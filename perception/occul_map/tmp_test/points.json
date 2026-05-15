@@ -1,0 +1,1 @@
+{"image": {"path": "img.png", "width": 32, "height": 32}, "points": [{"molmo_id": 1, "x": 10, "y": 10, "label": "front"}, {"molmo_id": 2, "x": 18, "y": 18, "label": "back"}]}

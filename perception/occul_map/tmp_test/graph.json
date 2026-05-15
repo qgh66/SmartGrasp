@@ -1,0 +1,70 @@
+{
+  "image": {
+    "path": "/home/admin128/qiuguanhe/SmartGrasp/occul_map/tmp_test/img.png",
+    "width": 32,
+    "height": 32
+  },
+  "depth_map": {
+    "path": "/home/admin128/qiuguanhe/SmartGrasp/occul_map/tmp_test/depth.npy",
+    "shape": [
+      32,
+      32
+    ]
+  },
+  "points_source": "/home/admin128/qiuguanhe/SmartGrasp/occul_map/tmp_test/points.json",
+  "sam_model_id": "facebook/sam-vit-base",
+  "graph": {
+    "graph_type": "occlusion_relationship_graph",
+    "adjacency_matrix": [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "nodes": [
+      {
+        "node_id": 0,
+        "molmo_id": 1,
+        "label": "front",
+        "point": {
+          "x": 10,
+          "y": 10
+        },
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/occul_map/tmp_test/mask/mask_001_front.png",
+        "mask_area": 144,
+        "predicted_iou": 0.99
+      },
+      {
+        "node_id": 1,
+        "molmo_id": 2,
+        "label": "back",
+        "point": {
+          "x": 18,
+          "y": 18
+        },
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/occul_map/tmp_test/mask/mask_002_back.png",
+        "mask_area": 144,
+        "predicted_iou": 0.99
+      }
+    ],
+    "edges": [
+      {
+        "source": 0,
+        "target": 1,
+        "relation": "occludes",
+        "contact_pixels": 64,
+        "source_depth_median": 1.0,
+        "target_depth_median": 2.0,
+        "depth_gap": 1.0,
+        "source_molmo_id": 1,
+        "target_molmo_id": 2,
+        "source_label": "front",
+        "target_label": "back"
+      }
+    ]
+  }
+}

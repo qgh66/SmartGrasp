@@ -1,0 +1,393 @@
+from __future__ import annotations
+
+import argparse
+import io
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+SMARTGRASP_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = SMARTGRASP_ROOT.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
+from PIL import Image
+
+from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
+from SmartGrasp.perception.occul_map.org import build_occlusion_graph, graph_to_jsonable
+
+
+OUT_ROOT = SMARTGRASP_ROOT / "data" / "integrated_runs"
+DEFAULT_MOLMO_PROMPT = (
+    "Point out every physically separate visible graspable object in the image. "
+    "Return exactly one point for each object instance, including small, thin, overlapping, or partially hidden objects. "
+    "Do not merge adjacent objects into one point, even if they touch or have similar colors. "
+    "Use one point near the center of the visible region of each object. "
+    "Use short noun labels. Before finishing, check the image again for any missed partially visible objects. "
+    "The requested target is: {annotation}."
+)
+
+
+def read_dataset() -> pd.DataFrame:
+    parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
+    if not parquet_files:
+        raise FileNotFoundError(f"No parquet files found by {PARQUET_GLOB}")
+    return pd.concat([pd.read_parquet(path) for path in parquet_files], ignore_index=True)
+
+
+def select_sample(df: pd.DataFrame, scene_id: int | None, query_obj_id: int | None) -> pd.Series:
+    candidates = df
+    if scene_id is not None:
+        candidates = candidates[candidates["sceneId"].astype(int) == int(scene_id)]
+    if query_obj_id is not None:
+        candidates = candidates[candidates["queryObjId"].astype(int) == int(query_obj_id)]
+    if candidates.empty:
+        raise ValueError(f"No sample found for scene_id={scene_id}, query_obj_id={query_obj_id}")
+    return candidates.iloc[0]
+
+
+def find_npz_source(scene_id: int) -> tuple[Path, str | None]:
+    for name, source_path, zip_member in iter_npz_sources():
+        if Path(name).stem == str(scene_id):
+            return Path(source_path), zip_member
+    raise FileNotFoundError(f"No npz source found for sceneId={scene_id}")
+
+
+def save_sample_image(row: pd.Series, out_dir: Path) -> Path:
+    image_obj = row["image"]
+    if isinstance(image_obj, dict) and image_obj.get("bytes"):
+        image = Image.open(io.BytesIO(image_obj["bytes"])).convert("RGB")
+    elif isinstance(image_obj, dict) and image_obj.get("path"):
+        image = Image.open(image_obj["path"]).convert("RGB")
+    else:
+        raise ValueError("Unsupported image field in parquet row")
+
+    image_path = out_dir / "scene_image.png"
+    image.save(image_path)
+    return image_path
+
+
+def object_centroid(mask: np.ndarray) -> tuple[int, int]:
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        raise ValueError("Cannot compute centroid for an empty object mask")
+    return int(np.round(xs.mean())), int(np.round(ys.mean()))
+
+
+def build_gt_points(instances_objects: np.ndarray, annotation: str, query_obj_id: int | None) -> list[dict[str, Any]]:
+    object_ids = sorted(int(value) for value in np.unique(instances_objects) if int(value) > 0)
+    points: list[dict[str, Any]] = []
+    for object_id in object_ids:
+        x, y = object_centroid(instances_objects == object_id)
+        label = annotation if query_obj_id == object_id else f"object_{object_id}"
+        points.append({"molmo_id": object_id, "x": x, "y": y, "label": label})
+    return points
+
+
+def write_points_json(
+    out_dir: Path,
+    image_path: Path,
+    width: int,
+    height: int,
+    prompt: str,
+    points: list[dict[str, Any]],
+    mode: str,
+) -> Path:
+    payload = {
+        "model_id": mode,
+        "prompt": prompt,
+        "image": {"path": str(image_path.resolve()), "width": int(width), "height": int(height)},
+        "parse_mode": mode,
+        "raw_model_output": "",
+        "points": points,
+    }
+    path = out_dir / "molmo_points.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def save_depth(depth: np.ndarray, out_dir: Path) -> Path:
+    path = out_dir / "depth.npy"
+    np.save(path, depth.astype(np.float32, copy=False))
+    return path
+
+
+def save_gt_masks(instances_objects: np.ndarray, out_dir: Path) -> list[dict[str, Any]]:
+    mask_dir = out_dir / "mask"
+    mask_dir.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, Any]] = []
+    object_ids = sorted(int(value) for value in np.unique(instances_objects) if int(value) > 0)
+    for node_id, object_id in enumerate(object_ids):
+        mask = instances_objects == object_id
+        mask_path = mask_dir / f"mask_{object_id:03d}_gt.png"
+        Image.fromarray((mask.astype(np.uint8) * 255), mode="L").save(mask_path)
+        records.append(
+            {
+                "node_id": node_id,
+                "molmo_id": object_id,
+                "label": f"object_{object_id}",
+                "point": {"x": int(object_centroid(mask)[0]), "y": int(object_centroid(mask)[1])},
+                "mask_path": str(mask_path.resolve()),
+                "mask_area": int(np.count_nonzero(mask)),
+            }
+        )
+    return records
+
+
+def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Path, title: str) -> None:
+    fig, ax = plt.subplots(figsize=(8, 6))
+    if graph.number_of_nodes() > 0:
+        pos = nx.spring_layout(graph, seed=42)
+        labels = {}
+        for node in graph.nodes():
+            node_payload = graph_json["nodes"][int(node)]
+            labels[node] = str(node_payload.get("molmo_id", node))
+        nx.draw_networkx_nodes(graph, pos, node_color="#cfe8ff", node_size=1500, ax=ax)
+        nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, ax=ax)
+        nx.draw_networkx_edges(
+            graph,
+            pos,
+            arrows=True,
+            arrowstyle="-|>",
+            arrowsize=18,
+            width=1.8,
+            edge_color="#1f4e79",
+            ax=ax,
+        )
+        edge_labels = {}
+        for u, v, data in graph.edges(data=True):
+            info = data.get("info")
+            if info is not None:
+                edge_labels[(u, v)] = f"gap={info.depth_gap:.3f}"
+        nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8, ax=ax)
+    ax.set_title(title)
+    ax.axis("off")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def visualize_graph_payload(graph_payload: dict[str, Any], out_path: Path, title: str) -> None:
+    graph = nx.DiGraph()
+    for node in graph_payload["nodes"]:
+        graph.add_node(int(node["node_id"]))
+    for edge in graph_payload["edges"]:
+        graph.add_edge(int(edge["source"]), int(edge["target"]), payload=edge)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    if graph.number_of_nodes() > 0:
+        pos = nx.spring_layout(graph, seed=42)
+        labels = {int(node["node_id"]): str(node.get("molmo_id", node["node_id"])) for node in graph_payload["nodes"]}
+        nx.draw_networkx_nodes(graph, pos, node_color="#cfe8ff", node_size=1500, ax=ax)
+        nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, ax=ax)
+        nx.draw_networkx_edges(
+            graph,
+            pos,
+            arrows=True,
+            arrowstyle="-|>",
+            arrowsize=18,
+            width=1.8,
+            edge_color="#1f4e79",
+            ax=ax,
+        )
+        edge_labels = {}
+        for source, target, data in graph.edges(data=True):
+            edge = data["payload"]
+            if "depth_gap" in edge:
+                edge_labels[(source, target)] = f"gap={edge['depth_gap']:.3f}"
+        nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8, ax=ax)
+    ax.set_title(title)
+    ax.axis("off")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def build_graph_from_gt_masks(
+    instances_objects: np.ndarray,
+    depth: np.ndarray,
+    out_dir: Path,
+    epsilon: float,
+    kernel_size: int,
+    min_contact_pixels: int,
+    min_contact_ratio: float,
+) -> dict[str, Any]:
+    node_records = save_gt_masks(instances_objects, out_dir)
+    object_ids = [record["molmo_id"] for record in node_records]
+    masks = np.stack([(instances_objects == object_id) for object_id in object_ids], axis=0)
+    graph, adjacency = build_occlusion_graph(
+        masks=masks,
+        depth_map=depth,
+        epsilon=epsilon,
+        kernel_size=kernel_size,
+        min_contact_pixels=min_contact_pixels,
+        min_contact_ratio=min_contact_ratio,
+    )
+    graph_payload = graph_to_jsonable(graph, adjacency, node_records=node_records)
+    for edge in graph_payload["edges"]:
+        source_node = node_records[edge["source"]]
+        target_node = node_records[edge["target"]]
+        edge["source_molmo_id"] = int(source_node["molmo_id"])
+        edge["target_molmo_id"] = int(target_node["molmo_id"])
+        edge["source_label"] = str(source_node["label"])
+        edge["target_label"] = str(target_node["label"])
+
+    payload = {"graph": graph_payload, "mask_source": "instances_objects", "depth_source": "npz.depth"}
+    out_json = out_dir / "occlusion_graph.json"
+    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    visualize_graph(graph, graph_payload, out_dir / "occlusion_graph.png", "GT Mask Occlusion Graph")
+    return payload
+
+
+def maybe_run_molmo(image_path: Path, prompt: str, out_dir: Path, model_id: str) -> Path:
+    from SmartGrasp.perception.molmo.molmo_annotator import MolmoAnnotator
+
+    annotator = MolmoAnnotator(model_id=model_id)
+    result = annotator.annotate_to_folder(str(image_path), prompt, str(out_dir), return_base64=False)
+    return Path(result["json_path"])
+
+
+def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> dict[str, Any]:
+    if df is None:
+        df = read_dataset()
+    row = select_sample(df, args.scene_id, args.query_obj_id)
+    scene_id = int(row["sceneId"])
+    query_obj_id = int(row["queryObjId"])
+
+    out_dir = OUT_ROOT / f"scene_{scene_id}_query_{query_obj_id}_{args.point_source}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    image_path = save_sample_image(row, out_dir)
+    with Image.open(image_path) as image:
+        width, height = image.size
+
+    npz_source, zip_member = find_npz_source(scene_id)
+    with load_npz(npz_source, zip_member) as npz:
+        depth = np.asarray(npz["depth"], dtype=np.float32)
+        instances_objects = np.asarray(npz["instances_objects"])
+
+    depth_path = save_depth(depth, out_dir)
+    prompt = args.prompt or DEFAULT_MOLMO_PROMPT.format(annotation=row["annotation"])
+
+    if args.point_source == "molmo":
+        from SmartGrasp.perception.occul_map.molmo_sam_org import build_org_json
+
+        points_path = maybe_run_molmo(image_path, prompt, out_dir, args.molmo_model_id)
+        graph_payload = build_org_json(
+            points_json_path=points_path.resolve(),
+            depth_path=depth_path.resolve(),
+            output_json_path=(out_dir / "occlusion_graph.json").resolve(),
+            output_mask_dir=(out_dir / "mask").resolve(),
+            sam_model_id=args.sam_model_id,
+            epsilon=args.epsilon,
+            kernel_size=args.kernel_size,
+            min_contact_pixels=args.min_contact_pixels,
+            min_contact_ratio=args.min_contact_ratio,
+            sam_point_grid_radius=args.sam_point_grid_radius,
+            mask_clean_kernel=args.mask_clean_kernel,
+            device=args.device,
+        )
+        visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "Molmo/SAM Occlusion Graph")
+    else:
+        points = build_gt_points(instances_objects, str(row["annotation"]), query_obj_id)
+        points_path = write_points_json(out_dir, image_path, width, height, prompt, points, "gt_centers")
+        graph_payload = build_graph_from_gt_masks(
+            instances_objects=instances_objects,
+            depth=depth,
+            out_dir=out_dir,
+            epsilon=args.epsilon,
+            kernel_size=args.kernel_size,
+            min_contact_pixels=args.min_contact_pixels,
+            min_contact_ratio=args.min_contact_ratio,
+        )
+
+    summary = {
+        "scene_id": scene_id,
+        "query_obj_id": query_obj_id,
+        "annotation": str(row["annotation"]),
+        "point_source": args.point_source,
+        "output_dir": str(out_dir.resolve()),
+        "image_path": str(image_path.resolve()),
+        "depth_path": str(depth_path.resolve()),
+        "points_json": str(points_path.resolve()),
+        "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
+        "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
+        "num_nodes": len(graph_payload["graph"]["nodes"]),
+        "num_edges": len(graph_payload["graph"]["edges"]),
+    }
+    summary_path = out_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return summary
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run SmartGrasp data -> Molmo points -> occlusion graph pipeline.")
+    parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
+    parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
+    parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
+    parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
+    parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
+    parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
+    parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
+    parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
+    parser.add_argument("--epsilon", type=float, default=0.01)
+    parser.add_argument("--kernel-size", type=int, default=3)
+    parser.add_argument("--min-contact-pixels", type=int, default=1)
+    parser.add_argument("--min-contact-ratio", type=float, default=0.0)
+    parser.add_argument("--sam-point-grid-radius", type=int, default=0)
+    parser.add_argument("--mask-clean-kernel", type=int, default=3)
+    parser.add_argument("--device", default=None)
+    return parser
+
+
+def main() -> None:
+    args = build_arg_parser().parse_args()
+    if args.serve:
+        df = read_dataset()
+        print("SmartGrasp pipeline worker is ready. Enter scene ids, one line at a time. Enter q to quit.", flush=True)
+        while True:
+            try:
+                line = input("scene_id> ").strip()
+            except EOFError:
+                break
+            if line.lower() in {"q", "quit", "exit"}:
+                break
+            if not line:
+                continue
+            try:
+                scene_id = int(line)
+            except ValueError:
+                print(f"Invalid scene id: {line}", flush=True)
+                continue
+            item_args = argparse.Namespace(**vars(args))
+            item_args.scene_id = scene_id
+            item_args.query_obj_id = None
+            item_args.scene_ids = None
+            item_args.serve = False
+            try:
+                run_pipeline(item_args, df=df)
+            except Exception as exc:
+                print(f"Failed scene_id={scene_id}: {exc}", flush=True)
+    elif args.scene_ids:
+        df = read_dataset()
+        summaries = []
+        for scene_id in args.scene_ids:
+            item_args = argparse.Namespace(**vars(args))
+            item_args.scene_id = scene_id
+            item_args.query_obj_id = None
+            summaries.append(run_pipeline(item_args, df=df))
+        print(json.dumps({"runs": summaries}, ensure_ascii=False, indent=2))
+    else:
+        run_pipeline(args)
+
+
+if __name__ == "__main__":
+    main()

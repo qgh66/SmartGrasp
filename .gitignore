@@ -1,0 +1,16 @@
+# 排除数据和模型
+data/
+models/*.pth
+models/*.onnx
+*.weights
+
+# 排除 Python 缓存
+__pycache__/
+*.py[cod]
+
+# 排除环境和日志
+.venv/
+.conda/
+logs/
+build/
+devel/
