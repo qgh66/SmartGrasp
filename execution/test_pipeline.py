@@ -4,7 +4,7 @@ import open3d as o3d
 from pointcloud_utils import generate_local_pointcloud
 from grasp_generator import generate_optimal_grasp
 
-print("=== SmartGrasp 执行模块集成测试 ===")
+print("=== SmartGrasp Execution Module Integration Test ===")
 
 H, W = 720, 1280
 dummy_color = np.ones((H, W, 3), dtype=np.uint8) * 100 
@@ -20,5 +20,5 @@ target_pcd = generate_local_pointcloud(dummy_color, dummy_depth, dummy_mask, rea
 best_grasp = generate_optimal_grasp(dummy_color, dummy_mask, real_intrinsics, target_pcd)
 
 if best_grasp is not None:
-    print("\n🎉 测试成功！找到了最优抓取位姿：")
+    print("\n[Test Success] Found optimal grasp pose:")
     print(best_grasp)
