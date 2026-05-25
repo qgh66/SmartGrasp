@@ -4,26 +4,6 @@ import os
 from pointcloud_utils import generate_local_pointcloud
 from grasp_generator import generate_optimal_grasp
 
-def format_pointcloud_for_graspnet(o3d_pcd, target_points=20000):
-    """
-    Sample Open3D point cloud to fixed size (20000, 3) Numpy array.
-    """
-    points = np.asarray(o3d_pcd.points)
-    # [Fixed] Extract the exact integer length (e.g., 1767) using 
-    num_pts = points.shape  
-    
-    if num_pts == 0:
-        print("[Warning] Empty point cloud.")
-        return None
-        
-    print(f"[Data Format] Adjusting points from {num_pts} to {target_points}...")
-
-    # Downsample or oversample
-    replace_flag = num_pts < target_points
-    sampled_indices = np.random.choice(num_pts, target_points, replace=replace_flag)
-        
-    return points[sampled_indices, :]
-
 print("=== Execution Module Integration Test ===")
 
 # 1. Load real data from ThinkGrasp directory
@@ -48,15 +28,15 @@ real_intrinsics = {
     'cx': 630.28532943, 'cy': 381.85590217
 }
 
-# 2. Convert to 3D point cloud
+# 2. Convert to 3D point cloud (Returns an Open3D PointCloud object)
 target_pcd = generate_local_pointcloud(real_color, real_depth, real_mask, real_intrinsics)
 
-# 3. Format for GraspNet
-graspnet_input = format_pointcloud_for_graspnet(target_pcd)
-
-# 4. Generate Grasp Pose
-if graspnet_input is not None:
-    best_grasp = generate_optimal_grasp(graspnet_input)
+# 3. Generate Grasp Pose
+# [Fixed] Pass the Open3D target_pcd directly. ThinkGrasp expects Open3D, not Numpy!
+if target_pcd is not None and len(target_pcd.points) > 0:
+    best_grasp = generate_optimal_grasp(target_pcd)
     if best_grasp is not None:
         print("\n[Success] Optimal grasp pose found:")
         print(best_grasp)
+else:
+    print("[Warning] Point cloud is empty. Cannot generate grasps.")
