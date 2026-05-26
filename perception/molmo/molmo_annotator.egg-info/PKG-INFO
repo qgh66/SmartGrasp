@@ -71,3 +71,9 @@ print(res["base64_png"][:80])
 print(res["json_path"])
 print(res["points"][:3])
 ```
+
+## Sample command
+
+```bash
+molmo-annotate   --image 1.jpg   --prompt 'Point out all graspable objects on the table. Use short noun labels.'   --out ./out
+```

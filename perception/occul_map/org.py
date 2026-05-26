@@ -79,7 +79,7 @@ def _make_kernel(kernel_size: int) -> np.ndarray:
 def find_contact_area(
     mask_i: np.ndarray,
     mask_j: np.ndarray,
-    kernel_size: int = 3,
+    kernel_size: int = 5,
 ) -> np.ndarray:
     """Return the boolean contact area between two masks after light dilation."""
 
@@ -141,6 +141,7 @@ def graph_to_jsonable(
             "source": int(source),
             "target": int(target),
             "relation": "occludes",
+            "direction": "source_occludes_target",
         }
         if info is not None:
             edge_payload.update(
@@ -165,10 +166,10 @@ def graph_to_jsonable(
 def build_occlusion_graph(
     masks: np.ndarray,
     depth_map: np.ndarray,
-    epsilon: float = 0.01,
-    kernel_size: int = 3,
-    min_contact_pixels: int = 1,
-    min_contact_ratio: float = 0.0,
+    epsilon: float = 0.05,
+    kernel_size: int = 5,
+    min_contact_pixels: int = 50,
+    min_contact_ratio: float = 0.002,
 ) -> tuple[nx.DiGraph, np.ndarray]:
     """Build an ORG from instance masks and a depth map.
 
