@@ -18,6 +18,7 @@ mkdir -p logs
 export SMARTGRASP_DATA_DIR="${SMARTGRASP_DATA_DIR:-/home/data/datasets/FreeGraspData}"
 export HF_HOME="/home/data/models/huggingface"
 export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_HUB_OFFLINE=1
 export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
 export TORCH_HOME="/home/data/models/torch"
 export MPLBACKEND=Agg
@@ -55,8 +56,7 @@ fi
   --scene-id "${SCENE_ID:-527}" \
   --point-source "${POINT_SOURCE:-molmo}" \
   --molmo-model-id "${MOLMO_MODEL_ID:-allenai/Molmo-7B-D-0924}" \
-  --molmo-max-attempts "${MOLMO_MAX_ATTEMPTS:-1}" \
-  --segmentation-backend "${SEGMENTATION_BACKEND:-auto}" \
+  --segmentation-backend "${SEGMENTATION_BACKEND:-langsam}" \
   --sam-model-id "${SAM_MODEL_ID:-facebook/sam-vit-large}" \
   --epsilon "${EPSILON:-0.05}" \
   --kernel-size "${KERNEL_SIZE:-5}" \

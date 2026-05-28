@@ -38,22 +38,6 @@ DEFAULT_MOLMO_PROMPT = (
     "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
     "Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface."
 )
-MOLMO_SCAN_PROMPT_SUFFIXES = [
-    "",
-    (
-        "Run a second independent full-scene scan. Divide the image into upper-left, upper-center, upper-right, "
-        "middle-left, center, middle-right, lower-left, lower-center, and lower-right regions. "
-        "Point out every physically separate visible object instance in those regions, including repeated objects. "
-        "Ignore only the green tray/green box and other background support surfaces. Do not use any expected object count."
-    ),
-    (
-        "Run a careful missed-object scan. Focus on small, partly hidden, overlapping, low-contrast, or similarly colored foreground objects. "
-        "Mark separate physical instances separately even when they touch or overlap, including repeated objects. "
-        "Ignore only the green tray/green box and other background support surfaces. Do not invent objects and do not use any expected object count."
-    ),
-]
-
-
 def read_dataset() -> pd.DataFrame:
     parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
     if not parquet_files:
@@ -310,57 +294,6 @@ def build_graph_from_gt_masks(
     return payload
 
 
-def merge_point_records(points_by_attempt: list[list[dict[str, Any]]], image_size: tuple[int, int]) -> list[dict[str, Any]]:
-    width, height = image_size
-    merged: list[dict[str, Any]] = []
-    same_label_thresh = max(18, int(min(width, height) * 0.03))
-    any_label_thresh = max(8, int(min(width, height) * 0.015))
-    for points in points_by_attempt:
-        for point in points:
-            x = int(point["x"])
-            y = int(point["y"])
-            label = sanitize_point_label(str(point.get("label", "")))
-            norm_label = label.lower()
-            duplicate = False
-            for kept in merged:
-                kept_label = str(kept.get("label", "")).lower()
-                dist_sq = (x - int(kept["x"])) ** 2 + (y - int(kept["y"])) ** 2
-                threshold = same_label_thresh if norm_label and norm_label == kept_label else any_label_thresh
-                if dist_sq <= threshold**2:
-                    duplicate = True
-                    break
-            if not duplicate:
-                merged.append({"molmo_id": len(merged) + 1, "x": x, "y": y, "label": label})
-    return merged
-
-
-def write_merged_molmo_outputs(
-    image_path: Path,
-    prompt: str,
-    out_dir: Path,
-    model_id: str,
-    points: list[dict[str, Any]],
-) -> Path:
-    with Image.open(image_path) as image:
-        width, height = image.size
-        draw_labeled_image_matplotlib(
-            image=image,
-            points_with_ids=[(int(point["molmo_id"]), int(point["x"]), int(point["y"])) for point in points],
-            out_png_path=str(out_dir / "1_molmo_label_raw.png"),
-        )
-    payload = {
-        "model_id": model_id,
-        "prompt": prompt,
-        "image": {"path": str(image_path), "width": int(width), "height": int(height)},
-        "parse_mode": "merged_multi_scan",
-        "raw_model_output": "",
-        "points": points,
-    }
-    final_json_path = out_dir / "molmo_points.json"
-    final_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return final_json_path
-
-
 def write_final_perception_label(
     image_path: Path,
     graph_payload: dict[str, Any],
@@ -373,7 +306,7 @@ def write_final_perception_label(
             continue
         points_with_ids.append((int(node.get("molmo_id", node["node_id"])), int(point["x"]), int(point["y"])))
 
-    out_path = out_dir / "molmo_label.png"
+    out_path = out_dir / "label_1_molmo.png"
     with Image.open(image_path) as image:
         draw_labeled_image_matplotlib(
             image=image,
@@ -399,35 +332,38 @@ def maybe_run_molmo(
     prompt: str,
     out_dir: Path,
     model_id: str,
-    max_attempts: int = 3,
 ) -> Path:
     from SmartGrasp.perception.molmo.molmo_annotator import MolmoAnnotator
 
     annotator = MolmoAnnotator(model_id=model_id)
-    points_by_attempt: list[list[dict[str, Any]]] = []
-    attempts = max(1, min(max_attempts, len(MOLMO_SCAN_PROMPT_SUFFIXES)))
-
-    for attempt_index in range(attempts):
-        suffix = MOLMO_SCAN_PROMPT_SUFFIXES[attempt_index]
-        attempt_prompt = prompt if not suffix else f"{prompt}\n\n{suffix}"
-        result = annotator.annotate_to_folder(
-            str(image_path),
-            attempt_prompt,
-            str(out_dir),
-            labeled_png_name=f"molmo_label_attempt_{attempt_index + 1}.png",
-            json_name=f"molmo_points_attempt_{attempt_index + 1}.json",
-            return_base64=False,
-        )
-        points = result.get("json_data", {}).get("points", [])
-        points_by_attempt.append(points)
-
-    if not points_by_attempt:
+    result = annotator.annotate_to_folder(
+        str(image_path),
+        prompt,
+        str(out_dir),
+        return_base64=False,
+    )
+    points = result.get("json_data", {}).get("points", [])
+    if not points:
         raise RuntimeError("Molmo did not return a usable result.")
 
+    # Write points.json with molmo_id assigned
     with Image.open(image_path) as image:
-        image_size = image.size
-    merged_points = merge_point_records(points_by_attempt, image_size)
-    return write_merged_molmo_outputs(image_path, prompt, out_dir, model_id, merged_points)
+        width, height = image.size
+    sanitized_points = [
+        {"molmo_id": i + 1, "x": int(p["x"]), "y": int(p["y"]), "label": sanitize_point_label(str(p.get("label", "")))}
+        for i, p in enumerate(points)
+    ]
+    payload = {
+        "model_id": model_id,
+        "prompt": prompt,
+        "image": {"path": str(image_path), "width": int(width), "height": int(height)},
+        "parse_mode": "point_markup",
+        "raw_model_output": "",
+        "points": sanitized_points,
+    }
+    final_json_path = out_dir / "molmo_points.json"
+    final_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return final_json_path
 
 
 def sanitize_point_label(label: str) -> str:
@@ -604,9 +540,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             prompt,
             out_dir,
             args.molmo_model_id,
-            args.molmo_max_attempts,
         )
-        sanitize_points_json(points_path)
         graph_payload = build_org_json(
             points_json_path=points_path.resolve(),
             depth_path=depth_path.resolve(),
@@ -658,8 +592,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         "points_json": str(points_path.resolve()),
         "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
-        "raw_molmo_label_png": str((out_dir / "1_molmo_label_raw.png").resolve()) if args.point_source == "molmo" else None,
-        "perception_label_png": str((out_dir / "3_molmo_label_proposed.png").resolve()),
+        "raw_label_1_molmo_png": str((out_dir / "label_2_langsam.png").resolve()) if args.point_source == "molmo" else None,
+        "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
         "num_nodes": len(graph_payload["graph"]["nodes"]),
         "num_edges": len(graph_payload["graph"]["edges"]),
         "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()) if gt_summary else None,
@@ -680,7 +614,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
     parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
     parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
-    parser.add_argument("--molmo-max-attempts", type=int, default=1, help="Number of independent full-scene Molmo scans to merge.")
+
     parser.add_argument("--segmentation-backend", choices=["sam", "langsam", "auto"], default="sam")
     parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
     parser.add_argument("--epsilon", type=float, default=0.05)

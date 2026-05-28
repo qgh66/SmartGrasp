@@ -14,7 +14,7 @@ The pipeline connects three existing parts of the repository:
 2. `perception/molmo/`
    - Runs `allenai/Molmo-7B-D-0924` on a scene image.
    - Produces `molmo_points.json`, where each object has `molmo_id`, `x`, `y`, and `label`.
-   - Also writes `molmo_label.png` for visual inspection.
+   - Also writes `label_1_molmo.png` for visual inspection.
 
 3. `perception/occul_map/`
    - Uses Molmo points as SAM prompts.
@@ -154,7 +154,7 @@ Typical files:
 ```text
 scene_image.png
 depth.npy
-molmo_label.png
+label_1_molmo.png
 molmo_points.json
 mask/
 occlusion_graph.json
@@ -162,7 +162,7 @@ occlusion_graph.png
 summary.json
 ```
 
-In GT mode, `molmo_label.png` is not generated because Molmo is not run.
+In GT mode, `label_1_molmo.png` is not generated because Molmo is not run.
 
 ## Important Parameters
 
