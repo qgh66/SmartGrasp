@@ -1,0 +1,118 @@
+{
+  "scene_id": 365,
+  "query_obj_id": 5,
+  "annotation": "the brown box on bottom right",
+  "point_source": "gt-centers",
+  "output_dir": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt",
+  "image_path": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/scene_image.png",
+  "depth_path": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/depth.npy",
+  "points_json": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/molmo_points.json",
+  "graph_json": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/occlusion_graph.json",
+  "graph_png": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/occlusion_graph.png",
+  "num_nodes": 6,
+  "num_edges": 1,
+  "gt_object_count": 6,
+  "image": {
+    "path": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/scene_image.png",
+    "width": 1200,
+    "height": 1200
+  },
+  "molmo_points": [
+    {
+      "molmo_id": 1,
+      "x": 524,
+      "y": 550,
+      "label": "object_1"
+    },
+    {
+      "molmo_id": 2,
+      "x": 614,
+      "y": 812,
+      "label": "object_2"
+    },
+    {
+      "molmo_id": 3,
+      "x": 674,
+      "y": 722,
+      "label": "object_3"
+    },
+    {
+      "molmo_id": 4,
+      "x": 867,
+      "y": 717,
+      "label": "object_4"
+    },
+    {
+      "molmo_id": 5,
+      "x": 360,
+      "y": 773,
+      "label": "the brown box on bottom right"
+    },
+    {
+      "molmo_id": 6,
+      "x": 835,
+      "y": 961,
+      "label": "object_6"
+    }
+  ],
+  "matrix_labels": [
+    "1: object 1",
+    "2: object 2",
+    "3: object 3",
+    "4: object 4",
+    "5: object 5",
+    "6: object 6"
+  ],
+  "occlusion_matrix_direction": "row object occludes column object",
+  "occlusion_matrix_metric": "contact_ratio",
+  "occlusion_matrix": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.032418,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

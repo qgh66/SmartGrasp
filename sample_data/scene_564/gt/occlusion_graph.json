@@ -1,0 +1,163 @@
+{
+  "graph": {
+    "graph_type": "occlusion_relationship_graph",
+    "adjacency_matrix": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "nodes": [
+      {
+        "node_id": 0,
+        "molmo_id": 1,
+        "label": "object_1",
+        "point": {
+          "x": 764,
+          "y": 824
+        },
+        "mask_path": "/home/qiuguanhe/SmartGrasp/data/scene_564/gt/mask/mask_001_gt.png",
+        "mask_area": 106888
+      },
+      {
+        "node_id": 1,
+        "molmo_id": 2,
+        "label": "object_2",
+        "point": {
+          "x": 447,
+          "y": 741
+        },
+        "mask_path": "/home/qiuguanhe/SmartGrasp/data/scene_564/gt/mask/mask_002_gt.png",
+        "mask_area": 128552
+      },
+      {
+        "node_id": 2,
+        "molmo_id": 3,
+        "label": "object_3",
+        "point": {
+          "x": 603,
+          "y": 511
+        },
+        "mask_path": "/home/qiuguanhe/SmartGrasp/data/scene_564/gt/mask/mask_003_gt.png",
+        "mask_area": 45508
+      },
+      {
+        "node_id": 3,
+        "molmo_id": 4,
+        "label": "object_4",
+        "point": {
+          "x": 802,
+          "y": 194
+        },
+        "mask_path": "/home/qiuguanhe/SmartGrasp/data/scene_564/gt/mask/mask_004_gt.png",
+        "mask_area": 100159
+      },
+      {
+        "node_id": 4,
+        "molmo_id": 5,
+        "label": "object_5",
+        "point": {
+          "x": 841,
+          "y": 1045
+        },
+        "mask_path": "/home/qiuguanhe/SmartGrasp/data/scene_564/gt/mask/mask_005_gt.png",
+        "mask_area": 35800
+      }
+    ],
+    "edges": [
+      {
+        "source": 1,
+        "target": 0,
+        "relation": "occludes",
+        "direction": "source_occludes_target",
+        "contact_pixels": 1339,
+        "contact_ratio": 0.012527131202754284,
+        "source_depth_median": 73.45867919921875,
+        "target_depth_median": 74.36839294433594,
+        "depth_gap": 0.9097137451171875,
+        "source_molmo_id": 2,
+        "target_molmo_id": 1,
+        "source_label": "object_2",
+        "target_label": "object_1"
+      },
+      {
+        "source": 1,
+        "target": 2,
+        "relation": "occludes",
+        "direction": "source_occludes_target",
+        "contact_pixels": 1422,
+        "contact_ratio": 0.031247253230201284,
+        "source_depth_median": 74.02188873291016,
+        "target_depth_median": 74.63933563232422,
+        "depth_gap": 0.6174468994140625,
+        "source_molmo_id": 2,
+        "target_molmo_id": 3,
+        "source_label": "object_2",
+        "target_label": "object_3"
+      },
+      {
+        "source": 2,
+        "target": 0,
+        "relation": "occludes",
+        "direction": "source_occludes_target",
+        "contact_pixels": 315,
+        "contact_ratio": 0.006921859892766107,
+        "source_depth_median": 77.01032257080078,
+        "target_depth_median": 79.52809143066406,
+        "depth_gap": 2.5177688598632812,
+        "source_molmo_id": 3,
+        "target_molmo_id": 1,
+        "source_label": "object_3",
+        "target_label": "object_1"
+      },
+      {
+        "source": 4,
+        "target": 0,
+        "relation": "occludes",
+        "direction": "source_occludes_target",
+        "contact_pixels": 1543,
+        "contact_ratio": 0.04310055865921788,
+        "source_depth_median": 72.44110107421875,
+        "target_depth_median": 74.24491119384766,
+        "depth_gap": 1.8038101196289062,
+        "source_molmo_id": 5,
+        "target_molmo_id": 1,
+        "source_label": "object_5",
+        "target_label": "object_1"
+      }
+    ]
+  },
+  "mask_source": "instances_objects",
+  "depth_source": "npz.depth"
+}

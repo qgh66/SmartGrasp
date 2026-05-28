@@ -1,0 +1,49 @@
+{
+  "model_id": "gt_centers",
+  "prompt": "Point out all objects in the green tray. Return one point for each visible object instance, including repeated objects that look similar or have the same category. Do not merge adjacent objects, even if they touch or have similar colors. Ignore the green tray/green box itself and any other background support surface. Do separate different instances even if they are very close or nearly touching.Use one point near the center of the visible region of each object. Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface.",
+  "image": {
+    "path": "/home/qiuguanhe/SmartGrasp/data/scene_365/gt/scene_image.png",
+    "width": 1200,
+    "height": 1200
+  },
+  "parse_mode": "gt_centers",
+  "raw_model_output": "",
+  "points": [
+    {
+      "molmo_id": 1,
+      "x": 524,
+      "y": 550,
+      "label": "object_1"
+    },
+    {
+      "molmo_id": 2,
+      "x": 614,
+      "y": 812,
+      "label": "object_2"
+    },
+    {
+      "molmo_id": 3,
+      "x": 674,
+      "y": 722,
+      "label": "object_3"
+    },
+    {
+      "molmo_id": 4,
+      "x": 867,
+      "y": 717,
+      "label": "object_4"
+    },
+    {
+      "molmo_id": 5,
+      "x": 360,
+      "y": 773,
+      "label": "the brown box on bottom right"
+    },
+    {
+      "molmo_id": 6,
+      "x": 835,
+      "y": 961,
+      "label": "object_6"
+    }
+  ]
+}
