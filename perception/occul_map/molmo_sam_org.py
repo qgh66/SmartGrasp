@@ -736,40 +736,6 @@ def _drop_contained_duplicate_masks(
     return kept, removed
 
 
-def _renumber_final_masks(mask_records: list[dict[str, Any]], output_mask_dir: Path) -> list[dict[str, Any]]:
-    """Keep only valid unique masks and rewrite them as mask_001..., mask_002..., ..."""
-    output_mask_dir.mkdir(parents=True, exist_ok=True)
-    kept: list[dict[str, Any]] = []
-    seen_masks: list[np.ndarray] = []
-
-    for record in mask_records:
-        mask = np.asarray(record.get("mask_array"), dtype=bool)
-        if mask.ndim != 2 or int(np.count_nonzero(mask)) == 0:
-            continue
-        if any(_mask_iou(mask, seen) >= 0.995 for seen in seen_masks):
-            old_mask_path = Path(str(record.get("mask_path", "")))
-            if old_mask_path.exists():
-                old_mask_path.unlink()
-            continue
-        kept.append(record)
-        seen_masks.append(mask)
-
-    for old_mask in output_mask_dir.glob("*.png"):
-        old_mask.unlink()
-
-    for index, record in enumerate(kept, start=1):
-        mask = np.asarray(record["mask_array"], dtype=bool)
-        label = _safe_label(str(record.get("label", f"object_{index}")))
-        mask_path = output_mask_dir / f"mask_{index:03d}_{label}.png"
-        _save_mask_png(mask, mask_path)
-        record["node_id"] = index - 1
-        record["molmo_id"] = index
-        record["mask_path"] = str(mask_path.resolve())
-        record["mask_area"] = int(np.count_nonzero(mask))
-
-    return kept
-
-
 def _write_effective_masks(mask_records: list[dict[str, Any]], effective_mask_dir: Path) -> None:
     if effective_mask_dir.exists():
         shutil.rmtree(effective_mask_dir)
@@ -1037,30 +1003,26 @@ def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     return list(sam.generate(image_np))
 
 
-BACKGROUND_EXCLUSION_PROMPTS = [
-    "green tray.",
-    "green box.",
-    "green container.",
-    "table surface.",
-    "support surface.",
-]
-
-
 def _generate_background_exclusion_mask(
     model: Any,
     image: Image.Image,
     existing_foreground_union: np.ndarray,
+    background_prompts: list[str],
     mask_clean_kernel: int = 3,
 ) -> np.ndarray:
-    """Run LangSAM with background prompts and return a single background exclusion mask.
+    """Run LangSAM with background prompts (derived from Molmo's rejected labels)
+    and return a single background exclusion mask.
 
-    Only regions NOT already covered by foreground masks are included.
-    If LangSAM fails, returns an empty mask (no exclusion).
+    Only regions not already covered by foreground masks are included.
+    If LangSAM fails or no prompts, returns an empty mask.
     """
+    if not background_prompts:
+        return np.zeros((image.size[1], image.size[0]), dtype=bool)
+
     image_area = float(image.size[0] * image.size[1])
     background_union = np.zeros((image.size[1], image.size[0]), dtype=bool)
 
-    for prompt in BACKGROUND_EXCLUSION_PROMPTS:
+    for prompt in background_prompts:
         try:
             masks, _scores = _langsam_predict(model, image, prompt)
         except Exception:
@@ -1069,7 +1031,6 @@ def _generate_background_exclusion_mask(
             mask = _clean_mask(raw_mask, mask_clean_kernel)
             area = int(np.count_nonzero(mask))
             area_ratio = float(area / image_area)
-            # Accept only reasonably-sized background regions
             if area_ratio < 0.01 or area_ratio > 0.7:
                 continue
             background_union |= mask
@@ -1077,7 +1038,6 @@ def _generate_background_exclusion_mask(
     if int(np.count_nonzero(background_union)) == 0:
         return np.zeros((image.size[1], image.size[0]), dtype=bool)
 
-    # Exclude regions already covered by foreground masks
     background_union &= ~existing_foreground_union
     return background_union
 
@@ -1130,6 +1090,10 @@ def complete_masks_with_sam2_auto_proposals(
         containment = _mask_overlap_fraction(mask, existing_union)
         cx, cy = _mask_centroid_xy(mask)
         contains_existing_point = any(_point_inside_xy(mask, x, y) for x, y in existing_points if x >= 0 and y >= 0)
+        background_overlap = 0.0
+        has_background_exclusion = background_exclusion_mask is not None and np.count_nonzero(background_exclusion_mask) > 0
+        if has_background_exclusion:
+            background_overlap = float(np.count_nonzero(mask & background_exclusion_mask) / max(1, area))
 
         reason: str | None = None
         if area_ratio < min_area_ratio:
@@ -1146,10 +1110,8 @@ def complete_masks_with_sam2_auto_proposals(
             reason = "mostly_inside_existing_mask"
         elif contains_existing_point:
             reason = "contains_existing_molmo_point"
-        elif background_exclusion_mask is not None and np.count_nonzero(background_exclusion_mask) > 0:
-            bg_overlap = float(np.count_nonzero(mask & background_exclusion_mask) / max(1, int(np.count_nonzero(mask))))
-            if bg_overlap > 0.5:
-                reason = "overlaps_background_exclusion"
+        elif background_overlap > 0.5:
+            reason = "overlaps_background_exclusion"
 
         metadata = {
             "proposal_index": idx,
@@ -1161,6 +1123,7 @@ def complete_masks_with_sam2_auto_proposals(
             "border_fraction": border_fraction,
             "max_existing_iou": max_iou,
             "existing_containment": containment,
+            "background_exclusion_overlap": background_overlap,
             "centroid": {"x": cx, "y": cy},
         }
         if reason:
@@ -1559,7 +1522,6 @@ def build_org_json(
     )
 
     # --- background exclusion mask (for filtering SAM2 proposals) ---
-    foreground_union = None
     background_exclusion_mask: np.ndarray | None = None
     if proposal_backend == "sam2-auto":
         foreground_masks = [np.asarray(record["mask_array"], dtype=bool) for record in mask_records]
@@ -1609,7 +1571,6 @@ def build_org_json(
         duplicate_dir=duplicate_dir,
     )
     duplicate_mask_report.extend(proposal_duplicate_report)
-    mask_records = _renumber_final_masks(mask_records, output_mask_dir)
 
     # --- second-stage label image (after proposal dedup) ---
     _draw_mask_records_label(

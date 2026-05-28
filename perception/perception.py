@@ -508,32 +508,6 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) 
     }
 
 
-def finalize_perception_outputs(out_dir: Path) -> None:
-    scene_image = out_dir / "scene_image.png"
-    scene_png = out_dir / "scene.png"
-    if scene_image.exists():
-        scene_image.replace(scene_png)
-
-    label_candidates = [
-        out_dir / "3_molmo_label_proposed.png",
-        out_dir / "perception_label.png",
-        out_dir / "molmo_label.png",
-    ]
-    scene_labeled = out_dir / "scene_labeled.png"
-    for candidate in label_candidates:
-        if candidate.exists():
-            candidate.replace(scene_labeled)
-            break
-
-    allowed_files = {"summary.json", "occlusion_graph.png", "scene.png", "scene_labeled.png"}
-    allowed_dirs = {"mask"}
-    for child in out_dir.iterdir():
-        if child.is_file() and child.name not in allowed_files:
-            child.unlink()
-        elif child.is_dir() and child.name not in allowed_dirs:
-            shutil.rmtree(child)
-
-
 def build_gt_reference_outputs(
     row: pd.Series,
     scene_id: int,
@@ -679,16 +653,20 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         "annotation": str(row["annotation"]),
         "point_source": args.point_source,
         "output_dir": str(out_dir.resolve()),
-        "image_path": str((out_dir / "scene.png").resolve()),
+        "image_path": str(image_path.resolve()),
+        "depth_path": str(depth_path.resolve()),
+        "points_json": str(points_path.resolve()),
+        "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
-        "perception_label_png": str((out_dir / "scene_labeled.png").resolve()),
+        "raw_molmo_label_png": str((out_dir / "1_molmo_label_raw.png").resolve()) if args.point_source == "molmo" else None,
+        "perception_label_png": str((out_dir / "3_molmo_label_proposed.png").resolve()),
         "num_nodes": len(graph_payload["graph"]["nodes"]),
         "num_edges": len(graph_payload["graph"]["edges"]),
+        "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()) if gt_summary else None,
         **scene_graph_summary,
     }
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    finalize_perception_outputs(out_dir)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
 

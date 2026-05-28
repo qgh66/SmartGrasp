@@ -55,7 +55,7 @@ fi
   --scene-id "${SCENE_ID:-527}" \
   --point-source "${POINT_SOURCE:-molmo}" \
   --molmo-model-id "${MOLMO_MODEL_ID:-allenai/Molmo-7B-D-0924}" \
-  --molmo-max-attempts "${MOLMO_MAX_ATTEMPTS:-3}" \
+  --molmo-max-attempts "${MOLMO_MAX_ATTEMPTS:-1}" \
   --segmentation-backend "${SEGMENTATION_BACKEND:-auto}" \
   --sam-model-id "${SAM_MODEL_ID:-facebook/sam-vit-large}" \
   --epsilon "${EPSILON:-0.05}" \
