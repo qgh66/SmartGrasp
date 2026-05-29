@@ -422,7 +422,7 @@ class MolmoAnnotator:
         image_path: str,
         prompt: str,
         out_dir: str,
-        labeled_png_name: str = "molmo_label.png",
+        labeled_png_name: str = "label_1_molmo.png",
         json_name: str = "molmo_points.json",
         return_base64: bool = True,
     ) -> Dict[str, Any]:

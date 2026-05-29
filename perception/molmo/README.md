@@ -2,7 +2,7 @@
 
 A small reusable module that runs **allenai/Molmo-7B-D-0924** to extract object points from an image, then produces:
 
-- `molmo_label.png` (numbered labels drawn on the image, matplotlib style)
+- `label_1_molmo.png` (numbered labels drawn on the image, matplotlib style)
 - `molmo_points.json` (pixel coordinates)
 
 ## Model weights (NOT included)
@@ -42,7 +42,7 @@ molmo-annotate \
 ```
 
 Outputs:
-- `out/molmo_label.png`
+- `out/label_1_molmo.png`
 - `out/molmo_points.json`
 
 ## Python usage
