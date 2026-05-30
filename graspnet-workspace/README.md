@@ -60,7 +60,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/graspnet-workspace
+cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
 ```
 
 ### 2. 安装 PyBullet
@@ -85,14 +85,14 @@ cp /home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar checkpo
 ### 纯推理 Demo（无需 PyBullet）
 
 ```bash
-cd /home/admin128/beilei/graspnet-workspace
+cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
 python scripts/demo_inference.py
 ```
 
 ### 仿真 Demo（GraspNet + PyBullet）
 
 ```bash
-cd /home/admin128/beilei/graspnet-workspace
+cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
 bash scripts/demo_simulation.sh
 ```
 
@@ -122,9 +122,9 @@ K 为候选抓取数量（通常数百个）。
 
 ### 坐标约定
 
-- 抓取坐标系: **Z 轴 = 接近方向**（夹爪向物体移动的方向），X 轴 = 夹爪开合方向
+- 抓取坐标系: **local X 轴 = 接近/depth 方向**，local Y 轴 = 夹爪开合方向，local Z 轴 = 夹爪高度方向
 - 世界坐标系: Z 向上（高度），Y 向前，X 向右
-- 坐标系变换: 抓取坐标系的 Z 对应世界坐标系，需要旋转矩阵转换
+- 坐标系变换: GUI 和 evaluator 使用 `R @ local_vertices + center`，其中 local X 是 GraspNet 官方夹爪几何的 depth/approach 轴
 
 ---
 
