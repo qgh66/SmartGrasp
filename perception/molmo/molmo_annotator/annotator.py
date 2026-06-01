@@ -114,6 +114,8 @@ class MolmoAnnotator:
               "Do not skip an object just because its exact category is uncertain. "
               "Use alt and the tag text as a short likely noun category/name with visible attributes such as color, shape, material, size, brand text, or pose. "
               "If the exact category is unclear, use a visible-attribute label such as red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
+              "For repeated identical objects, append a short spatial word: left/right/top/bottom/front/back. "
+              "Example: 'red round lid right', 'blue can front'. "
               "Replace actual_x and actual_y with the real coordinates from this image. "
               "Output ONLY these point tags, no extra text.\n"
         )

@@ -36,6 +36,9 @@ DEFAULT_MOLMO_PROMPT = (
     "Use one point near the center of the visible region of each object. "
     "Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. "
     "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
+    "IMPORTANT: When multiple objects share the same category and appearance, clearly separate them apart and"
+    "append a brief spatial descriptor to distinguish them: e.g. red round lid left, red round lid right, "
+    "yellow packet top, yellow packet bottom. "
     "Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface."
 )
 def read_dataset() -> pd.DataFrame:
@@ -327,6 +330,51 @@ def reset_output_dir(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _disambiguate_duplicate_labels(
+    points: list[dict[str, Any]], width: int, height: int
+) -> list[dict[str, Any]]:
+    """If multiple points share the same normalized label, append spatial suffixes
+    (left/right/top/bottom) based on relative position so that LangSAM receives
+    distinct prompts for each instance."""
+    # Group by normalized label (lowercase, strip trailing spatial words)
+    spatial_markers = {"left", "right", "top", "bottom", "front", "back"}
+    groups: dict[str, list[int]] = {}
+    for idx, point in enumerate(points):
+        label = str(point.get("label", ""))
+        # Strip existing spatial suffixes to find base label
+        parts = label.lower().split()
+        base_parts = [p for p in parts if p not in spatial_markers]
+        base = " ".join(base_parts) if base_parts else label.lower()
+        groups.setdefault(base, []).append(idx)
+
+    for base, indices in groups.items():
+        if len(indices) <= 1:
+            continue
+        # Sort by position to assign consistent spatial suffixes
+        xs = [points[i]["x"] for i in indices]
+        ys = [points[i]["y"] for i in indices]
+        med_x = sum(xs) / len(xs)
+        med_y = sum(ys) / len(ys)
+
+        for i in indices:
+            label = str(points[i].get("label", ""))
+            # Skip if already has a spatial suffix
+            parts = label.lower().split()
+            if any(p in spatial_markers for p in parts):
+                continue
+            x = points[i]["x"]
+            y = points[i]["y"]
+            suffix = ""
+            if len(xs) >= 2:
+                suffix += " left" if x < med_x else " right"
+            if len(ys) >= 2 and abs(y - med_y) > height * 0.05:
+                suffix += " top" if y < med_y else " bottom"
+            if suffix:
+                points[i]["label"] = label + suffix
+
+    return points
+
+
 def maybe_run_molmo(
     image_path: Path,
     prompt: str,
@@ -353,6 +401,7 @@ def maybe_run_molmo(
         {"molmo_id": i + 1, "x": int(p["x"]), "y": int(p["y"]), "label": sanitize_point_label(str(p.get("label", "")))}
         for i, p in enumerate(points)
     ]
+    sanitized_points = _disambiguate_duplicate_labels(sanitized_points, width, height)
     payload = {
         "model_id": model_id,
         "prompt": prompt,
