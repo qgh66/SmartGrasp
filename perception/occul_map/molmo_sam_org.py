@@ -46,9 +46,17 @@ def _safe_label(label: str) -> str:
     return normalized or "object"
 
 
+LANGSAM_GUIDELINE = (
+    " Segment the complete object. An object may have multiple parts, colors, "
+    "or irregular shapes — judge by overall form, usage, and color to include all of it in one mask. "
+    "Separate this object from adjacent objects even if they touch: "
+    "only return the mask for this one object."
+)
+
+
 def _semantic_prompt(label: str) -> str:
     prompt = " ".join(part for part in _sanitize_label(label).split("_") if part)
-    return f"{prompt}." if prompt else "object."
+    return f"{prompt}.{LANGSAM_GUIDELINE}" if prompt else f"object.{LANGSAM_GUIDELINE}"
 
 
 BACKGROUND_LABEL_TERMS = {
@@ -1024,7 +1032,10 @@ def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     sam = getattr(model, "sam", None)
     if sam is None or not hasattr(sam, "generate"):
         raise RuntimeError("Loaded LangSAM object does not expose SAM2 automatic mask generation.")
-    return list(sam.generate(image_np))
+    return list(sam.generate(
+        image_np,
+        min_mask_region_area=150,
+    ))
 
 
 def _generate_background_exclusion_mask(
@@ -1045,12 +1056,12 @@ def _generate_background_exclusion_mask(
     masked_image = Image.fromarray(image_np)
 
     image_area = float(masked_image.size[0] * masked_image.size[1])
-    background_union = np.zeros((masked_image.size[1], masked_image.size[0]), dtype=bool)
+    background = np.zeros((masked_image.size[1], masked_image.size[0]), dtype=bool)
 
     try:
-        masks, _scores = _langsam_predict(model, masked_image, "background area around the objects.")
+        masks, _scores = _langsam_predict(model, masked_image, "green background area around the objects.")
     except Exception:
-        return background_union
+        return background
 
     for raw_mask in masks:
         mask = _clean_mask(raw_mask, mask_clean_kernel)
@@ -1058,14 +1069,14 @@ def _generate_background_exclusion_mask(
         area_ratio = float(area / image_area)
         if area_ratio < 0.01 or area_ratio > 0.7:
             continue
-        background_union |= mask
+        background |= mask
 
-    if int(np.count_nonzero(background_union)) == 0:
-        return background_union
+    if int(np.count_nonzero(background)) == 0:
+        return background
 
     # Safety: exclude any regions inside foreground masks
-    background_union &= ~existing_foreground_union
-    return background_union
+    background &= ~existing_foreground_union
+    return background
 
 
 def complete_masks_with_sam2_auto_proposals(

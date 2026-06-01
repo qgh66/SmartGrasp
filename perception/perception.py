@@ -30,15 +30,24 @@ OUT_ROOT = SMARTGRASP_ROOT / "data"
 DEFAULT_MOLMO_PROMPT = (
     "Point out all objects in the green tray. "
     "Return one point for each visible object instance, including repeated objects that look similar or have the same category. "
-    "Do not merge adjacent objects, even if they touch or have similar colors. "
-    "Ignore the green tray/green box itself and any other background support surface. "
-    "Do separate different instances even if they are very close or nearly touching."
     "Use one point near the center of the visible region of each object. "
     "Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. "
     "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
-    "IMPORTANT: When multiple objects share the same category and appearance, clearly separate them apart and"
-    "append a brief spatial descriptor to distinguish them: e.g. red round lid left, red round lid right, "
-    "yellow packet top, yellow packet bottom. "
+    "The labels are formatted as color, plus shape, plus any other visible attributes, plus object name, and plus spatial suffix if needed. "
+    "Here are some important guidelines to ensure accurate and consistent annotations: "
+    # separate adjacent objects
+    "First, IMPORTANT, do separate different instances even if they are very close or touching."
+    "Do not merge adjacent objects, even if they have similar color, shape, categoty or usage."
+    #ignore the background
+    "Second, ignore the green tray/green box itself and any other background support surface. "
+    # separate similar objects
+    "Third, when multiple objects share the same category and appearance, clearly separate them apart especially when they are touching or very close."
+    "Append a brief spatial descriptor as a suffix to distinguish them. "
+    # detect objects multidimensionally
+    "Fourth, objects may have irregular shapes. They can be not only triangles, rectangles, circles but also rings, awkward shape, etc. "
+    "Look at the overall shape, color, boundaries and usages to judge whether it is an object and its category and characteristics. "
+    "Fifth, a single object may have multiple colors, textures, or patterns on its surface. "
+    "Do NOT split one object into multiple points just because different regions show different colors. "
     "Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface."
 )
 def read_dataset() -> pd.DataFrame:
