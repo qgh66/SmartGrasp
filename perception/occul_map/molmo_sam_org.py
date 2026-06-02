@@ -438,6 +438,7 @@ def _select_best_mask(
     iou_scores: torch.Tensor,
     input_points: list[list[int]],
     mask_clean_kernel: int,
+    negative_points: list[list[int]] | None = None,
     prompt_metadata: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, dict[str, Any], list[dict[str, Any]]]:
     masks_np = _normalize_processed_masks(processed_masks)
@@ -457,11 +458,13 @@ def _select_best_mask(
         area_ratio = float(area / image_area)
         prompt_hits = _point_hits(cleaned_mask, input_points)
         prompt_coverage = float(prompt_hits / max(1, len(input_points)))
+        negative_hits = _point_hits(cleaned_mask, negative_points or [])
         too_small_penalty = max(0.0, 0.001 - area_ratio) * 200.0
         large_penalty = max(0.0, area_ratio - 0.08) * 4.0
         giant_penalty = max(0.0, area_ratio - 0.18) * 10.0
         empty_penalty = 1.0 if area == 0 else 0.0
         prompt_penalty = 0.6 if prompt_hits == 0 else 0.0
+        negative_penalty = 1.5 * negative_hits
         selection_score = (
             float(scores_np[idx])
             + 0.35 * prompt_coverage
@@ -470,6 +473,7 @@ def _select_best_mask(
             - giant_penalty
             - empty_penalty
             - prompt_penalty
+            - negative_penalty
         )
         candidate = {
             "candidate_index": idx,
@@ -479,6 +483,7 @@ def _select_best_mask(
             "predicted_iou": float(scores_np[idx]),
             "prompt_hits": int(prompt_hits),
             "prompt_coverage": prompt_coverage,
+            "negative_hits": int(negative_hits),
             "selection_score": float(selection_score),
         }
         if prompt_metadata:
@@ -540,6 +545,19 @@ def _point_inside_mask(mask: np.ndarray, point: MolmoPoint, radius: int = 3) -> 
     return bool(np.any(mask[y0:y1, x0:x1]))
 
 
+def _other_points_inside_mask(
+    mask: np.ndarray,
+    target: MolmoPoint,
+    points: list[MolmoPoint],
+    radius: int = 3,
+) -> list[MolmoPoint]:
+    return [
+        point
+        for point in points
+        if point.molmo_id != target.molmo_id and _point_inside_mask(mask, point, radius=radius)
+    ]
+
+
 def _point_inside_xy(mask: np.ndarray, x: int, y: int, radius: int = 3) -> bool:
     height, width = mask.shape
     x0 = max(0, int(x) - radius)
@@ -558,26 +576,89 @@ def _mask_centroid_distance(mask: np.ndarray, point: MolmoPoint) -> float:
     return float(np.hypot(cx - point.x, cy - point.y))
 
 
+def _normalize_box(raw_box: Any) -> list[int] | None:
+    try:
+        values = np.asarray(raw_box, dtype=np.float32).reshape(-1)
+    except Exception:
+        return None
+    if values.size < 4:
+        return None
+    x0, y0, x1, y1 = [int(round(float(value))) for value in values[:4]]
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return [x0, y0, x1, y1]
+
+
+def _box_contains_point(box: list[int] | None, point: MolmoPoint, margin: int = 3) -> bool:
+    if box is None:
+        return False
+    x0, y0, x1, y1 = box
+    return bool(x0 - margin <= point.x <= x1 + margin and y0 - margin <= point.y <= y1 + margin)
+
+
+def _other_points_inside_box(
+    box: list[int] | None,
+    target: MolmoPoint,
+    points: list[MolmoPoint],
+    margin: int = 3,
+) -> list[MolmoPoint]:
+    if box is None:
+        return []
+    return [
+        point
+        for point in points
+        if point.molmo_id != target.molmo_id and _box_contains_point(box, point, margin=margin)
+    ]
+
+
 def _select_langsam_mask(
     masks: list[np.ndarray],
     scores: list[float],
+    boxes: list[list[int] | None],
     point: MolmoPoint,
+    points: list[MolmoPoint],
     mask_clean_kernel: int,
+    previous_masks: list[np.ndarray] | None = None,
 ) -> tuple[np.ndarray | None, dict[str, Any], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
+    previous_masks = previous_masks or []
     for idx, raw_mask in enumerate(masks):
         mask = _clean_mask(raw_mask, mask_clean_kernel)
         area = int(np.count_nonzero(mask))
         contains_point = _point_inside_mask(mask, point)
+        box = boxes[idx] if idx < len(boxes) else None
+        box_contains_point = _box_contains_point(box, point)
+        other_points_in_box = _other_points_inside_box(box, point, points)
+        other_points_in_mask = _other_points_inside_mask(mask, point, points)
+        max_previous_iou = max((_mask_iou(mask, previous) for previous in previous_masks), default=0.0)
         centroid_distance = _mask_centroid_distance(mask, point)
         score = float(scores[idx]) if idx < len(scores) else 0.0
-        selection_score = score + (2.0 if contains_point else 0.0) - min(centroid_distance / 1000.0, 1.0)
+        selection_score = (
+            score
+            + (3.0 if contains_point else -3.0)
+            + (1.0 if box_contains_point else -1.0)
+            - 0.5 * len(other_points_in_box)
+            - 2.0 * len(other_points_in_mask)
+            - 1.0 * max_previous_iou
+            - min(centroid_distance / 1000.0, 1.0)
+        )
         candidates.append(
             {
                 "candidate_index": idx,
                 "mask": mask,
                 "area": area,
+                "box": box,
                 "contains_point": contains_point,
+                "box_contains_point": box_contains_point,
+                "other_points_in_box": [
+                    {"molmo_id": other.molmo_id, "x": other.x, "y": other.y, "label": other.label}
+                    for other in other_points_in_box
+                ],
+                "other_points_in_mask": [
+                    {"molmo_id": other.molmo_id, "x": other.x, "y": other.y, "label": other.label}
+                    for other in other_points_in_mask
+                ],
+                "max_previous_iou": float(max_previous_iou),
                 "centroid_distance": centroid_distance,
                 "semantic_score": score,
                 "selection_score": selection_score,
@@ -587,17 +668,21 @@ def _select_langsam_mask(
     if not candidates:
         return None, {}, []
 
-    best = max(candidates, key=lambda item: item["selection_score"])
+    point_candidates = [candidate for candidate in candidates if candidate["contains_point"]]
+    best_pool_name = "point" if point_candidates else "all"
+    best_pool = point_candidates or candidates
+    best = max(best_pool, key=lambda item: item["selection_score"])
     metadata = {key: value for key, value in best.items() if key != "mask"}
+    metadata["selection_pool"] = best_pool_name
     candidate_metadata = [{key: value for key, value in item.items() if key != "mask"} for item in candidates]
     return best["mask"], metadata, candidate_metadata
 
 
-def _langsam_predict(model: Any, image: Image.Image, prompt: str) -> tuple[list[np.ndarray], list[float]]:
+def _langsam_predict(model: Any, image: Image.Image, prompt: str) -> tuple[list[np.ndarray], list[float], list[list[int] | None]]:
     result = model.predict([image], [prompt])
     if isinstance(result, list):
         if not result:
-            return [], []
+            return [], [], []
         item = result[0]
         if isinstance(item, dict):
             raw_masks = item.get("masks")
@@ -608,9 +693,13 @@ def _langsam_predict(model: Any, image: Image.Image, prompt: str) -> tuple[list[
                 raw_scores = item.get("scores")
             if raw_scores is None:
                 raw_scores = []
+            raw_boxes = item.get("boxes")
+            if raw_boxes is None:
+                raw_boxes = []
         else:
             raw_masks = item
             raw_scores = []
+            raw_boxes = []
     elif isinstance(result, dict):
         raw_masks = result.get("masks")
         if raw_masks is None:
@@ -620,9 +709,13 @@ def _langsam_predict(model: Any, image: Image.Image, prompt: str) -> tuple[list[
             raw_scores = result.get("scores")
         if raw_scores is None:
             raw_scores = []
+        raw_boxes = result.get("boxes")
+        if raw_boxes is None:
+            raw_boxes = []
     else:
         raw_masks = getattr(result, "masks", [])
         raw_scores = getattr(result, "mask_scores", getattr(result, "scores", []))
+        raw_boxes = getattr(result, "boxes", [])
 
     if isinstance(raw_masks, torch.Tensor):
         raw_masks = list(raw_masks)
@@ -637,7 +730,12 @@ def _langsam_predict(model: Any, image: Image.Image, prompt: str) -> tuple[list[
     scores = [float(score) for score in raw_scores] if raw_scores is not None else []
     if len(scores) < len(masks):
         scores.extend([0.0] * (len(masks) - len(scores)))
-    return masks, scores
+    if isinstance(raw_boxes, torch.Tensor):
+        raw_boxes = raw_boxes.detach().cpu().numpy()
+    boxes = [_normalize_box(box) for box in list(raw_boxes)] if raw_boxes is not None else []
+    if len(boxes) < len(masks):
+        boxes.extend([None] * (len(masks) - len(boxes)))
+    return masks, scores, boxes
 
 
 def _mask_bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
@@ -1056,7 +1154,7 @@ def _generate_background_exclusion_mask(
     background = np.zeros((masked_image.size[1], masked_image.size[0]), dtype=bool)
 
     try:
-        masks, _scores = _langsam_predict(model, masked_image, "green background area around the objects.")
+        masks, _scores, _boxes = _langsam_predict(model, masked_image, "green background area around the objects.")
     except Exception:
         return background
 
@@ -1251,17 +1349,20 @@ def generate_masks_with_langsam(
     mask_records: list[dict[str, Any]] = []
     for point in points:
         prompt = _semantic_prompt(point.label)
-        masks, scores = _langsam_predict(model, image, prompt)
+        previous_masks = [np.asarray(record["mask_array"], dtype=bool) for record in mask_records]
+        masks, scores, boxes = _langsam_predict(model, image, prompt)
         best_mask, selected_candidate, candidate_metadata = _select_langsam_mask(
             masks,
             scores,
+            boxes,
             point,
+            points,
             mask_clean_kernel,
+            previous_masks=previous_masks,
         )
         if best_mask is None:
             raise ValueError(f"LangSAM returned no masks for point {point.molmo_id} prompt={prompt!r}.")
 
-        previous_masks = [np.asarray(record["mask_array"], dtype=bool) for record in mask_records]
         max_previous_iou = max((_mask_iou(best_mask, previous) for previous in previous_masks), default=0.0)
         point_hit = _point_inside_mask(best_mask, point)
         fallback_reason: str | None = None
@@ -1274,12 +1375,13 @@ def generate_masks_with_langsam(
         if fallback_reason is not None:
             fallback_records = generate_masks_with_sam(
                 image_path=image_path,
-                points=[point],
+                points=points,
+                target_points=[point],
                 output_mask_dir=output_mask_dir,
                 sam_model_id=sam_model_id,
                 point_grid_radius=sam_point_grid_radius,
                 prompt_mode=sam_prompt_mode,
-                negative_points=0,
+                negative_points=sam_negative_points,
                 mask_clean_kernel=mask_clean_kernel,
                 save_candidates=save_candidates,
                 device=device,
@@ -1345,6 +1447,7 @@ def generate_masks_with_sam(
     points: list[MolmoPoint],
     output_mask_dir: Path,
     sam_model_id: str,
+    target_points: list[MolmoPoint] | None = None,
     point_grid_radius: int = 0,
     prompt_mode: str = "cross",
     negative_points: int = 0,
@@ -1361,7 +1464,8 @@ def generate_masks_with_sam(
     processor, model = _load_sam(sam_model_id, device)
 
     mask_records: list[dict[str, Any]] = []
-    for point in points:
+    points_to_segment = target_points or points
+    for point in points_to_segment:
         variants = _prompt_variants(
             target=point,
             points=points,
@@ -1403,6 +1507,7 @@ def generate_masks_with_sam(
                 outputs.iou_scores[0],
                 positive_points,
                 mask_clean_kernel,
+                negative_points=variant["negative_prompt_points"],
                 prompt_metadata={
                     "variant_index": variant_idx,
                     "prompt_mode": variant["mode"],
