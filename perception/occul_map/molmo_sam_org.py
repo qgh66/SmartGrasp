@@ -59,17 +59,6 @@ def _semantic_prompt(label: str) -> str:
     return f"{prompt}.{LANGSAM_GUIDELINE}" if prompt else f"object.{LANGSAM_GUIDELINE}"
 
 
-BACKGROUND_LABEL_TERMS = {
-    "background",
-    "table",
-    "tray",
-    "bin",
-    "box",
-    "container",
-    "surface",
-    "holder",
-    "support",
-}
 VAGUE_LABEL_TERMS = {
     "unknown",
     "unknownproduct",
@@ -85,17 +74,6 @@ def _label_tokens(label: str) -> set[str]:
     return set(_safe_label(label).split("_"))
 
 
-def _is_background_or_vague_label(label: str) -> tuple[bool, str | None]:
-    normalized = _sanitize_label(label)
-    compact = normalized.replace("_", "")
-    tokens = set(normalized.split("_"))
-    if compact in VAGUE_LABEL_TERMS or tokens & VAGUE_LABEL_TERMS:
-        return True, "vague_label"
-    if tokens & BACKGROUND_LABEL_TERMS:
-        return True, "background_or_container_label"
-    return False, None
-
-
 def _sanitize_label(label: str) -> str:
     tokens = [token for token in _safe_label(label).split("_") if token]
     filtered = [token for token in tokens if token not in VAGUE_LABEL_TERMS]
@@ -106,23 +84,10 @@ def _sanitize_label(label: str) -> str:
 
 def _filter_points(points: list[MolmoPoint]) -> tuple[list[MolmoPoint], list[dict[str, Any]]]:
     kept: list[MolmoPoint] = []
-    removed: list[dict[str, Any]] = []
     for point in points:
-        should_remove, reason = _is_background_or_vague_label(point.label)
-        if should_remove:
-            removed.append(
-                {
-                    "molmo_id": point.molmo_id,
-                    "x": point.x,
-                    "y": point.y,
-                    "label": point.label,
-                    "reason": reason,
-                }
-            )
-        else:
-            sanitized = _sanitize_label(point.label)
-            kept.append(MolmoPoint(point.molmo_id, point.x, point.y, sanitized or point.label))
-    return kept, removed
+        sanitized = _sanitize_label(point.label)
+        kept.append(MolmoPoint(point.molmo_id, point.x, point.y, sanitized or point.label))
+    return kept, []
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -1595,7 +1560,7 @@ def build_org_json(
     raw_molmo_ids = {int(point.molmo_id) for point in points}
     points, filtered_points = _filter_points(points)
     if not points:
-        raise ValueError("All Molmo points were filtered as background or vague labels.")
+        raise ValueError("No Molmo points are available for mask generation.")
     depth_map = _load_depth_map(depth_path)
 
     effective_backend = segmentation_backend
