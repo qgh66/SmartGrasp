@@ -376,7 +376,7 @@ def _disambiguate_duplicate_labels(
             suffix = ""
             if len(xs) >= 2:
                 suffix += " left" if x < med_x else " right"
-            if len(ys) >= 2 and abs(y - med_y) > height * 0.05:
+            if len(ys) >= 2 and abs(y - med_y) > height * 0.12:
                 suffix += " top" if y < med_y else " bottom"
             if suffix:
                 points[i]["label"] = label + suffix

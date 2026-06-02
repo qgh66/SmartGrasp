@@ -1032,10 +1032,7 @@ def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     sam = getattr(model, "sam", None)
     if sam is None or not hasattr(sam, "generate"):
         raise RuntimeError("Loaded LangSAM object does not expose SAM2 automatic mask generation.")
-    return list(sam.generate(
-        image_np,
-        min_mask_region_area=150,
-    ))
+    return list(sam.generate(image_np))
 
 
 def _generate_background_exclusion_mask(
