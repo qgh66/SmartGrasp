@@ -595,9 +595,9 @@ def _select_langsam_mask(
         max_previous_iou = max((_mask_iou(mask, previous) for previous in previous_masks), default=0.0)
         score = float(scores[idx]) if idx < len(scores) else 0.0
         selection_score = (
-            5.0 * score
+            4.0 * score
             + (3.0 if contains_point else -3.0)
-            - 2.0 * len(other_points_in_mask)
+            - 3.0 * len(other_points_in_mask)
             - 2.0 * max_previous_iou
         )
         candidates.append(
