@@ -781,9 +781,12 @@ def _drop_contained_duplicate_masks(
         duplicate_of: dict[str, Any] | None = None
         for kept_record in kept:
             kept_mask = np.asarray(kept_record["mask_array"], dtype=bool)
-            containment = _mask_overlap_fraction(mask, kept_mask)
-            if containment < containment_threshold:
+            new_in_kept = _mask_overlap_fraction(mask, kept_mask)
+            kept_in_new = _mask_overlap_fraction(kept_mask, mask)
+            if new_in_kept < containment_threshold and kept_in_new < containment_threshold:
                 continue
+            # Either new mask is contained in kept, or kept is contained in new.
+            # Keep the earlier (more reliable) one and drop the later one.
             duplicate_of = kept_record
             break
 
@@ -1671,6 +1674,9 @@ def build_org_json(
     points_payload, points, image_path = _load_points(points_json_path)
     raw_molmo_ids = {int(point.molmo_id) for point in points}
     points, filtered_points = _filter_points(points)
+    # Sort by molmo_id: Molmo outputs most confident points first, so
+    # earlier molmo_id = more reliable. Segment and dedup in this order.
+    points.sort(key=lambda p: p.molmo_id)
     if not points:
         raise ValueError("No Molmo points are available for mask generation.")
     depth_map = _load_depth_map(depth_path)
