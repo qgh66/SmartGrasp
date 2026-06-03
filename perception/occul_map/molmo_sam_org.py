@@ -1095,6 +1095,7 @@ BACKGROUND_EXPANSION_MIN_ANCHOR_FRACTION = 0.025
 BACKGROUND_EXPANSION_MAX_HUE_MODES = 4
 BACKGROUND_EXPANSION_MAX_COMPONENT_AREA_RATIO = 0.23
 LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD = 0.5
+LANGSAM_OTHER_POINT_FALLBACK_THRESHOLD = 2
 
 
 def _hue_distance(hue: np.ndarray, center: float) -> np.ndarray:
@@ -1416,13 +1417,16 @@ def generate_masks_with_langsam(
 
         max_previous_iou = max((_mask_iou(best_mask, previous) for previous in previous_masks), default=0.0)
         point_hit = _point_inside_mask(best_mask, point)
+        other_points_in_best_mask = _other_points_inside_mask(best_mask, point, points)
         semantic_background_overlap = _background_overlap_fraction(best_mask, background_exclusion_mask)
         fallback_reason: str | None = None
         if not point_hit:
             fallback_reason = "semantic_mask_misses_point"
         elif max_previous_iou > 0.3:
             fallback_reason = "semantic_mask_duplicates_previous_instance"
-        elif semantic_background_overlap > LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD:
+        elif len(other_points_in_best_mask) > LANGSAM_OTHER_POINT_FALLBACK_THRESHOLD:
+            fallback_reason = "semantic_mask_contains_other_instances"
+        elif semantic_background_overlap >= LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD:
             fallback_reason = "semantic_mask_overlaps_background"
 
         fallback_record: dict[str, Any] | None = None
@@ -1436,7 +1440,7 @@ def generate_masks_with_langsam(
                 sam_model_id=sam_model_id,
                 point_grid_radius=sam_point_grid_radius,
                 prompt_mode=sam_prompt_mode,
-                negative_points=sam_negative_points,
+                negative_points=max(sam_negative_points, 8),
                 mask_clean_kernel=mask_clean_kernel,
                 save_candidates=save_candidates,
                 device=device,
