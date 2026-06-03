@@ -1098,45 +1098,30 @@ def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     return list(sam.generate(image_np))
 
 
+DEPTH_BACKGROUND_THRESHOLD = 79.802 - 0.05
+LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD = 0.5
+
+
 def _generate_background_exclusion_mask(
-    model: Any,
-    image: Image.Image,
-    existing_foreground_union: np.ndarray,
+    depth_map: np.ndarray,
     mask_clean_kernel: int = 3,
 ) -> np.ndarray:
-    """Paint foreground black, ask LangSAM for \"background.\", exclude foreground.
-
-    If LangSAM fails, returns an empty mask (no exclusion).
-    """
-    import numpy as np
-
-    # Paint foreground areas black so LangSAM focuses on remaining regions
-    image_np = np.asarray(image).copy()
-    image_np[existing_foreground_union] = 0
-    masked_image = Image.fromarray(image_np)
-
-    image_area = float(masked_image.size[0] * masked_image.size[1])
-    background = np.zeros((masked_image.size[1], masked_image.size[0]), dtype=bool)
-
-    try:
-        masks, _scores, _boxes = _langsam_predict(model, masked_image, "green background area around the objects.")
-    except Exception:
-        return background
-
-    for raw_mask in masks:
-        mask = _clean_mask(raw_mask, mask_clean_kernel)
-        area = int(np.count_nonzero(mask))
-        area_ratio = float(area / image_area)
-        if area_ratio < 0.01 or area_ratio > 0.7:
-            continue
-        background |= mask
-
-    if int(np.count_nonzero(background)) == 0:
-        return background
-
-    # Safety: exclude any regions inside foreground masks
-    background &= ~existing_foreground_union
+    """Use the tray-bottom depth plane as the background exclusion mask."""
+    depth = np.asarray(depth_map, dtype=np.float32)
+    valid_depth = np.isfinite(depth) & (depth > 0)
+    background = valid_depth & (depth >= DEPTH_BACKGROUND_THRESHOLD)
+    background = _clean_mask(background, mask_clean_kernel)
     return background
+
+
+def _background_overlap_fraction(mask: np.ndarray, background_mask: np.ndarray | None) -> float:
+    if background_mask is None or int(np.count_nonzero(background_mask)) == 0:
+        return 0.0
+    mask_bool = np.asarray(mask, dtype=bool)
+    area = int(np.count_nonzero(mask_bool))
+    if area == 0:
+        return 0.0
+    return float(np.count_nonzero(mask_bool & np.asarray(background_mask, dtype=bool)) / area)
 
 
 def complete_masks_with_sam2_auto_proposals(
@@ -1305,6 +1290,7 @@ def generate_masks_with_langsam(
     mask_clean_kernel: int = 3,
     save_candidates: bool = False,
     device: str | None = None,
+    background_exclusion_mask: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     image = Image.open(image_path).convert("RGB")
     if device is None:
@@ -1330,13 +1316,17 @@ def generate_masks_with_langsam(
 
         max_previous_iou = max((_mask_iou(best_mask, previous) for previous in previous_masks), default=0.0)
         point_hit = _point_inside_mask(best_mask, point)
+        semantic_background_overlap = _background_overlap_fraction(best_mask, background_exclusion_mask)
         fallback_reason: str | None = None
         if not point_hit:
             fallback_reason = "semantic_mask_misses_point"
         elif max_previous_iou > 0.3:
             fallback_reason = "semantic_mask_duplicates_previous_instance"
+        elif semantic_background_overlap > LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD:
+            fallback_reason = "semantic_mask_overlaps_background"
 
         fallback_record: dict[str, Any] | None = None
+        fallback_accepted = False
         if fallback_reason is not None:
             fallback_records = generate_masks_with_sam(
                 image_path=image_path,
@@ -1355,10 +1345,20 @@ def generate_masks_with_langsam(
             fallback_mask = np.asarray(fallback_record["mask_array"], dtype=bool)
             fallback_hit = _point_inside_mask(fallback_mask, point)
             fallback_max_previous_iou = max((_mask_iou(fallback_mask, previous) for previous in previous_masks), default=0.0)
-            if fallback_hit and fallback_max_previous_iou <= 0.3:
+            fallback_background_overlap = _background_overlap_fraction(fallback_mask, background_exclusion_mask)
+            if (
+                fallback_hit
+                and fallback_max_previous_iou <= 0.3
+                and fallback_background_overlap <= LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD
+            ):
                 best_mask = fallback_mask
+                semantic_background_overlap = fallback_background_overlap
+                fallback_record["background_exclusion_overlap"] = float(fallback_background_overlap)
+                fallback_accepted = True
             else:
                 fallback_record = None
+        if fallback_reason is not None and not fallback_accepted:
+            continue
 
         # Drop mask if it does not contain its own Molmo point after all fallbacks
         final_point_hit = _point_inside_mask(best_mask, point)
@@ -1394,6 +1394,7 @@ def generate_masks_with_langsam(
                 "semantic_candidates": candidate_metadata,
                 "semantic_point_hit": bool(point_hit),
                 "semantic_max_previous_iou": float(max_previous_iou),
+                "semantic_background_overlap": float(semantic_background_overlap),
                 "fallback_reason": fallback_reason,
                 "fallback_sam_record": (
                     {key: value for key, value in fallback_record.items() if key != "mask_array"}
@@ -1562,6 +1563,14 @@ def build_org_json(
     if not points:
         raise ValueError("No Molmo points are available for mask generation.")
     depth_map = _load_depth_map(depth_path)
+    background_exclusion_mask: np.ndarray | None = None
+    try:
+        background_exclusion_mask = _generate_background_exclusion_mask(
+            depth_map=depth_map,
+            mask_clean_kernel=mask_clean_kernel,
+        )
+    except Exception as exc:
+        print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
 
     effective_backend = segmentation_backend
     if segmentation_backend in {"langsam", "auto"}:
@@ -1577,6 +1586,7 @@ def build_org_json(
                 mask_clean_kernel=mask_clean_kernel,
                 save_candidates=save_candidates,
                 device=device,
+                background_exclusion_mask=background_exclusion_mask,
             )
             effective_backend = "langsam"
         except Exception as exc:
@@ -1622,22 +1632,8 @@ def build_org_json(
         out_path=output_mask_dir.parent / "label_2_langsam.png",
     )
 
-    # --- background exclusion mask (paint foreground black, ask LangSAM "background.") ---
-    background_exclusion_mask: np.ndarray | None = None
+    # --- background exclusion mask (depth tray-bottom plane) ---
     if proposal_backend == "sam2-auto":
-        foreground_masks = [np.asarray(record["mask_array"], dtype=bool) for record in mask_records]
-        foreground_union = np.any(np.stack(foreground_masks, axis=0), axis=0) if foreground_masks else np.zeros(depth_map.shape, dtype=bool)
-        try:
-            langsam_model = _load_langsam(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-            background_exclusion_mask = _generate_background_exclusion_mask(
-                model=langsam_model,
-                image=Image.open(image_path).convert("RGB"),
-                existing_foreground_union=foreground_union,
-                mask_clean_kernel=mask_clean_kernel,
-            )
-        except Exception as exc:
-            print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
-
         if background_exclusion_mask is not None and np.count_nonzero(background_exclusion_mask) > 0:
             _save_mask_png(background_exclusion_mask, output_mask_dir / "000_background.png")
 
