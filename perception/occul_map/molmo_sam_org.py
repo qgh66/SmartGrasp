@@ -587,19 +587,7 @@ def _select_langsam_mask(
 ) -> tuple[np.ndarray | None, dict[str, Any], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
     previous_masks = previous_masks or []
-
-    # Keep top 10 candidates by LangSAM confidence score before detailed scoring
-    if len(masks) > 10:
-        scored_indices = sorted(
-            range(len(masks)),
-            key=lambda i: float(scores[i]) if i < len(scores) else 0.0,
-            reverse=True,
-        )[:10]
-    else:
-        scored_indices = list(range(len(masks)))
-
-    for idx in scored_indices:
-        raw_mask = masks[idx]
+    for idx, raw_mask in enumerate(masks):
         mask = _clean_mask(raw_mask, mask_clean_kernel)
         area = int(np.count_nonzero(mask))
         contains_point = _point_inside_mask(mask, point)
@@ -607,9 +595,9 @@ def _select_langsam_mask(
         max_previous_iou = max((_mask_iou(mask, previous) for previous in previous_masks), default=0.0)
         score = float(scores[idx]) if idx < len(scores) else 0.0
         selection_score = (
-            3.0 * score
+            5.0 * score
             + (3.0 if contains_point else -3.0)
-            - 3.0 * len(other_points_in_mask)
+            - 2.0 * len(other_points_in_mask)
             - 2.0 * max_previous_iou
         )
         candidates.append(
@@ -1429,7 +1417,6 @@ def generate_masks_with_langsam(
         max_previous_iou = max((_mask_iou(best_mask, previous) for previous in previous_masks), default=0.0)
         point_hit = _point_inside_mask(best_mask, point)
         semantic_background_overlap = _background_overlap_fraction(best_mask, background_exclusion_mask)
-        langsam_other_points_in_mask = int(len(selected_candidate.get("other_points_in_mask", [])))
         fallback_reason: str | None = None
         if not point_hit:
             fallback_reason = "semantic_mask_misses_point"
@@ -1437,8 +1424,6 @@ def generate_masks_with_langsam(
             fallback_reason = "semantic_mask_duplicates_previous_instance"
         elif semantic_background_overlap > LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD:
             fallback_reason = "semantic_mask_overlaps_background"
-        elif langsam_other_points_in_mask >= 3:
-            fallback_reason = "semantic_mask_covers_other_objects"
 
         fallback_record: dict[str, Any] | None = None
         fallback_accepted = False
@@ -1461,12 +1446,10 @@ def generate_masks_with_langsam(
             fallback_hit = _point_inside_mask(fallback_mask, point)
             fallback_max_previous_iou = max((_mask_iou(fallback_mask, previous) for previous in previous_masks), default=0.0)
             fallback_background_overlap = _background_overlap_fraction(fallback_mask, background_exclusion_mask)
-            fallback_other_points = len(_other_points_inside_mask(fallback_mask, point, points))
             if (
                 fallback_hit
                 and fallback_max_previous_iou <= 0.3
                 and fallback_background_overlap <= LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD
-                and fallback_other_points < 3
             ):
                 best_mask = fallback_mask
                 semantic_background_overlap = fallback_background_overlap
