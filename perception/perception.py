@@ -359,11 +359,20 @@ def _disambiguate_duplicate_labels(
     for base, indices in groups.items():
         if len(indices) <= 1:
             continue
-        # Sort by position to assign consistent spatial suffixes
         xs = [points[i]["x"] for i in indices]
         ys = [points[i]["y"] for i in indices]
         med_x = sum(xs) / len(xs)
         med_y = sum(ys) / len(ys)
+        span_x = max(xs) - min(xs)
+        span_y = max(ys) - min(ys)
+        use_x = span_x >= max(24, width * 0.03)
+        use_y = span_y >= max(24, height * 0.03)
+        if use_x and use_y:
+            # Prefer the axis that separates the repeated instances more clearly.
+            if span_x >= span_y * 1.25:
+                use_y = False
+            elif span_y >= span_x * 1.25:
+                use_x = False
 
         for i in indices:
             label = str(points[i].get("label", ""))
@@ -374,9 +383,9 @@ def _disambiguate_duplicate_labels(
             x = points[i]["x"]
             y = points[i]["y"]
             suffix = ""
-            if len(xs) >= 2 and abs(x - med_x) > width * 0.10:
+            if use_x:
                 suffix += " left" if x < med_x else " right"
-            if len(ys) >= 2 and abs(y - med_y) > height * 0.10:
+            if use_y:
                 suffix += " top" if y < med_y else " bottom"
             if suffix:
                 points[i]["label"] = label + suffix
