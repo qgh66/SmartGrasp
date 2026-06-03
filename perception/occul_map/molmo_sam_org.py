@@ -1674,9 +1674,6 @@ def build_org_json(
     points_payload, points, image_path = _load_points(points_json_path)
     raw_molmo_ids = {int(point.molmo_id) for point in points}
     points, filtered_points = _filter_points(points)
-    # Sort by molmo_id: Molmo outputs most confident points first, so
-    # earlier molmo_id = more reliable. Segment and dedup in this order.
-    points.sort(key=lambda p: p.molmo_id)
     if not points:
         raise ValueError("No Molmo points are available for mask generation.")
     depth_map = _load_depth_map(depth_path)
