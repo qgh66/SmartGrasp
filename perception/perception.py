@@ -32,7 +32,7 @@ DEFAULT_MOLMO_PROMPT = (
     "Return one point for each visible object instance, including repeated objects that look similar or have the same category. "
     "Use one point near the center of the visible region of each object. "
     "Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. "
-    "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
+    # "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
     "The labels are formatted as color, plus shape, plus any other visible attributes, plus object name, and plus spatial suffix if needed. "
     "Here are some important guidelines to ensure accurate and consistent annotations: "
     # separate adjacent objects
@@ -448,6 +448,20 @@ def sanitize_points_json(points_path: Path) -> None:
     points_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def write_image_source_json(out_dir: Path, image_path: Path, width: int, height: int, prompt: str) -> Path:
+    payload = {
+        "model_id": "sam2_molmo_langsam",
+        "prompt": prompt,
+        "image": {"path": str(image_path.resolve()), "width": int(width), "height": int(height)},
+        "parse_mode": "image_source",
+        "raw_model_output": "",
+        "points": [],
+    }
+    path = out_dir / "molmo_points.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
 def load_json_file(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -488,6 +502,18 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) 
                 "label": display_label(node.get("label", f"object_{molmo_id}")),
             }
         )
+
+    if not molmo_points:
+        molmo_points = [
+            {
+                "molmo_id": int(node.get("molmo_id", node["node_id"])),
+                "x": int(node.get("point", {}).get("x", 0)),
+                "y": int(node.get("point", {}).get("y", 0)),
+                "label": display_label(node.get("label", f"object_{node.get('molmo_id', node['node_id'])}")),
+            }
+            for node in nodes
+            if isinstance(node.get("point"), dict)
+        ]
 
     node_id_to_index = {item["node_id"]: item["matrix_index"] for item in object_order}
     size = len(object_order)
@@ -602,12 +628,15 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     if args.point_source == "molmo":
         from SmartGrasp.perception.occul_map.molmo_sam_org import build_org_json
 
-        points_path = maybe_run_molmo(
-            image_path,
-            prompt,
-            out_dir,
-            args.molmo_model_id,
-        )
+        if args.segmentation_backend == "sam2-molmo-langsam":
+            points_path = write_image_source_json(out_dir, image_path, width, height, prompt)
+        else:
+            points_path = maybe_run_molmo(
+                image_path,
+                prompt,
+                out_dir,
+                args.molmo_model_id,
+            )
         graph_payload = build_org_json(
             points_json_path=points_path.resolve(),
             depth_path=depth_path.resolve(),
@@ -615,6 +644,11 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             output_mask_dir=(out_dir / "mask").resolve(),
             segmentation_backend=args.segmentation_backend,
             sam_model_id=args.sam_model_id,
+            molmo_model_id=args.molmo_model_id,
+            review_model_id=args.review_model_id,
+            review_api_key_env=args.review_api_key_env,
+            review_base_url=args.review_base_url,
+            review_timeout=args.review_timeout,
             epsilon=args.epsilon,
             kernel_size=args.kernel_size,
             min_contact_pixels=args.min_contact_pixels,
@@ -632,6 +666,14 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             max_proposal_masks=args.max_proposal_masks,
             save_candidates=args.save_candidates,
             device=args.device,
+            depth_merge_threshold=args.depth_merge_threshold,
+            anchor_merge_depth_threshold=args.anchor_merge_depth_threshold,
+            anchor_refine_with_langsam=not args.no_anchor_langsam_refine,
+            sam2_points_per_side=args.sam2_points_per_side,
+            sam2_crop_n_layers=args.sam2_crop_n_layers,
+            sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
+            sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+            preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
         )
         visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "Molmo/SAM Occlusion Graph")
     else:
@@ -659,6 +701,10 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         "points_json": str(points_path.resolve()),
         "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
+        "sam2_auto_label_png": str((out_dir / "label_1_sam2_auto.png").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
+        "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
+        "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
+        "molmo_sam2_review_json": str((out_dir / "molmo_sam2_review.json").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
         "raw_label_1_molmo_png": str((out_dir / "label_2_langsam.png").resolve()) if args.point_source == "molmo" else None,
         "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
         "num_nodes": len(graph_payload["graph"]["nodes"]),
@@ -681,8 +727,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
     parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
     parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
+    parser.add_argument("--review-model-id", default="gpt-5.5")
+    parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
+    parser.add_argument("--review-base-url", default=None)
+    parser.add_argument("--review-timeout", type=float, default=120.0)
 
-    parser.add_argument("--segmentation-backend", choices=["sam", "langsam", "auto"], default="sam")
+    parser.add_argument("--segmentation-backend", choices=["sam2-molmo-langsam", "sam2-anchor", "sam", "langsam", "auto"], default="sam2-molmo-langsam")
     parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
     parser.add_argument("--epsilon", type=float, default=0.05)
     parser.add_argument("--kernel-size", type=int, default=5)
@@ -699,6 +749,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--proposal-containment-threshold", type=float, default=0.6)
     parser.add_argument("--proposal-border-fraction-threshold", type=float, default=0.18)
     parser.add_argument("--max-proposal-masks", type=int, default=3)
+    parser.add_argument("--depth-merge-threshold", type=float, default=0.0)
+    parser.add_argument("--anchor-merge-depth-threshold", type=float, default=0.015)
+    parser.add_argument("--no-anchor-langsam-refine", action="store_true")
+    parser.add_argument("--sam2-points-per-side", type=int, default=24)
+    parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
+    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.7)
+    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.88)
+    parser.add_argument("--preserve-unclaimed-sam2", type=int, default=24)
     parser.add_argument("--save-candidates", action="store_true")
     parser.add_argument("--device", default=None)
     return parser
