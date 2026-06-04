@@ -1,10 +1,12 @@
 # new branch
-
 # 排除数据和模型
 data/
 models/*.pth
 models/*.onnx
 *.weights
+
+/sample_data/*
+scene_details/
 
 # 排除 Python 缓存
 __pycache__/
@@ -13,6 +15,10 @@ __pycache__/
 # 排除环境和日志
 .venv/
 .conda/
+.env
 logs/
 build/
+.codex/
+.vscode/
+.agents/
 devel/
