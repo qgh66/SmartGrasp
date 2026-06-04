@@ -5,7 +5,7 @@ models/*.pth
 models/*.onnx
 *.weights
 
-/sample_data/*
+sample_data/
 scene_details/
 
 # 排除 Python 缓存
