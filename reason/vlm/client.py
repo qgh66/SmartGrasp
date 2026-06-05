@@ -20,15 +20,25 @@ You will see:
 - A list of candidate occluders (object ids + labels).
 - The occlusion relations (a -> b means a is on top of / in front of b).
 
-For EACH candidate, output an INDEPENDENT score in [0, 1]:
-  - 1.0 = strongly believe removing this object will reveal more of the target.
-  - 0.0 = removing this object will not help at all.
+For EACH candidate, output an INDEPENDENT score in [0, 1] using the
+following FINE-GRAINED scale:
 
-Scores do NOT need to sum to 1. Judge each candidate on its own.
+  - 0.90 - 1.00 = directly covers/blocks the target (clear top-layer occluder).
+  - 0.70 - 0.89 = strongly contributes to occlusion (e.g., presses a directly-
+                  covering object onto the target, or partially overlaps target).
+  - 0.50 - 0.69 = indirect occluder (blocks a direct occluder; removing it is a
+                  necessary intermediate step toward reaching the target).
+  - 0.30 - 0.49 = weakly relevant (adjacent or contributes minimally).
+  - 0.10 - 0.29 = mostly unrelated to the target.
+  - 0.00 - 0.09 = removing this candidate has essentially no effect on the target.
 
-Use BOTH:
-  - The image (where is the candidate relative to the target?).
-  - The relations (does the candidate directly occlude the target?).
+IMPORTANT RULES:
+1. Use the FULL [0, 1] range. Do NOT only output 0 or 1.
+2. CHAIN OCCLUSION COUNTS: if A blocks B and B blocks the target, removing A
+   is still useful — give A a moderate-to-good score (0.5 - 0.8), NOT 0.
+3. Scores are INDEPENDENT; they do NOT need to sum to 1. Judge each candidate
+   on its own.
+4. Consider BOTH the image (spatial layout) and the relations (graph chain).
 
 Output strictly as JSON, no prose, no markdown:
 {"scores": {"<mid>": <0..1>, ...}}
@@ -44,8 +54,12 @@ You will see:
 - The target object label (the target itself is NOT in the image).
 - A list of candidate occluders (each could be hiding the target underneath/behind/inside).
 
-For EACH candidate, output a probability in [0, 1] representing how likely
-the target is hidden under/behind/inside that candidate.
+For EACH candidate, output a probability in [0, 1] using a FINE-GRAINED scale:
+
+  - 0.50 - 0.80 = strongly likely (size/shape/category match, e.g., bowl over spoon).
+  - 0.20 - 0.49 = plausible (could hide it but not the most natural match).
+  - 0.05 - 0.19 = unlikely (size/category mismatch but not impossible).
+  - 0.00 - 0.04 = very unlikely (clearly cannot hide the target).
 
 Use common sense about object semantics:
   - A bowl, cup, or box can hide small objects inside or beneath.
@@ -53,14 +67,17 @@ Use common sense about object semantics:
   - A large object can hide more than a small one.
   - Match the size: a target of size X is unlikely to be hidden by a much smaller object.
 
-These probabilities represent MUTUALLY EXCLUSIVE hypotheses (the target is hidden
-under exactly ONE candidate), so they should approximately sum to 1.0
-(but don't worry if they don't exactly sum — downstream code will normalize).
+IMPORTANT RULES:
+1. Use the FULL probability range; avoid extreme 0 or 1.
+2. The most likely candidate should usually be 0.4 - 0.7, NOT 0.95+,
+   because we cannot SEE the target — there is real uncertainty.
+3. These probabilities represent MUTUALLY EXCLUSIVE hypotheses (the target
+   is hidden under exactly ONE candidate), so they should approximately
+   sum to 1.0 (downstream code will normalize if needed).
 
 Output strictly as JSON, no prose, no markdown, no code fences:
 {"scores": {"<mid>": <0..1>, ...}}
 Include exactly the requested mids."""
-
 
 
 

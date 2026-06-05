@@ -30,6 +30,15 @@ def _build_user_text_partial(
         lines.append("  (none)")
     lines.append("")
     lines.append(
+        "Reminders:\n"
+        "  - Score range is [0, 1]. Avoid only 0 or 1; use intermediate values.\n"
+        "  - A candidate that blocks a DIRECT occluder of the target is an\n"
+        "    INDIRECT occluder and deserves a moderate score (around 0.5-0.7),\n"
+        "    not 0.\n"
+        "  - A candidate that directly covers the target should be high\n"
+        "    (around 0.9-1.0).\n"
+    )
+    lines.append(
         f'Reply as JSON: {{"scores": {{"<mid>": <0..1>, ...}}}}. '
         f'Mids must be exactly: {[o["mid"] for o in occluders]}.'
     )
