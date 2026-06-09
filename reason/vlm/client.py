@@ -17,33 +17,39 @@ decide which object is most relevant to "uncover" a partially visible target.
 You will see:
 - A labeled scene image where each object is outlined and tagged with its id.
 - The target object id and label.
-- A list of candidate occluders (object ids + labels).
+- A list of candidate objects (object ids + labels). These are ALL ancestors
+  of the target in the occlusion graph — they may be top-layer (directly
+  graspable now) OR lower-layer (pressed by other objects above them).
 - The occlusion relations (a -> b means a is on top of / in front of b).
 
-For EACH candidate, output an INDEPENDENT score in [0, 1] using the
-following FINE-GRAINED scale:
+For EACH candidate, output an INDEPENDENT score in [0, 1] reflecting its
+IMPORTANCE in the occlusion chain leading to the target. Do NOT filter by
+whether the candidate can be grasped right now; we account for that separately.
 
-  - 0.90 - 1.00 = directly covers/blocks the target (clear top-layer occluder).
-  - 0.70 - 0.89 = strongly contributes to occlusion (e.g., presses a directly-
-                  covering object onto the target, or partially overlaps target).
-  - 0.50 - 0.69 = indirect occluder (blocks a direct occluder; removing it is a
-                  necessary intermediate step toward reaching the target).
+Use the FINE-GRAINED scale:
+  - 0.90 - 1.00 = directly covers/blocks the target (immediate occluder).
+  - 0.70 - 0.89 = strongly contributes to occlusion (e.g., presses a direct
+                  occluder onto the target, or partially overlaps target).
+  - 0.50 - 0.69 = indirect occluder (in the chain to target), OR a lower-layer
+                  object that becomes the key bottleneck once layers above
+                  it are removed.
   - 0.30 - 0.49 = weakly relevant (adjacent or contributes minimally).
   - 0.10 - 0.29 = mostly unrelated to the target.
-  - 0.00 - 0.09 = removing this candidate has essentially no effect on the target.
+  - 0.00 - 0.09 = essentially no relevance to the target.
 
 IMPORTANT RULES:
 1. Use the FULL [0, 1] range. Do NOT only output 0 or 1.
-2. CHAIN OCCLUSION COUNTS: if A blocks B and B blocks the target, removing A
-   is still useful — give A a moderate-to-good score (0.5 - 0.8), NOT 0.
-3. Scores are INDEPENDENT; they do NOT need to sum to 1. Judge each candidate
+2. CHAIN OCCLUSION COUNTS: if A blocks B and B blocks the target, A is still
+   important — give A a moderate-to-good score (0.5 - 0.8), NOT 0.
+3. NON-TOP-LAYER CANDIDATES are fine. Score them based on their role in the
+   occlusion chain, not whether they can be grasped first.
+4. Scores are INDEPENDENT; they do NOT need to sum to 1. Judge each candidate
    on its own.
-4. Consider BOTH the image (spatial layout) and the relations (graph chain).
+5. Consider BOTH the image (spatial layout) and the relations (graph chain).
 
 Output strictly as JSON, no prose, no markdown:
 {"scores": {"<mid>": <0..1>, ...}}
 Include exactly the requested mids."""
-
 
 
 _SYSTEM_PROMPT_INVISIBLE = """You are a vision/spatial reasoning expert helping a robot

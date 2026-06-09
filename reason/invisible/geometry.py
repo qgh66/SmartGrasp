@@ -50,31 +50,25 @@ def equivalent_area(
     mid: int,
     perception,
     geom_cache: dict,
-    removed_mids: set[int] | None = None,
 ) -> float:
-    """Approximate hidden support area after optional counterfactual removals."""
-    if removed_mids is None:
-        removed_mids = set()
-
+    """Fixed area estimate: average of self + all objects pressing on top."""
     g = perception.occlusion_graph
     node = perception.molmo_to_node[mid]
-
-    # Keep only objects that still remain above this candidate.
-    above_nodes = [
-        pred for pred in g.predecessors(node)
-        if perception.node_info[pred]["molmo_id"] not in removed_mids
-    ]
-
+    
+    # All objects pressing on top of this candidate (not filtered by removed)
+    above_nodes = list(g.predecessors(node))
+    
     visible_area = geom_cache[mid]["visible_area"]
     if not above_nodes:
         return visible_area
-
-    above_area = sum(
+    
+    above_area_sum = sum(
         geom_cache[perception.node_info[n]["molmo_id"]]["visible_area"]
         for n in above_nodes
     )
-    return (visible_area + above_area) / 2.0
-
+    
+    # New formula: average over self + all above
+    return (visible_area + above_area_sum) / (len(above_nodes) + 1)
 
 def equivalent_height(mid: int, geom_cache: dict) -> float:
     """Return the cached height proxy for one object."""
@@ -85,25 +79,22 @@ def compute_geometric_prior(
     target_mid: int,
     perception,
     geom_cache: dict | None = None,
-    removed_mids: set[int] | None = None,
 ) -> dict[int, float]:
-    """Compute a normalized geometry prior from area and height proxies."""
     _ = target_mid
     if geom_cache is None:
         geom_cache = precompute_geometry_cache(perception)
-
+    
     raw_scores: dict[int, float] = {}
     for mid in occluder_mids:
-        area = equivalent_area(mid, perception, geom_cache, removed_mids)
+        area = equivalent_area(mid, perception, geom_cache)  
         height = equivalent_height(mid, geom_cache)
         raw_scores[mid] = area * height
-
+    
     total = sum(raw_scores.values())
     if total <= 0:
         n = len(raw_scores)
         return {mid: 1.0 / n for mid in raw_scores} if n > 0 else {}
     return {mid: v / total for mid, v in raw_scores.items()}
-
 
 def _dilated_ring(mask: np.ndarray, k: int = 5) -> np.ndarray:
     """Return the outer ring after dilating a binary mask."""

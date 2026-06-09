@@ -12,6 +12,7 @@ from .schemas import PerceptionOutput, GraspDecision, Branch
 from .branch_judge.classifier import classify_branch
 from .fully_visible import handle as handle_fully_visible
 from .partially_visible import handle as handle_partially_visible
+from .invisible import handle as handle_fully_occluded
 
 
 @dataclass
@@ -116,12 +117,25 @@ def run_closed_loop(
                 return result
 
         elif branch == Branch.FULLY_OCCLUDED:
-            result.final_status = (
-                f"fully_occluded_not_supported_step{step}: "
-                f"target={target_mid}, branch={branch.value}"
-            )
-            result.num_steps = step
-            return result
+            try:
+                decision = handle_fully_occluded(current)
+            except Exception as e:
+                result.final_status = f"handler_error_step{step}: {e}"
+                return result
+            result.actions.append(decision)
+            result.num_steps = step + 1
+
+            if not decision.success or decision.grasp_id is None:
+                result.final_status = (
+                    f"handler_failed_step{step}: {decision.message}"
+                )
+                return result
+
+            try:
+                current = simulate_remove(current, decision.grasp_id)
+            except Exception as e:
+                result.final_status = f"simulate_remove_error_step{step}: {e}"
+                return result
 
         else:  # FAULT
             result.final_status = (

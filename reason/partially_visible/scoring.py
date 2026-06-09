@@ -1,16 +1,17 @@
+"""TBM fusion, Shannon entropy, and entropy-based information gain."""
 from __future__ import annotations
 
 import math
 from collections import deque
 
-import networkx as nx
+from .geometry import compute_geometric_prior, top_level_ancestors_after
 
 
 def tbm_fusion(
     P_s: dict[int, float],
     P_g: dict[int, float],
 ) -> dict[int, float]:
-    """Fuse semantic and geometric scores into a normalized belief."""
+    """Fuse semantic and geometric priors into a normalized belief."""
     raw = {mid: P_s[mid] * P_g[mid] for mid in P_s}
     total = sum(raw.values())
     if total <= 0:
@@ -19,67 +20,55 @@ def tbm_fusion(
     return {mid: v / total for mid, v in raw.items()}
 
 
-def _upstream_levels(g: nx.DiGraph, target_node: int) -> dict[int, int]:
-    """Assign a top-down level to the target and all of its ancestors."""
-    relevant_nodes = nx.ancestors(g, target_node) | {target_node}
-    subgraph = g.subgraph(relevant_nodes).copy()
-
-    levels: dict[int, int] = {}
-    for node in nx.topological_sort(subgraph):
-        preds = list(subgraph.predecessors(node))
-        if not preds:
-            levels[node] = 0
-        else:
-            levels[node] = 1 + max(levels[pred] for pred in preds)
-    return levels
+def entropy(P: dict[int, float]) -> float:
+    """Shannon entropy in bits; zero probs are skipped."""
+    h = 0.0
+    for p in P.values():
+        if p > 0:
+            h -= p * math.log2(p)
+    return h
 
 
 def information_gain(
     occluder_mid: int,
     perception,
-    belief: dict[int, float] | None = None,
+    P_prior: dict[int, float],
+    P_s_cache: dict[int, float],
 ) -> float:
-    """Estimate structural gain after removing one visible occluder."""
-    if occluder_mid not in perception.molmo_to_node:
-        raise KeyError(f"candidate {occluder_mid} not found in occlusion graph")
+    """Shannon IG: H(P_prior) - H(P_after) on the top-level candidate set.
 
+    VLM is NOT called here. The cached P_s scores (covering all ancestors)
+    are reused to rebuild the belief after removing the candidate.
+    """
     target_mid = perception.target_molmo_id
-    if target_mid not in perception.molmo_to_node:
-        raise KeyError(f"target {target_mid} not found in occlusion graph")
+    H_prior = entropy(P_prior)
 
-    g = perception.occlusion_graph
-    target_node = perception.molmo_to_node[target_mid]
-    occluder_node = perception.molmo_to_node[occluder_mid]
-
-    current_levels = _upstream_levels(g, target_node)
-
-    new_graph = g.copy()
-    new_graph.remove_node(occluder_node)
-    next_levels = _upstream_levels(new_graph, target_node)
-
-    shared_nodes = [
-        node for node in current_levels
-        if node != occluder_node and node in next_levels
-    ]
-
-    level_drop = sum(
-        max(0, current_levels[node] - next_levels[node])
-        for node in shared_nodes
-    )
-    promoted_to_top = sum(
-        1
-        for node in shared_nodes
-        if current_levels[node] > 0 and next_levels[node] == 0
+    # New top-level candidates after removing this object.
+    new_candidates = top_level_ancestors_after(
+        perception, target_mid, removed_mids={occluder_mid}
     )
 
-    target_bonus = 1.0 if next_levels.get(target_node, 0) == 0 else 0.0
-    belief_bonus = 0.0 if belief is None else 0.1 * belief.get(occluder_mid, 0.0)
+    if not new_candidates:
+        # Target became directly graspable.
+        H_after = 0.0
+    else:
+        # Reuse cached VLM scores for the new candidates.
+        P_s_new = {mid: P_s_cache.get(mid, 0.5) for mid in new_candidates}
+        # Recompute geometry on the residual graph.
+        P_g_new = compute_geometric_prior(
+            new_candidates,
+            target_mid,
+            perception,
+            removed_mids={occluder_mid},
+        )
+        P_after = tbm_fusion(P_s_new, P_g_new)
+        H_after = entropy(P_after)
 
-    return float(level_drop) + 0.5 * promoted_to_top + target_bonus + belief_bonus
+    return H_prior - H_after
 
 
 def compute_cost(occluder_mid: int, perception) -> int:
-    """Approximate removal cost as the number of layers above the object."""
+    """Approximate removal cost as the depth of objects pressing on the candidate."""
     g = perception.occlusion_graph
     start = perception.molmo_to_node[occluder_mid]
 
@@ -99,8 +88,8 @@ def compute_cost(occluder_mid: int, perception) -> int:
 def compute_score(
     ig_value: float,
     cost: int,
+    belief: float,
     alpha: float = 0.1,
-    belief: float = 1.0,
 ) -> float:
-    """Combine structural gain and cost into a final ranking score."""
+    """Final score: belief-weighted IG minus a small cost penalty."""
     return belief * ig_value - alpha * cost

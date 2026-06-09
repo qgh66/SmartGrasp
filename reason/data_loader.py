@@ -174,11 +174,23 @@ def _attach_scene_artifacts(scene_dir: Path, node_info: dict[int, dict]) -> None
 
 
 def _find_mask_path(mask_dir: Path, molmo_id: int) -> Path | None:
-    matches = sorted(mask_dir.glob(f"mask_{molmo_id:03d}_*.png"))
-    if matches:
-        return matches[0]
-    exact = mask_dir / f"mask_{molmo_id:03d}.png"
-    return exact if exact.exists() else None
+    patterns = [
+        f"mask_{molmo_id:03d}_*.png",
+        f"{molmo_id:03d}_*.png",
+    ]
+    for pattern in patterns:
+        matches = sorted(mask_dir.glob(pattern))
+        if matches:
+            return matches[0]
+
+    exact_candidates = [
+        mask_dir / f"mask_{molmo_id:03d}.png",
+        mask_dir / f"{molmo_id:03d}.png",
+    ]
+    for candidate in exact_candidates:
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _load_binary_mask(mask_path: Path, threshold: int = 127) -> np.ndarray:

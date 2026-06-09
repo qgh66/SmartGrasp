@@ -1,9 +1,10 @@
+"""Partial-occlusion branch: pick the best top-layer occluder to remove."""
 from __future__ import annotations
 
 import networkx as nx
 
 from ..schemas import PerceptionOutput, GraspDecision, Branch
-from .prior import compute_semantic_prior
+from .prior import compute_semantic_prior_all_ancestors
 from .geometry import compute_geometric_prior
 from .scoring import (
     compute_cost,
@@ -28,10 +29,8 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         )
 
     t_node = perception.molmo_to_node[target_mid]
-
     ancestors = nx.ancestors(g, t_node)
     candidate_nodes = [n for n in ancestors if g.in_degree(n) == 0]
-
     if not candidate_nodes:
         return GraspDecision(
             branch=Branch.PARTIALLY_OCCLUDED,
@@ -45,19 +44,24 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         perception.node_info[n]["molmo_id"] for n in candidate_nodes
     )
 
-    P_s = compute_semantic_prior(candidate_mids, target_mid, perception)
-    P_g = compute_geometric_prior(candidate_mids, target_mid, perception)
-    P = tbm_fusion(P_s, P_g)
+    # One VLM call: score every ancestor (top + non-top) for later reuse.
+    P_s_all = compute_semantic_prior_all_ancestors(target_mid, perception)
+    P_s_top = {mid: P_s_all.get(mid, 0.5) for mid in candidate_mids}
 
+    # Initial belief on top-level candidates only.
+    P_g_top = compute_geometric_prior(candidate_mids, target_mid, perception)
+    P_prior = tbm_fusion(P_s_top, P_g_top)
+
+    # Shannon IG per candidate; reuses P_s_all to avoid extra VLM calls.
     details: dict[int, dict] = {}
     for mid in candidate_mids:
-        ig_value = information_gain(mid, perception, belief=P)
+        ig_value = information_gain(mid, perception, P_prior, P_s_all)
         cost = compute_cost(mid, perception)
-        score = compute_score(ig_value, cost, belief=P[mid])
+        score = compute_score(ig_value, cost, belief=P_prior[mid])
         details[mid] = {
-            "P_s": P_s[mid],
-            "P_g": P_g[mid],
-            "P": P[mid],
+            "P_s": P_s_top[mid],
+            "P_g": P_g_top[mid],
+            "P": P_prior[mid],
             "IG": ig_value,
             "cost": cost,
             "score": score,
@@ -70,7 +74,7 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
     best_node = perception.molmo_to_node[best_mid]
     best_label = perception.node_info[best_node]["label"]
 
-    # Build a compact debug string for downstream inspection.
+    # Compact debug string.
     lines = [
         f"selected mid={best_mid} ({best_label})",
         "candidates:",

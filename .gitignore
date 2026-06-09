@@ -7,6 +7,9 @@ models/*.onnx
 
 sample_data/
 scene_details/
+runs/
+runs_detail/
+analysis_report/
 
 # 排除 Python 缓存
 __pycache__/

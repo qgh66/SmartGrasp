@@ -40,7 +40,6 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         target_mid,
         perception,
         geom_cache=geom_cache,
-        removed_mids=None,
     )
     P = tbm_fusion(P_s, P_g)
 
