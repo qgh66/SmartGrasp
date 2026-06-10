@@ -26,7 +26,7 @@ BRANCH_INVISIBLE = "invisible"
 
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://www.highland-api.top/v1"
-DEFAULT_API_KEY_ENV = "API111_API_KEY"
+DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 
 _SIDE_WORDS = {
     "left",
@@ -311,7 +311,12 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "their ids in candidate_object_ids. The caller will choose the least "
         "occluded one using the occlusion matrix.\n"
         "4. Use the labeled image ids to distinguish instances.\n"
-        "5. Return only one JSON object, with no markdown.\n\n"
+        "5. Words such as top, bottom, upper, lower, up, and down refer to "
+        "physical height / stacking order in the real scene by default, not "
+        "their 2D position in the image. Only treat them as image-space "
+        "directions if the instruction explicitly says things like 'in the "
+        "image', 'in the picture', or 'on the screen'.\n"
+        "6. Return only one JSON object, with no markdown.\n\n"
         "Required JSON shape:\n"
         "{\n"
         '  "target_present": true or false,\n'

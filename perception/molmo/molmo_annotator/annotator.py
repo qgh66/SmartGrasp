@@ -104,16 +104,9 @@ class MolmoAnnotator:
         return (
             user_prompt.strip()
             + "\n\n"
-            + "Point to the center of each distinct object in the green tray. "
-              "Return one point for each visible object instance, including repeated objects that look similar or share the same category. "
-              "Do not merge adjacent objects into one point, even if they touch or overlap. "
-              "Do not mark the green tray/green box itself or other background support surfaces. "
-              "Return one object per line using Molmo point tags in this shape:\n"
+            + "Return one point per object using Molmo point tags in this shape:\n"
               "<point x=\"actual_x\" y=\"actual_y\" alt=\"short_label\">short_label</point>\n"
               "Use x and y as 0-100 image percentage coordinates. "
-              "Do not skip an object just because its exact category is uncertain. "
-              "Use alt and the tag text as a short likely noun category/name with visible attributes such as color, shape, material, size, brand text, or pose. "
-              "If the exact category is unclear, use a visible-attribute label such as red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
               "Replace actual_x and actual_y with the real coordinates from this image. "
               "Output ONLY these point tags, no extra text.\n"
         )
@@ -422,7 +415,7 @@ class MolmoAnnotator:
         image_path: str,
         prompt: str,
         out_dir: str,
-        labeled_png_name: str = "molmo_label.png",
+        labeled_png_name: str = "label_1_molmo.png",
         json_name: str = "molmo_points.json",
         return_base64: bool = True,
     ) -> Dict[str, Any]:

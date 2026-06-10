@@ -14,7 +14,7 @@ The pipeline connects three existing parts of the repository:
 2. `perception/molmo/`
    - Runs `allenai/Molmo-7B-D-0924` on a scene image.
    - Produces `molmo_points.json`, where each object has `molmo_id`, `x`, `y`, and `label`.
-   - Also writes `molmo_label.png` for visual inspection.
+   - Also writes `label_1_molmo.png` for visual inspection.
 
 3. `perception/occul_map/`
    - Uses Molmo points as SAM prompts.
@@ -26,6 +26,57 @@ The main entry point is:
 ```bash
 perception/perception.py
 ```
+
+## Prepare FreeGrasp Data
+
+The local pipeline expects the FreeGrasp parquet files and `npz_file.zip` to be
+available before running perception. In this repository, the helper script is:
+
+```bash
+download.py
+```
+
+Run it from the repository root:
+
+```bash
+/home/qiuguanhe/miniconda3/envs/smartgrasp/bin/python download.py
+```
+
+It downloads `FBK-TeV/FreeGraspData` from Hugging Face and exports the needed
+files to:
+
+```text
+freegrasp/
+```
+
+Expected files:
+
+```text
+freegrasp/README.md
+freegrasp/train-00000-of-00002.parquet
+freegrasp/train-00001-of-00002.parquet
+freegrasp/npz_file.zip
+```
+
+`download.py` prints two useful paths:
+
+- `builder cache_dir`: Hugging Face dataset cache used by `datasets`.
+- `export dir`: the local directory used by this project, normally
+  `freegrasp/`.
+
+If the machine cannot access Hugging Face, manually place the same files under
+`freegrasp/`. The perception code only needs the local exported files; it does
+not require Hugging Face at runtime once those files exist.
+
+`run_intent.py --generate` and `perception/perception.py` set or read
+`SMARTGRASP_DATA_DIR` to locate these files. For manual perception runs, either
+export it explicitly:
+
+```bash
+export SMARTGRASP_DATA_DIR=/home/qiuguanhe/huanghan/SmartGrasp/freegrasp
+```
+
+or pass data through scripts that set this environment variable internally.
 
 ## Data Flow
 
@@ -146,15 +197,20 @@ This generates a GT-style graph from `instances_objects + depth`.
 Each run is written to:
 
 ```text
-data/integrated_runs/scene_{sceneId}_query_{queryObjId}_{point-source}/
+data/scene_<sceneId>/<point-source>/
 ```
+
+For `--point-source molmo`, `<point-source>` is `perception`. For
+`--point-source gt-centers`, `<point-source>` is `gt`.
 
 Typical files:
 
 ```text
 scene_image.png
 depth.npy
-molmo_label.png
+label_1_molmo.png or label_1_sam2_auto.png
+label_2_langsam.png
+label_3_final.png
 molmo_points.json
 mask/
 occlusion_graph.json
@@ -162,7 +218,9 @@ occlusion_graph.png
 summary.json
 ```
 
-In GT mode, `molmo_label.png` is not generated because Molmo is not run.
+In GT mode, `label_1_molmo.png` is not generated because Molmo is not run. In
+the `sam2-molmo-langsam` backend, `label_3_final.png` is the labeled RGB image
+used by downstream intent handling.
 
 ## Important Parameters
 
