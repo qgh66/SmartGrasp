@@ -61,8 +61,34 @@
 测试排雷推开坐标计算与闭环信号生成：
 `python reveal_api.py`
 
+### 4. 运行 Reveal Push 物理仿真
+将 `reveal_api.py` 生成的 5 cm +X 扰动计划交给 PyBullet 执行，并保存
+Dash GUI 可回放的逐帧轨迹：
+
+```bash
+cd ../graspnet-workspace
+python scripts/demo_reveal_push.py \
+  --distance 0.05 \
+  --output results/reveal_push.json
+```
+
+该脚本默认使用 PyBullet 的小方块。使用真实遮挡物模型时传入
+`--obj /path/to/object.obj`。
+
 ---
 
 ## 🔗 后续集成 (Integration Note)
 
 本目录为**纯算法逻辑层**。在项目的第 3 个月（Month 3）进行全系统闭环测试时，本目录下的 API 将被主控流水线（如 `graspnet-workspace/scripts/demo_closed_loop.py`）动态导入。主程序将根据感知层传来的 `is_occluded` 状态，对 `execution_api.py` 和 `reveal_api.py` 进行交通路由，并在 PyBullet 仿真引擎中渲染最终的机械臂 3D 物理执行动画。
+
+启动push仿真命令为
+```
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+
+python gui/app.py \
+  --host 0.0.0.0 \
+  --port 8050 \
+  --results results/reveal_push_real.json \
+  --viz-data results/reveal_push_real_viz_data.pkl
+```
+之后网页端打开http://127.0.0.1:8050
