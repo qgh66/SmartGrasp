@@ -110,8 +110,6 @@ class SimulationScene:
         import tempfile
 
         abs_path = os.path.abspath(obj_path)
-        mesh_dir = os.path.dirname(abs_path)
-        mesh_file = os.path.basename(abs_path)
 
         urdf_content = f"""<?xml version="1.0"?>
 <robot name="object">
@@ -124,20 +122,20 @@ class SimulationScene:
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="{mesh_file}" scale="{scale} {scale} {scale}"/>
+        <mesh filename="{abs_path}" scale="{scale} {scale} {scale}"/>
       </geometry>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="{mesh_file}" scale="{scale} {scale} {scale}"/>
+        <mesh filename="{abs_path}" scale="{scale} {scale} {scale}"/>
       </geometry>
     </collision>
   </link>
 </robot>"""
 
         tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".urdf", dir=mesh_dir, delete=False
+            mode="w", suffix=".urdf", delete=False
         )
         tmp.write(urdf_content)
         tmp.close()

@@ -196,6 +196,10 @@ def _annotate_constraints(results: list[dict], point_cloud: np.ndarray) -> None:
     obj_pts = _object_points(point_cloud)
     for grasp in results:
         raw_success = bool(grasp.get("success", False))
+        if grasp.get("action_type") == "push":
+            grasp["raw_success"] = raw_success
+            grasp["physical_valid"] = True
+            continue
         valid, reasons, metrics = _constraint_status(grasp, obj_pts)
         grasp["raw_success"] = raw_success
         grasp["physical_valid"] = valid
@@ -254,6 +258,10 @@ def normalize_results(data) -> tuple[list[dict], dict]:
         g["rotation"] = np.asarray(g.get("rotation", np.eye(3)), dtype=float).reshape(3, 3)
         normalized.append(g)
     return normalized, meta
+
+
+def _action_label(result: dict) -> str:
+    return result.get("action_type", "grasp")
 
 
 @lru_cache(maxsize=16)
@@ -497,6 +505,68 @@ def gripper_traces(position: np.ndarray, rot: np.ndarray, width: float, depth: f
     return [mesh, edges, approach]
 
 
+def pybullet_gripper_traces(frame: dict, rot: np.ndarray) -> list:
+    """Draw the exact boxes used by simulation/gripper.py collision bodies."""
+    geometry = frame.get("gripper_geometry", {})
+    base_size = float(geometry.get("base_size", 0.03))
+    base_width = float(geometry.get("base_width", base_size))
+    finger_length = float(geometry.get("finger_length", 0.10))
+    finger_width = float(geometry.get("finger_width", 0.012))
+    finger_height = float(geometry.get("finger_height", 0.03))
+
+    base_pos = np.asarray(frame["gripper_pos"], dtype=float)
+    opening = float(frame.get("opening", 0.10))
+    left_pos = np.asarray(
+        frame.get(
+            "left_pos",
+            base_pos + rot @ np.array([0.0, -opening / 2.0, 0.0]),
+        ),
+        dtype=float,
+    )
+    right_pos = np.asarray(
+        frame.get(
+            "right_pos",
+            base_pos + rot @ np.array([0.0, opening / 2.0, 0.0]),
+        ),
+        dtype=float,
+    )
+    left_rot = _rotation_matrix_from_orientation(
+        frame.get("left_orn", frame.get("gripper_orn")))
+    right_rot = _rotation_matrix_from_orientation(
+        frame.get("right_orn", frame.get("gripper_orn")))
+
+    parts = [
+        (
+            base_pos,
+            rot,
+            (base_size, base_width, finger_height),
+            "#666666",
+            "base",
+        ),
+        (
+            left_pos,
+            left_rot,
+            (finger_length, finger_width, finger_height),
+            "#3399cc",
+            "left finger",
+        ),
+        (
+            right_pos,
+            right_rot,
+            (finger_length, finger_width, finger_height),
+            "#3399cc",
+            "right finger",
+        ),
+    ]
+    traces = []
+    for center, axes, size, color, name in parts:
+        traces.append(box_mesh(center, axes, size, color, name, opacity=0.92))
+        edge_trace = box_edges(center, axes, size, color="#0f172a", width=3)
+        edge_trace.name = f"{name} edges"
+        traces.append(edge_trace)
+    return traces
+
+
 def add_selected_gripper(fig: go.Figure, grasp: dict, obj_pts: np.ndarray):
     rot, center, _ = _constrained_grasp_pose(grasp, obj_pts)
     for trace in gripper_traces(center, rot, grasp.get("width", 0.06), grasp.get("depth", 0.03), "selected gripper"):
@@ -568,9 +638,9 @@ def make_animation_figure(case, selected_index: int | None, sample_count: int = 
     fig = go.Figure()
     if selected is None:
         fig.update_layout(
-            title="Grasp Animation (select a grasp to view)",
+            title="Action Animation (select an action to view)",
             margin={"l": 0, "r": 0, "t": 32, "b": 0},
-            annotations=[{"text": "Select a grasp", "showarrow": False, "xref": "paper", "yref": "paper", "x": 0.5, "y": 0.5}],
+            annotations=[{"text": "Select an action", "showarrow": False, "xref": "paper", "yref": "paper", "x": 0.5, "y": 0.5}],
         )
         return fig
 
@@ -580,6 +650,10 @@ def make_animation_figure(case, selected_index: int | None, sample_count: int = 
     obj_pts = choose_points(obj_pts, min(max(800, sample_count), len(obj_pts))) if len(obj_pts) else np.empty((0, 3))
     table_pts = choose_points(table_pts, min(1200, len(table_pts))) if len(table_pts) else np.empty((0, 3))
 
+    frame_log = selected.get("frame_log") or []
+    if frame_log:
+        return _animation_from_frame_log(
+            frame_log, selected, obj_pts, table_pts, case)
     return _animation_synthetic(selected, obj_pts, table_pts, pc, case)
 
 
@@ -601,17 +675,25 @@ def make_3d_figure(case, top_k: int, outcomes: list[str], score_min: float, sele
     for r in results:
         color = "#16a34a" if r["success"] else "#dc2626"
         size = 8 if r["grasp_index"] == selected_index else 5
+        action = _action_label(r)
         fig.add_trace(go.Scatter3d(
             x=[r["translation"][0]], y=[r["translation"][1]], z=[r["translation"][2]],
             mode="markers",
             marker={"size": size, "color": color, "line": {"color": "#111827", "width": 1}},
-            name=f"grasp {r['grasp_index']}",
+            name=f"{action} {r['grasp_index']}",
             hovertemplate=(
-                "grasp=%{text}<br>x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<extra></extra>"
+                "action=%{text}<br>x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<extra></extra>"
             ),
-            text=[f"{r['grasp_index']} score={r['score']:.3f}"],
+            text=[f"{action} {r['grasp_index']} score={r['score']:.3f}"],
         ))
-        add_axis(fig, r["translation"], r["rotation"], 0.035, f"grasp {r['grasp_index']}", 5 if r["grasp_index"] == selected_index else 3)
+        add_axis(
+            fig,
+            r["translation"],
+            r["rotation"],
+            0.035,
+            f"{action} {r['grasp_index']}",
+            5 if r["grasp_index"] == selected_index else 3,
+        )
 
     if len(obj_pts):
         mins = obj_pts.min(axis=0)
@@ -663,7 +745,11 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
     obj_mesh_orn = case.get("meta", {}).get("object_orientation") if case else None
     if obj_mesh_orn is None and obj_path and Path(obj_path).exists() and len(obj_pts):
         obj_mesh_orn = _estimate_mesh_orientation_from_points(obj_path, obj_pts)
-    has_mesh = bool(obj_path and Path(obj_path).exists())
+    has_mesh = bool(
+        obj_path
+        and Path(obj_path).suffix.lower() == ".obj"
+        and Path(obj_path).exists()
+    )
     mesh_failed = False
 
     # 用于点云跟随的初始物体位置
@@ -674,11 +760,15 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
         grp = np.array(f['gripper_pos'])
         gr_orn = f.get('gripper_orn', [0,0,0,1])
         rot_m = Rot.from_quat(gr_orn).as_matrix()
-        w_val = f.get('opening', 0.06)
         success = f.get('success', None)
         label = phase
         if success is not None:
             label = 'SUCCESS' if success else 'FAILED'
+        label_color = (
+            '#166534' if success is True
+            else '#b91c1c' if success is False
+            else '#334155'
+        )
 
         traces = []
         if len(table_pts):
@@ -714,11 +804,13 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
                     mode='markers', marker={'size':12,'color':color,'symbol':'diamond'},
                     name='object', hoverinfo='skip'))
 
-        traces.extend(gripper_traces(grp, rot_m, w_val, selected.get('depth',0.03)))
+        traces.extend(pybullet_gripper_traces(f, rot_m))
         traces.append(go.Scatter3d(
             x=[grp[0]], y=[grp[1]], z=[grp[2]+0.06],
-            mode='markers+text', marker={'size':4,'color':'#f59e0b'},
-            text=[label], textposition='top center', name='stage', hoverinfo='skip'))
+            mode='text',
+            text=[label], textposition='middle center',
+            textfont={'size': 13, 'color': label_color},
+            name='stage', hoverinfo='skip'))
         frames.append(go.Frame(data=traces, name=str(fi)))
         bounds_all.extend([obj_p, grp])
 
@@ -731,7 +823,10 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
               'label': str(i)} for i in range(len(frames))]
     
     fig.update_layout(
-        title=f"PyBullet Replay - grasp {selected['grasp_index']} ({len(frame_log)} frames)",
+        title=(
+            f"PyBullet Replay - {_action_label(selected)} "
+            f"{selected['grasp_index']} ({len(frame_log)} frames)"
+        ),
         margin={'l':0,'r':0,'t':32,'b':0}, paper_bgcolor='#f8fafc',
         scene={'xaxis':{'title':'X','range':[c[0]-pad,c[0]+pad]},
                'yaxis':{'title':'Y','range':[c[1]-pad,c[1]+pad]},
@@ -799,7 +894,11 @@ def _animation_synthetic(selected, obj_pts, table_pts, pc, case):
     obj_mesh_orn = case.get("meta", {}).get("object_orientation") if case else None
     if obj_mesh_orn is None and obj_path and Path(obj_path).exists() and len(obj_pts):
         obj_mesh_orn = _estimate_mesh_orientation_from_points(obj_path, obj_pts)
-    has_mesh = bool(obj_path and Path(obj_path).exists())
+    has_mesh = bool(
+        obj_path
+        and Path(obj_path).suffix.lower() == ".obj"
+        and Path(obj_path).exists()
+    )
     
     # For the demonstration, place the mesh by its visual center rather than
     # trusting stale PyBullet object_position metadata from older result files.
@@ -868,28 +967,51 @@ def make_summary(case, selected_index: int | None):
     results = case["results"]
     success = sum(1 for r in results if r["success"])
     total = len(results)
+    trajectory_count = sum(1 for r in results if r.get("frame_log"))
     selected = next((r for r in results if r["grasp_index"] == selected_index), None)
     lines = [
         html.Div([html.Span("Result: ", className="metric-label"), html.Code(_rel(case["result_path"]))]),
         html.Div([html.Span("Viz data: ", className="metric-label"), html.Code(_rel(case["viz_path"]))]),
         html.Div([html.Span("Success: ", className="metric-label"), html.Strong(f"{success}/{total}")]),
         html.Div([html.Span("Point cloud: ", className="metric-label"), html.Strong(f"{len(case['point_cloud']):,} pts")]),
-        html.Div([html.Span("Trajectories: ", className="metric-label"), html.Strong(str(len(case["trajectories"])))]),
+        html.Div([
+            html.Span("Recorded trajectories: ", className="metric-label"),
+            html.Strong(str(max(len(case["trajectories"]), trajectory_count))),
+        ]),
     ]
     if selected is not None:
         t = selected["translation"]
+        action = _action_label(selected)
         lines.extend([
-            html.H3(f"Grasp {selected['grasp_index']}", className="panel-subtitle"),
+            html.H3(f"{action.title()} {selected['grasp_index']}", className="panel-subtitle"),
             html.Div([html.Span("Status: ", className="metric-label"), html.Strong("success" if selected["success"] else "failed")]),
             html.Div([html.Span("Raw status: ", className="metric-label"), html.Strong("success" if selected.get("raw_success", selected["success"]) else "failed")]),
             html.Div([html.Span("Physical valid: ", className="metric-label"), html.Strong("yes" if selected.get("physical_valid", True) else "no")]),
             html.Div([html.Span("Score: ", className="metric-label"), html.Strong(f"{selected['score']:.4f}")]),
-            html.Div([html.Span("Lift Z: ", className="metric-label"), html.Strong(f"{selected['lift_z']:.4f} m")]),
             html.Div([html.Span("Width: ", className="metric-label"), html.Strong(f"{selected['width']:.4f} m")]),
             html.Div([html.Span("Depth: ", className="metric-label"), html.Strong(f"{selected['depth']:.4f} m")]),
-            html.Div([html.Span("Center-object dist: ", className="metric-label"), html.Strong(f"{selected.get('center_object_dist', 0.0):.4f} m")]),
             html.Div([html.Span("Center: ", className="metric-label"), html.Code(f"[{t[0]:.4f}, {t[1]:.4f}, {t[2]:.4f}]")]),
         ])
+        if action == "push":
+            lines.extend([
+                html.Div([
+                    html.Span("Requested push: ", className="metric-label"),
+                    html.Strong(f"{selected.get('requested_distance', 0.0):.4f} m"),
+                ]),
+                html.Div([
+                    html.Span("Actual push: ", className="metric-label"),
+                    html.Strong(f"{selected.get('signed_displacement', 0.0):.4f} m"),
+                ]),
+                html.Div([
+                    html.Span("Request reloop: ", className="metric-label"),
+                    html.Strong("yes" if selected.get("request_reloop") else "no"),
+                ]),
+            ])
+        else:
+            lines.extend([
+                html.Div([html.Span("Lift Z: ", className="metric-label"), html.Strong(f"{selected['lift_z']:.4f} m")]),
+                html.Div([html.Span("Center-object dist: ", className="metric-label"), html.Strong(f"{selected.get('center_object_dist', 0.0):.4f} m")]),
+            ])
         if selected.get("failure_reason"):
             lines.append(html.Div([html.Span("Failure reason: ", className="metric-label"), html.Code(selected["failure_reason"])]))
     return lines
@@ -942,7 +1064,7 @@ def build_app(default_result: Path | None, default_viz: Path | None) -> Dash:
                     value=["success", "failed"],
                     inline=True,
                 ),
-                html.Label("Selected grasp"),
+                html.Label("Selected action"),
                 dcc.Dropdown(id="selected-grasp", clearable=False),
                 html.Div(id="summary", className="summary"),
             ]),
@@ -1026,7 +1148,11 @@ def build_app(default_result: Path | None, default_viz: Path | None) -> Dash:
         rows = filtered_results(case["results"], int(top_k), outcomes or [], float(score_min))
         options = [
             {
-                "label": f"{r['grasp_index']} | {'success' if r['success'] else 'failed'} | score {r['score']:.3f}",
+                "label": (
+                    f"{_action_label(r)} {r['grasp_index']} | "
+                    f"{'success' if r['success'] else 'failed'} | "
+                    f"score {r['score']:.3f}"
+                ),
                 "value": int(r["grasp_index"]),
             }
             for r in rows

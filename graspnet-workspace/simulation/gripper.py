@@ -18,6 +18,7 @@ class ParallelJawGripper:
     FINGER_WIDTH  = 0.012
     FINGER_HEIGHT = 0.03
     BASE_SIZE = 0.03
+    BASE_WIDTH = 0.144
 
     def __init__(self):
         self.base_id = None
@@ -28,9 +29,15 @@ class ParallelJawGripper:
         self.grasp_constraint = None
 
     def load(self, position=(0.3, 0.0, 0.3), orientation=(0, 0, 0, 1)):
-        base_vis = p.createVisualShape(p.GEOM_BOX, halfExtents=[self.BASE_SIZE/2]*3,
+        base_half_extents = [
+            self.BASE_SIZE / 2,
+            self.BASE_WIDTH / 2,
+            self.FINGER_HEIGHT / 2,
+        ]
+        base_vis = p.createVisualShape(p.GEOM_BOX, halfExtents=base_half_extents,
                                         rgbaColor=[0.4, 0.4, 0.4, 1])
-        base_col = p.createCollisionShape(p.GEOM_BOX, halfExtents=[self.BASE_SIZE/2]*3)
+        base_col = p.createCollisionShape(
+            p.GEOM_BOX, halfExtents=base_half_extents)
         self.base_id = p.createMultiBody(0.0, base_col, base_vis, position, orientation)
 
         finger_vis = p.createVisualShape(p.GEOM_BOX,
@@ -39,11 +46,13 @@ class ParallelJawGripper:
         finger_col = p.createCollisionShape(p.GEOM_BOX,
             halfExtents=[self.FINGER_LENGTH/2, self.FINGER_WIDTH/2, self.FINGER_HEIGHT/2])
 
-        half = self._current_opening / 2.0
-        self.left_id = p.createMultiBody(0.05, finger_col, finger_vis,
-                                          [position[0], position[1]-half, position[2]])
-        self.right_id = p.createMultiBody(0.05, finger_col, finger_vis,
-                                           [position[0], position[1]+half, position[2]])
+        # Fingers are kinematic collision bodies. Their poses are controlled
+        # explicitly so gravity and contact cannot make the gripper fall apart.
+        self.left_id = p.createMultiBody(
+            0.0, finger_col, finger_vis, position, orientation)
+        self.right_id = p.createMultiBody(
+            0.0, finger_col, finger_vis, position, orientation)
+        self._sync_fingers()
         return self.base_id
 
     def remove(self):
@@ -62,9 +71,10 @@ class ParallelJawGripper:
     def _sync_fingers(self):
         pos, orn = p.getBasePositionAndOrientation(self.base_id)
         rot_m = np.array(p.getMatrixFromQuaternion(orn)).reshape(3, 3)
-        half = self._current_opening / 2.0
-        lp = np.array(pos) + rot_m @ np.array([0.0, -half, 0.0])
-        rp = np.array(pos) + rot_m @ np.array([0.0, half, 0.0])
+        forward = self.BASE_SIZE / 2.0 + self.FINGER_LENGTH / 2.0
+        half = self._current_opening / 2.0 + self.FINGER_WIDTH / 2.0
+        lp = np.array(pos) + rot_m @ np.array([forward, -half, 0.0])
+        rp = np.array(pos) + rot_m @ np.array([forward, half, 0.0])
         p.resetBasePositionAndOrientation(self.left_id, lp.tolist(), orn)
         p.resetBasePositionAndOrientation(self.right_id, rp.tolist(), orn)
 
