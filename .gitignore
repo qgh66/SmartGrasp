@@ -13,4 +13,9 @@ __pycache__/
 .conda/
 logs/
 build/
-devel/
+devel/# 排除仿真大文件
+checkpoints/
+results_phase3_*/
+results_viz_data.pkl
+simulation_demo.log
+*.pkl
