@@ -396,11 +396,20 @@ def _finalize_independent_scene_masks(
         mask = masks[index]
         area = int(np.count_nonzero(mask))
         area_ratio = float(area) / image_area
-        if area == 0 or area_ratio < LANGSAM_MIN_AREA_RATIO:
+        original_area = max(1, areas[index])
+        overlap_loss = 1.0 - float(area) / float(original_area)
+        # Heavily culled mask: lost >90% during overlap resolution and remaining is tiny → noise
+        heavily_culled = overlap_loss > (1.0 - FINALIZE_OVERLAP_LOSS_RATIO) and area_ratio < FINALIZE_CULLED_AREA_RATIO
+        if area == 0 or heavily_culled or area_ratio < LANGSAM_MIN_AREA_RATIO:
             removed = {key: value for key, value in record.items() if key != "mask_array"}
-            removed["duplicate_reason"] = (
-                "removed_after_overlap_exclusivity" if area == 0 else "removed_too_small_after_overlap"
-            )
+            if heavily_culled:
+                removed["duplicate_reason"] = "removed_heavily_culled_by_overlap"
+                removed["overlap_loss_ratio"] = float(overlap_loss)
+                removed["original_area"] = int(original_area)
+            elif area == 0:
+                removed["duplicate_reason"] = "removed_after_overlap_exclusivity"
+            else:
+                removed["duplicate_reason"] = "removed_too_small_after_overlap"
             if area_ratio < LANGSAM_MIN_AREA_RATIO and area > 0:
                 removed["removed_area_ratio"] = float(area_ratio)
                 removed["min_area_ratio_threshold"] = float(LANGSAM_MIN_AREA_RATIO)
@@ -1382,6 +1391,8 @@ def _openai_review_sam2_candidates(
 
 
 LANGSAM_MIN_AREA_RATIO = 0.0007  # Minimum fraction of image area for a valid LangSAM mask (0.07%)
+FINALIZE_OVERLAP_LOSS_RATIO = 0.10  # If a mask loses >90% of its area during overlap resolution, treat as noise
+FINALIZE_CULLED_AREA_RATIO = 0.003  # Absolute minimum (0.3%) for a heavily-culled mask to survive
 
 
 def _select_langsam_mask_for_review_object(
