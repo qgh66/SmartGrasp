@@ -130,8 +130,8 @@ def graph_to_jsonable(
             node_payload = dict(node)
             if "node_id" in node_payload:
                 node_payload["node_id"] = int(node_payload["node_id"])
-            if "molmo_id" in node_payload:
-                node_payload["molmo_id"] = int(node_payload["molmo_id"])
+            if "object_id" in node_payload:
+                node_payload["object_id"] = int(node_payload["object_id"])
             nodes_payload.append(node_payload)
 
     edges_payload: list[dict[str, Any]] = []

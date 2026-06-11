@@ -22,34 +22,11 @@ import pandas as pd
 from PIL import Image
 
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
-from SmartGrasp.perception.molmo.molmo_annotator.draw import draw_labeled_image_matplotlib
 from SmartGrasp.perception.occul_map.org import build_occlusion_graph, graph_to_jsonable
 
 
 OUT_ROOT = SMARTGRASP_ROOT / "data"
-DEFAULT_MOLMO_PROMPT = (
-    "Point out all objects in the green tray. "
-    "Return one point for each visible object instance, including repeated objects that look similar or have the same category. "
-    "Use one point near the center of the visible region of each object. "
-    "Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. "
-    # "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
-    "The labels are formatted as color, plus shape, plus any other visible attributes, plus object name, and plus spatial suffix if needed. "
-    "Here are some important guidelines to ensure accurate and consistent annotations: "
-    # separate adjacent objects
-    "First, IMPORTANT, do separate different instances even if they are very close or touching."
-    "Do not merge adjacent objects, even if they have similar color, shape, categoty or usage."
-    #ignore the background
-    "Second, ignore the green tray/green box itself and any other background support surface. "
-    # separate similar objects
-    "Third, when multiple objects share the same category and appearance, clearly separate them apart especially when they are touching or very close."
-    "Append a brief spatial descriptor as a suffix to distinguish them. "
-    # detect objects multidimensionally
-    "Fourth, objects may have irregular shapes. They can be not only triangles, rectangles, circles but also rings, awkward shape, etc. "
-    "Look at the overall shape, color, boundaries and usages to judge whether it is an object and its category and characteristics. "
-    "Fifth, a single object may have multiple colors, textures, or patterns on its surface. "
-    "Do NOT split one object into multiple points just because different regions show different colors. "
-    "Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface."
-)
+
 def read_dataset() -> pd.DataFrame:
     parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
     if not parquet_files:
@@ -106,7 +83,7 @@ def build_gt_points(instances_objects: np.ndarray, annotation: str, query_obj_id
     for object_id in object_ids:
         x, y = object_centroid(instances_objects == object_id)
         label = annotation if query_obj_id == object_id else f"object_{object_id}"
-        points.append({"molmo_id": object_id, "x": x, "y": y, "label": label})
+        points.append({"object_id": object_id, "x": x, "y": y, "label": label})
     return points
 
 
@@ -127,7 +104,7 @@ def write_points_json(
         "raw_model_output": "",
         "points": points,
     }
-    path = out_dir / "molmo_points.json"
+    path = out_dir / "points.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
@@ -158,7 +135,7 @@ def save_gt_masks(instances_objects: np.ndarray, out_dir: Path) -> list[dict[str
         records.append(
             {
                 "node_id": node_id,
-                "molmo_id": object_id,
+                "object_id": object_id,
                 "label": f"object_{object_id}",
                 "point": {"x": int(object_centroid(mask)[0]), "y": int(object_centroid(mask)[1])},
                 "mask_path": str(mask_path.resolve()),
@@ -175,7 +152,7 @@ def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Pat
         labels = {}
         for node in graph.nodes():
             node_payload = graph_json["nodes"][int(node)]
-            labels[node] = str(node_payload.get("molmo_id", node))
+            labels[node] = str(node_payload.get("object_id", node))
         nx.draw_networkx_nodes(graph, pos, node_color="#e7f0ff", edgecolors="#194b7a", linewidths=1.2, node_size=1500, ax=ax)
         nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, font_weight="bold", ax=ax)
         nx.draw_networkx_edges(
@@ -214,7 +191,7 @@ def visualize_graph_payload(graph_payload: dict[str, Any], out_path: Path, title
     fig, ax = plt.subplots(figsize=(8, 6))
     if graph.number_of_nodes() > 0:
         pos = directed_graph_layout(graph)
-        labels = {int(node["node_id"]): str(node.get("molmo_id", node["node_id"])) for node in graph_payload["nodes"]}
+        labels = {int(node["node_id"]): str(node.get("object_id", node["node_id"])) for node in graph_payload["nodes"]}
         nx.draw_networkx_nodes(graph, pos, node_color="#e7f0ff", edgecolors="#194b7a", linewidths=1.2, node_size=1500, ax=ax)
         nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, font_weight="bold", ax=ax)
         nx.draw_networkx_edges(
@@ -280,7 +257,7 @@ def build_graph_from_gt_masks(
     min_contact_ratio: float,
 ) -> dict[str, Any]:
     node_records = save_gt_masks(instances_objects, out_dir)
-    object_ids = [record["molmo_id"] for record in node_records]
+    object_ids = [record["object_id"] for record in node_records]
     masks = np.stack([(instances_objects == object_id) for object_id in object_ids], axis=0)
     graph, adjacency = build_occlusion_graph(
         masks=masks,
@@ -294,8 +271,8 @@ def build_graph_from_gt_masks(
     for edge in graph_payload["edges"]:
         source_node = node_records[edge["source"]]
         target_node = node_records[edge["target"]]
-        edge["source_molmo_id"] = int(source_node["molmo_id"])
-        edge["target_molmo_id"] = int(target_node["molmo_id"])
+        edge["source_object_id"] = int(source_node["object_id"])
+        edge["target_object_id"] = int(target_node["object_id"])
         edge["source_label"] = str(source_node["label"])
         edge["target_label"] = str(target_node["label"])
 
@@ -316,9 +293,9 @@ def write_final_perception_label(
         point = node.get("point", {})
         if "x" not in point or "y" not in point:
             continue
-        points_with_ids.append((int(node.get("molmo_id", node["node_id"])), int(point["x"]), int(point["y"])))
+        points_with_ids.append((int(node.get("object_id", node["node_id"])), int(point["x"]), int(point["y"])))
 
-    out_path = out_dir / "label_1_molmo.png"
+    out_path = out_dir / "label_1_points.png"
     with Image.open(image_path) as image:
         draw_labeled_image_matplotlib(
             image=image,
@@ -339,129 +316,6 @@ def reset_output_dir(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _disambiguate_duplicate_labels(
-    points: list[dict[str, Any]], width: int, height: int
-) -> list[dict[str, Any]]:
-    """If multiple points share the same normalized label, append spatial suffixes
-    (left/right/top/bottom) based on relative position so that LangSAM receives
-    distinct prompts for each instance."""
-    # Group by normalized label (lowercase, strip trailing spatial words)
-    spatial_markers = {"left", "right", "top", "bottom", "front", "back"}
-    groups: dict[str, list[int]] = {}
-    for idx, point in enumerate(points):
-        label = str(point.get("label", ""))
-        # Strip existing spatial suffixes to find base label
-        parts = label.lower().split()
-        base_parts = [p for p in parts if p not in spatial_markers]
-        base = " ".join(base_parts) if base_parts else label.lower()
-        groups.setdefault(base, []).append(idx)
-
-    for base, indices in groups.items():
-        if len(indices) <= 1:
-            continue
-        xs = [points[i]["x"] for i in indices]
-        ys = [points[i]["y"] for i in indices]
-        med_x = sum(xs) / len(xs)
-        med_y = sum(ys) / len(ys)
-        span_x = max(xs) - min(xs)
-        span_y = max(ys) - min(ys)
-        use_x = span_x >= max(24, width * 0.03)
-        use_y = span_y >= max(24, height * 0.03)
-        if use_x and use_y:
-            # Prefer the axis that separates the repeated instances more clearly.
-            if span_x >= span_y * 1.25:
-                use_y = False
-            elif span_y >= span_x * 1.25:
-                use_x = False
-
-        for i in indices:
-            label = str(points[i].get("label", ""))
-            # Skip if already has a spatial suffix
-            parts = label.lower().split()
-            if any(p in spatial_markers for p in parts):
-                continue
-            x = points[i]["x"]
-            y = points[i]["y"]
-            suffix = ""
-            if use_x:
-                suffix += " left" if x < med_x else " right"
-            if use_y:
-                suffix += " top" if y < med_y else " bottom"
-            if suffix:
-                points[i]["label"] = label + suffix
-
-    return points
-
-
-def maybe_run_molmo(
-    image_path: Path,
-    prompt: str,
-    out_dir: Path,
-    model_id: str,
-) -> Path:
-    from SmartGrasp.perception.molmo.molmo_annotator import MolmoAnnotator
-
-    annotator = MolmoAnnotator(model_id=model_id)
-    result = annotator.annotate_to_folder(
-        str(image_path),
-        prompt,
-        str(out_dir),
-        return_base64=False,
-    )
-    points = result.get("json_data", {}).get("points", [])
-    if not points:
-        raise RuntimeError("Molmo did not return a usable result.")
-
-    # Write points.json with molmo_id assigned
-    with Image.open(image_path) as image:
-        width, height = image.size
-    sanitized_points = [
-        {"molmo_id": i + 1, "x": int(p["x"]), "y": int(p["y"]), "label": sanitize_point_label(str(p.get("label", "")))}
-        for i, p in enumerate(points)
-    ]
-    sanitized_points = _disambiguate_duplicate_labels(sanitized_points, width, height)
-    payload = {
-        "model_id": model_id,
-        "prompt": prompt,
-        "image": {"path": str(image_path), "width": int(width), "height": int(height)},
-        "parse_mode": "point_markup",
-        "raw_model_output": "",
-        "points": sanitized_points,
-    }
-    final_json_path = out_dir / "molmo_points.json"
-    final_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return final_json_path
-
-
-def sanitize_point_label(label: str) -> str:
-    parts = [part for part in str(label).replace("-", " ").replace("_", " ").split() if part]
-    vague = {"unknown", "unknownproduct", "object", "item", "product", "thing", "container"}
-    filtered = [part for part in parts if part.lower() not in vague]
-    return " ".join(filtered or parts).strip() or "unlabeled visible object"
-
-
-def sanitize_points_json(points_path: Path) -> None:
-    payload = json.loads(points_path.read_text(encoding="utf-8"))
-    for point in payload.get("points", []):
-        if "label" in point:
-            point["label"] = sanitize_point_label(str(point["label"]))
-    points_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def write_image_source_json(out_dir: Path, image_path: Path, width: int, height: int, prompt: str) -> Path:
-    payload = {
-        "model_id": "sam2_molmo_langsam",
-        "prompt": prompt,
-        "image": {"path": str(image_path.resolve()), "width": int(width), "height": int(height)},
-        "parse_mode": "image_source",
-        "raw_model_output": "",
-        "points": [],
-    }
-    path = out_dir / "molmo_points.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
-
-
 def load_json_file(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -476,40 +330,32 @@ def display_label(label: Any) -> str:
     return str(label).replace("_", " ")
 
 
-def edge_strength_label(contact_ratio: float) -> str:
-    if contact_ratio >= 0.03:
-        return "strong"
-    if contact_ratio >= 0.01:
-        return "medium"
-    return "weak"
-
-
 def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) -> dict[str, Any]:
     points_payload = load_json_file(points_path)
     graph = graph_payload["graph"]
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
     edges = graph.get("edges", [])
-    molmo_points = points_payload.get("points", [])
+    object_points = points_payload.get("points", [])
 
     object_order: list[dict[str, Any]] = []
     for matrix_index, node in enumerate(nodes):
-        molmo_id = int(node.get("molmo_id", node["node_id"]))
+        object_id = int(node.get("object_id", node["node_id"]))
         object_order.append(
             {
                 "matrix_index": matrix_index,
                 "node_id": int(node["node_id"]),
-                "molmo_id": molmo_id,
-                "label": display_label(node.get("label", f"object_{molmo_id}")),
+                "object_id": object_id,
+                "label": display_label(node.get("label", f"object_{object_id}")),
             }
         )
 
-    if not molmo_points:
-        molmo_points = [
+    if not object_points:
+        object_points = [
             {
-                "molmo_id": int(node.get("molmo_id", node["node_id"])),
+                "object_id": int(node.get("object_id", node["node_id"])),
                 "x": int(node.get("point", {}).get("x", 0)),
                 "y": int(node.get("point", {}).get("y", 0)),
-                "label": display_label(node.get("label", f"object_{node.get('molmo_id', node['node_id'])}")),
+                "label": display_label(node.get("label", f"object_{node.get('object_id', node['node_id'])}")),
             }
             for node in nodes
             if isinstance(node.get("point"), dict)
@@ -527,9 +373,9 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) 
         contact_ratio = float(edge.get("contact_ratio", 0.0))
         occlusion_matrix[source_index][target_index] = safe_float(contact_ratio) or 0.0
 
-    matrix_labels = [f"{item['molmo_id']}: {item['label']}" for item in object_order]
+    matrix_labels = [f"{item['object_id']}: {item['label']}" for item in object_order]
     return {
-        "molmo_points": molmo_points,
+        "object_points": object_points,
         "matrix_labels": matrix_labels,
         "occlusion_matrix_direction": "row object occludes column object",
         "occlusion_matrix_metric": "contact_ratio",
@@ -595,7 +441,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     query_obj_id = int(row["queryObjId"])
 
     scene_dir = OUT_ROOT / f"scene_{scene_id}"
-    out_dir = scene_dir / ("perception" if args.point_source == "molmo" else "gt")
+    out_dir = scene_dir / "perception"
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -610,106 +456,84 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         instances_objects = np.asarray(npz["instances_objects"])
 
     depth_path = save_depth(depth, out_dir)
-    prompt = args.prompt or DEFAULT_MOLMO_PROMPT.format(annotation=row["annotation"])
-    gt_summary = None
-    if args.point_source == "molmo":
-        gt_summary = build_gt_reference_outputs(
-            row=row,
-            scene_id=scene_id,
-            query_obj_id=query_obj_id,
-            annotation=str(row["annotation"]),
-            instances_objects=instances_objects,
-            depth=depth,
-            prompt=prompt,
-            args=args,
-            source_image_path=image_path,
-        )
+    prompt = args.prompt or ""
+    annotation = str(row["annotation"])
 
-    if args.point_source == "molmo":
-        from SmartGrasp.perception.occul_map.molmo_sam_org import build_org_json
+    gt_summary = build_gt_reference_outputs(
+        row=row,
+        scene_id=scene_id,
+        query_obj_id=query_obj_id,
+        annotation=annotation,
+        instances_objects=instances_objects,
+        depth=depth,
+        prompt=prompt,
+        args=args,
+        source_image_path=image_path,
+    )
 
-        if args.segmentation_backend == "sam2-molmo-langsam":
-            points_path = write_image_source_json(out_dir, image_path, width, height, prompt)
-        else:
-            points_path = maybe_run_molmo(
-                image_path,
-                prompt,
-                out_dir,
-                args.molmo_model_id,
-            )
-        graph_payload = build_org_json(
-            points_json_path=points_path.resolve(),
-            depth_path=depth_path.resolve(),
-            output_json_path=(out_dir / "occlusion_graph.json").resolve(),
-            output_mask_dir=(out_dir / "mask").resolve(),
-            segmentation_backend=args.segmentation_backend,
-            sam_model_id=args.sam_model_id,
-            molmo_model_id=args.molmo_model_id,
-            review_model_id=args.review_model_id,
-            review_api_key_env=args.review_api_key_env,
-            review_base_url=args.review_base_url,
-            review_timeout=args.review_timeout,
-            epsilon=args.epsilon,
-            kernel_size=args.kernel_size,
-            min_contact_pixels=args.min_contact_pixels,
-            min_contact_ratio=args.min_contact_ratio,
-            sam_point_grid_radius=args.sam_point_grid_radius,
-            sam_prompt_mode=args.sam_prompt_mode,
-            sam_negative_points=args.sam_negative_points,
-            mask_clean_kernel=args.mask_clean_kernel,
-            proposal_backend=args.proposal_backend,
-            proposal_min_area_ratio=args.proposal_min_area_ratio,
-            proposal_max_area_ratio=args.proposal_max_area_ratio,
-            proposal_iou_threshold=args.proposal_iou_threshold,
-            proposal_containment_threshold=args.proposal_containment_threshold,
-            proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-            max_proposal_masks=args.max_proposal_masks,
-            save_candidates=args.save_candidates,
-            device=args.device,
-            depth_merge_threshold=args.depth_merge_threshold,
-            anchor_merge_depth_threshold=args.anchor_merge_depth_threshold,
-            anchor_refine_with_langsam=not args.no_anchor_langsam_refine,
-            sam2_points_per_side=args.sam2_points_per_side,
-            sam2_crop_n_layers=args.sam2_crop_n_layers,
-            sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
-            sam2_stability_score_thresh=args.sam2_stability_score_thresh,
-            preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
-        )
-        visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "Molmo/SAM Occlusion Graph")
-    else:
-        points = build_gt_points(instances_objects, str(row["annotation"]), query_obj_id)
-        points_path = write_points_json(out_dir, image_path, width, height, prompt, points, "gt_centers")
-        graph_payload = build_graph_from_gt_masks(
-            instances_objects=instances_objects,
-            depth=depth,
-            out_dir=out_dir,
-            epsilon=args.epsilon,
-            kernel_size=args.kernel_size,
-            min_contact_pixels=args.min_contact_pixels,
-            min_contact_ratio=args.min_contact_ratio,
-        )
+    from SmartGrasp.perception.occul_map.sam2_langsam_pipeline import build_org_json
+
+    graph_payload = build_org_json(
+        image_path=image_path,
+        depth_path=depth_path.resolve(),
+        output_json_path=(out_dir / "occlusion_graph.json").resolve(),
+        output_mask_dir=(out_dir / "mask").resolve(),
+        review_model_id=args.review_model_id,
+        review_api_key_env=args.review_api_key_env,
+        review_base_url=args.review_base_url,
+        review_timeout=args.review_timeout,
+        epsilon=args.epsilon,
+        kernel_size=args.kernel_size,
+        min_contact_pixels=args.min_contact_pixels,
+        min_contact_ratio=args.min_contact_ratio,
+        mask_clean_kernel=args.mask_clean_kernel,
+        proposal_min_area_ratio=args.proposal_min_area_ratio,
+        proposal_max_area_ratio=args.proposal_max_area_ratio,
+        proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
+        save_candidates=args.save_candidates,
+        device=args.device,
+        sam2_points_per_side=args.sam2_points_per_side,
+        sam2_crop_n_layers=args.sam2_crop_n_layers,
+        sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
+        sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+        preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
+    )
+    visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
+
+    # Write a minimal points.json for summary generation
+    points_payload = {
+        "points": [
+            {
+                "object_id": int(node.get("object_id", node.get("node_id", 0))),
+                "x": int(node.get("point", {}).get("x", 0)),
+                "y": int(node.get("point", {}).get("y", 0)),
+                "label": str(node.get("label", "")),
+            }
+            for node in graph_payload["graph"].get("nodes", [])
+        ]
+    }
+    points_path = out_dir / "points.json"
+    points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
     summary = {
         "scene_id": scene_id,
         "query_obj_id": query_obj_id,
-        "annotation": str(row["annotation"]),
-        "point_source": args.point_source,
+        "annotation": annotation,
+        "point_source": "sam2-langsam",
         "output_dir": str(out_dir.resolve()),
         "image_path": str(image_path.resolve()),
         "depth_path": str(depth_path.resolve()),
-        "points_json": str(points_path.resolve()),
         "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
-        "sam2_auto_label_png": str((out_dir / "label_1_sam2_auto.png").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
-        "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
-        "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
-        "molmo_sam2_review_json": str((out_dir / "molmo_sam2_review.json").resolve()) if args.segmentation_backend == "sam2-molmo-langsam" else None,
-        "raw_label_1_molmo_png": str((out_dir / "label_2_langsam.png").resolve()) if args.point_source == "molmo" else None,
+        "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
+        "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+        "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
+        "object_sam2_review_json": str((out_dir / "sam2_review.json").resolve()),
         "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
         "num_nodes": len(graph_payload["graph"]["nodes"]),
         "num_edges": len(graph_payload["graph"]["edges"]),
-        "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()) if gt_summary else None,
+        "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
         **scene_graph_summary,
     }
     summary_path = out_dir / "summary.json"
@@ -719,39 +543,24 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run SmartGrasp data -> Molmo points -> occlusion graph pipeline.")
+    parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> OpenAI review -> LangSAM refine -> occlusion graph.")
     parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
     parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
-    parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
-    parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
-    parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
+    parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
     parser.add_argument("--review-model-id", default="gpt-5.5")
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--review-base-url", default=None)
     parser.add_argument("--review-timeout", type=float, default=120.0)
-
-    parser.add_argument("--segmentation-backend", choices=["sam2-molmo-langsam", "sam2-anchor", "sam", "langsam", "auto"], default="sam2-molmo-langsam")
-    parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
     parser.add_argument("--epsilon", type=float, default=0.05)
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)
-    parser.add_argument("--sam-point-grid-radius", type=int, default=0)
-    parser.add_argument("--sam-prompt-mode", choices=["cross", "grid", "ring", "auto"], default="cross")
-    parser.add_argument("--sam-negative-points", type=int, default=0)
     parser.add_argument("--mask-clean-kernel", type=int, default=3)
-    parser.add_argument("--proposal-backend", choices=["none", "sam2-auto"], default="sam2-auto")
-    parser.add_argument("--proposal-min-area-ratio", type=float, default=0.0015)
+    parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
     parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)
-    parser.add_argument("--proposal-iou-threshold", type=float, default=0.35)
-    parser.add_argument("--proposal-containment-threshold", type=float, default=0.6)
     parser.add_argument("--proposal-border-fraction-threshold", type=float, default=0.18)
-    parser.add_argument("--max-proposal-masks", type=int, default=3)
-    parser.add_argument("--depth-merge-threshold", type=float, default=0.0)
-    parser.add_argument("--anchor-merge-depth-threshold", type=float, default=0.015)
-    parser.add_argument("--no-anchor-langsam-refine", action="store_true")
     parser.add_argument("--sam2-points-per-side", type=int, default=24)
     parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
     parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.7)
