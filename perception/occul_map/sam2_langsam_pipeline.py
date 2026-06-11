@@ -39,9 +39,11 @@ GROUNDING_DINO_LOCAL_MODEL_PATH = Path(
 )
 
 
-def _safe_label(label: str) -> str:
+def _safe_label(label: str, max_len: int = 80) -> str:
     normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in label.strip())
     normalized = "_".join(part for part in normalized.split("_") if part)
+    if max_len > 0 and len(normalized) > max_len:
+        normalized = normalized[:max_len].rstrip("_")
     return normalized or "object"
 
 
