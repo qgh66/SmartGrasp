@@ -984,7 +984,7 @@ def _draw_sam2_auto_label_image(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_path: Path,
-    max_labels: int = 80,
+    max_labels: int = 25,
 ) -> None:
     points_with_ids: list[tuple[int, int, int]] = []
     masks: list[np.ndarray] = []
@@ -1028,7 +1028,7 @@ def _save_sam2_rgb_parts_sheet(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_dir: Path,
-    max_labels: int = 40,
+    max_labels: int = 25,
 ) -> Path:
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)
@@ -1249,7 +1249,7 @@ def _openai_review_sam2_candidates(
     base_url: str | None,
     timeout: float,
     out_dir: Path,
-    max_labels: int = 40,
+    max_labels: int = 25,
 ) -> tuple[list[dict[str, Any]], str]:
     t_r0 = time.time()
     candidate_lines: list[str] = []
@@ -1773,7 +1773,7 @@ def build_org_json(
     proposal_max_area_ratio: float = 0.11,
     save_candidates: bool = False,
     device: str | None = None,
-    sam2_points_per_side: int | None = 20,
+    sam2_points_per_side: int | None = 30,
     sam2_crop_n_layers: int | None = 0,
     sam2_pred_iou_thresh: float | None = 0.75,
     sam2_stability_score_thresh: float | None = 0.90,

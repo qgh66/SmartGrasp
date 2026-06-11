@@ -561,7 +561,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
     parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)
     parser.add_argument("--proposal-border-fraction-threshold", type=float, default=1.0)
-    parser.add_argument("--sam2-points-per-side", type=int, default=20)
+    parser.add_argument("--sam2-points-per-side", type=int, default=30)
     parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
     parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.75)
     parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.90)

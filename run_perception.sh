@@ -81,7 +81,7 @@ fi
   --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
   --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \
   --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-1.0}" \
-  --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-20}" \
+  --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-30}" \
   --sam2-crop-n-layers "${SAM2_CROP_N_LAYERS:-0}" \
   --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.75}" \
   --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.90}" \
