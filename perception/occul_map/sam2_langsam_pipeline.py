@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from html import unescape
 from pathlib import Path
 from typing import Any
@@ -1245,6 +1246,7 @@ def _openai_review_sam2_candidates(
     out_dir: Path,
     max_labels: int = 40,
 ) -> tuple[list[dict[str, Any]], str]:
+    t_r0 = time.time()
     candidate_lines: list[str] = []
     for index, candidate in enumerate(candidates[:max_labels], start=1):
         bbox = candidate.get("bbox", [])
@@ -1259,6 +1261,7 @@ def _openai_review_sam2_candidates(
         timeout=timeout,
         out_dir=out_dir,
     )
+    _log_step("    ②b1 api_scene_objects (1img)", t_r0)
     scene_lines: list[str] = []
     for obj in scene_objects:
         parts = obj.get("visible_parts", [])
@@ -1310,6 +1313,7 @@ def _openai_review_sam2_candidates(
     )
     raw_output = _response_text(response)
     (out_dir / "openai_sam2_review_raw.txt").write_text(raw_output, encoding="utf-8")
+    _log_step("    ②b2 api_sam2_review (3img)", t_r0)
 
     payload = _extract_json_from_text(raw_output)
     objects = payload.get("objects")
@@ -1597,6 +1601,8 @@ def generate_masks_with_sam2_langsam_pipeline(
     sam2_stability_score_thresh: float | None = None,
     preserve_unclaimed_sam2: int = 24,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    t_p0 = _log_step("  ②a sam2_auto", None)
+
     candidates, sam2_report, model, image = _sam2_auto_candidate_pool(
         image_path=image_path,
         output_mask_dir=output_mask_dir,
@@ -1612,11 +1618,11 @@ def generate_masks_with_sam2_langsam_pipeline(
         pred_iou_thresh=sam2_pred_iou_thresh,
         stability_score_thresh=sam2_stability_score_thresh,
     )
+    t_p1 = _log_step("  ②a sam2_auto", t_p0)
     out_dir = output_mask_dir.parent
     label_path = out_dir / "label_1_sam2auto.png"
     _draw_sam2_auto_label_image(image_path, candidates, label_path)
     parts_sheet_path = _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
-    review_error: str | None = None
     try:
         review_objects, raw_review = _openai_review_sam2_candidates(
             image_path=image_path,
@@ -1630,23 +1636,12 @@ def generate_masks_with_sam2_langsam_pipeline(
             out_dir=out_dir,
         )
     except Exception as exc:
-        review_error = str(exc)
-        raw_review = ""
-        review_objects = []
-        fallback_payload = {
-            "model_id": review_model_id,
-            "review_backend": "openai_responses",
-            "image": {
-                "path": str(image_path.resolve()),
-                "sam2_label_path": str(label_path.resolve()),
-                "sam2_rgb_parts_sheet_path": str(parts_sheet_path.resolve()),
-            },
-            "error": review_error,
-            "objects": [],
-            "fallback": "preserve_sam2_auto_candidates",
-        }
-        (out_dir / "sam2_review.json").write_text(json.dumps(fallback_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        (out_dir / "openai_sam2_review.json").write_text(json.dumps(fallback_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        _log_step("  ②b openai_review FAILED", t_p1)
+        raise RuntimeError(f"OpenAI review failed — API error. Aborting. Error: {exc}") from exc
+
+    if not review_objects:
+        _log_step("  ②b openai_review returned empty", t_p1)
+        raise RuntimeError("OpenAI review returned no objects — empty response. Aborting.")
 
     mask_records: list[dict[str, Any]] = []
     claimed_sam2_ids: set[int] = set()
@@ -1714,10 +1709,21 @@ def generate_masks_with_sam2_langsam_pipeline(
             "rgb_parts_sheet_png": str(parts_sheet_path.resolve()),
             "candidates": sam2_report[:200],
         },
-        {"stage": "openai_sam2_review", "objects": review_objects, "raw_model_output": raw_review, "error": review_error},
+        {"stage": "openai_sam2_review", "objects": review_objects, "raw_model_output": raw_review, "error": None},
         {"stage": "sam2_unclaimed_preservation", "max_unclaimed": int(preserve_unclaimed_sam2), "claimed_sam2_ids": sorted(claimed_sam2_ids)},
     ]
+    _log_step("  ②c langsam_refine + unclaimed", t_p1)
     return mask_records, report
+
+def _log_step(step: str, start: float | None = None) -> float:
+    """Log a pipeline step with elapsed time. Returns current time."""
+    now = time.time()
+    if start is not None:
+        elapsed = now - start
+        print(f"[perception]  {step}  ({elapsed:.1f}s)", file=sys.stderr, flush=True)
+    else:
+        print(f"[perception]  {step} ...", file=sys.stderr, flush=True)
+    return now
 
 
 def build_org_json(
@@ -1745,6 +1751,8 @@ def build_org_json(
     sam2_stability_score_thresh: float | None = 0.88,
     preserve_unclaimed_sam2: int = 24,
 ) -> dict[str, Any]:
+    t0 = _log_step("start", None)
+
     _prepare_mask_output_dir(output_mask_dir, save_candidates)
     depth_map = _load_depth_map(depth_path)
     background_exclusion_mask: np.ndarray | None = None
@@ -1756,6 +1764,7 @@ def build_org_json(
         )
     except Exception as exc:
         print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
+    t1 = _log_step("① background_mask", t0)
 
     mask_records, anchor_report = generate_masks_with_sam2_langsam_pipeline(
         image_path=image_path,
@@ -1778,6 +1787,7 @@ def build_org_json(
         sam2_stability_score_thresh=sam2_stability_score_thresh,
         preserve_unclaimed_sam2=preserve_unclaimed_sam2,
     )
+    t2 = _log_step("② sam2+vlm+langsam_pipeline", t1)
 
     mask_records = _renumber_masks(mask_records, output_mask_dir)
     _draw_mask_records_label(
@@ -1794,6 +1804,7 @@ def build_org_json(
         image_shape=tuple(depth_map.shape),
     )
     mask_records = _renumber_masks(mask_records, output_mask_dir)
+    t3 = _log_step("③ finalize_non_overlap", t2)
 
     if background_exclusion_mask is not None and np.count_nonzero(background_exclusion_mask) > 0:
         foreground_union = np.any(
@@ -1859,4 +1870,7 @@ def build_org_json(
         edge["target_label"] = str(target_node["label"])
 
     _write_json(output_json_path, payload)
+
+    t4 = _log_step("④ occlusion_graph", t3)
+    _log_step("total", t0)
     return payload
