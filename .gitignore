@@ -18,3 +18,6 @@ build/
 devel/
 
 sample_data/
+
+# 排除 AI 助手指令文件（本地开发约定，不提交）
+AGENTS.md

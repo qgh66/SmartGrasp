@@ -391,12 +391,19 @@ def _finalize_independent_scene_masks(
 
     finalized: list[dict[str, Any]] = []
     removed_empty: list[dict[str, Any]] = []
+    image_area = max(1.0, float(image_shape[0] * image_shape[1]))
     for index, record in enumerate(kept):
         mask = masks[index]
         area = int(np.count_nonzero(mask))
-        if area == 0:
+        area_ratio = float(area) / image_area
+        if area == 0 or area_ratio < LANGSAM_MIN_AREA_RATIO:
             removed = {key: value for key, value in record.items() if key != "mask_array"}
-            removed["duplicate_reason"] = "removed_after_overlap_exclusivity"
+            removed["duplicate_reason"] = (
+                "removed_after_overlap_exclusivity" if area == 0 else "removed_too_small_after_overlap"
+            )
+            if area_ratio < LANGSAM_MIN_AREA_RATIO and area > 0:
+                removed["removed_area_ratio"] = float(area_ratio)
+                removed["min_area_ratio_threshold"] = float(LANGSAM_MIN_AREA_RATIO)
             removed_empty.append(removed)
             continue
         record["mask_array"] = mask
@@ -1374,6 +1381,9 @@ def _openai_review_sam2_candidates(
     return normalized, raw_output
 
 
+LANGSAM_MIN_AREA_RATIO = 0.0007  # Minimum fraction of image area for a valid LangSAM mask (0.07%)
+
+
 def _select_langsam_mask_for_review_object(
     masks: list[np.ndarray],
     scores: list[float],
@@ -1381,6 +1391,7 @@ def _select_langsam_mask_for_review_object(
     candidates: list[dict[str, Any]],
     background_exclusion_mask: np.ndarray | None,
     mask_clean_kernel: int,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[np.ndarray | None, dict[str, Any], list[dict[str, Any]]]:
     anchor_masks: list[np.ndarray] = []
     for sam2_id in review_object.get("sam2_ids", []):
@@ -1429,6 +1440,19 @@ def _select_langsam_mask_for_review_object(
     best = max(accepted_candidates, key=lambda item: item["selection_score"])
     best_mask = np.asarray(best["mask"], dtype=bool)
     selected = {key: value for key, value in best.items() if key != "mask"}
+
+    # If the best LangSAM mask is too small, fallback to the SAM2 anchor union.
+    image_area = max(1, float(image_shape[0] * image_shape[1])) if image_shape else None
+    if image_area is not None:
+        langsam_area_ratio = float(int(np.count_nonzero(best_mask))) / image_area
+        if langsam_area_ratio < LANGSAM_MIN_AREA_RATIO:
+            if anchor_mask is not None and int(np.count_nonzero(anchor_mask)) > 0:
+                selected["fallback"] = "langsam_too_small_keep_sam2_anchor"
+                selected["langsam_area_ratio"] = float(langsam_area_ratio)
+                selected["min_area_ratio_threshold"] = float(LANGSAM_MIN_AREA_RATIO)
+                return anchor_mask, selected, metadata
+            return None, {"fallback": "langsam_too_small_no_anchor"}, metadata
+
     if anchor_mask is not None:
         anchor_area = max(1, int(np.count_nonzero(anchor_mask)))
         best_area = max(1, int(np.count_nonzero(best_mask)))
@@ -1450,6 +1474,9 @@ def _select_langsam_mask_for_review_object(
     return best_mask, selected, metadata
 
 
+UNCLAIMED_MIN_AREA_RATIO = 0.0007  # Minimum fraction of image area for an unclaimed SAM2 candidate (0.07%)
+
+
 def _append_unclaimed_sam2_candidates(
     mask_records: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
@@ -1461,6 +1488,7 @@ def _append_unclaimed_sam2_candidates(
     depth_threshold: float = 0.012,
     min_contact_pixels: int = 4,
     max_area_ratio: float = 0.18,
+    min_area_ratio: float = 0.0007,
     iou_threshold: float = 0.55,
 ) -> list[dict[str, Any]]:
     if max_unclaimed <= 0:
@@ -1526,7 +1554,7 @@ def _append_unclaimed_sam2_candidates(
         merged_mask = np.any(np.stack([member["mask"] for member in members], axis=0), axis=0)
         area = int(np.count_nonzero(merged_mask))
         area_ratio = float(area / max(1.0, image_area))
-        if area_ratio > max_area_ratio:
+        if area_ratio > max_area_ratio or area_ratio < min_area_ratio:
             continue
         best_member = max(members, key=lambda item: float(item["candidate"].get("selection_score", 0.0)))
         grouped_items.append(
@@ -1663,6 +1691,7 @@ def generate_masks_with_sam2_langsam_pipeline(
                 candidates=candidates,
                 background_exclusion_mask=background_exclusion_mask,
                 mask_clean_kernel=mask_clean_kernel,
+                image_shape=source_image.size[::-1],  # (H, W) from PIL (W, H)
             )
             if best_mask is None:
                 continue
