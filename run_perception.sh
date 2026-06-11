@@ -18,12 +18,18 @@ mkdir -p logs
 export SMARTGRASP_DATA_DIR="${SMARTGRASP_DATA_DIR:-/home/data/datasets/FreeGraspData}"
 export HF_HOME="/home/data/models/huggingface"
 export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_HUB_OFFLINE=1
 export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
 export TORCH_HOME="/home/data/models/torch"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/smartgrasp-matplotlib-${USER:-user}}"
 export MPLBACKEND=Agg
 export PYTHONUNBUFFERED=1
+export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+export OPENAI_API_KEY='sk-0icgaaSMWa6ZBEmzKE960dC35DPmPuzUzN7hTGuFofOUCcHm'
+export OPENAI_BASE_URL=https://www.highland-api.top/v1
 
 PYTHON="${PYTHON:-/home/qiuguanhe/miniconda3/envs/smartgrasp/bin/python}"
+SEGMENTATION_BACKEND="${SEGMENTATION_BACKEND:-sam2-langsam}"
 
 if [[ ! -x "$PYTHON" ]]; then
   echo "smartgrasp python not found or not executable: $PYTHON" >&2
@@ -38,7 +44,7 @@ for required_dir in "$SMARTGRASP_DATA_DIR" "$(dirname "$HF_HOME")"; do
   fi
 done
 
-mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$TORCH_HOME"
+mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$TORCH_HOME" "$MPLCONFIGDIR"
 
 if ! compgen -G "$SMARTGRASP_DATA_DIR/*.parquet" > /dev/null; then
   echo "No parquet files found in SMARTGRASP_DATA_DIR=$SMARTGRASP_DATA_DIR" >&2
@@ -51,27 +57,35 @@ if [[ ! -e "$SMARTGRASP_DATA_DIR/npz_file.zip" ]] && ! find "$SMARTGRASP_DATA_DI
   exit 2
 fi
 
+echo "Running SmartGrasp perception:"
+echo "  scene_id=${SCENE_ID:-527}"
+echo "  segmentation_backend=$SEGMENTATION_BACKEND"
+echo "  python=$PYTHON"
+
+EXTRA_ARGS=()
+if [[ -n "${SAVE_CANDIDATES:-}" ]]; then
+  EXTRA_ARGS+=(--save-candidates)
+fi
+
 "$PYTHON" -u perception/perception.py \
   --scene-id "${SCENE_ID:-527}" \
-  --point-source "${POINT_SOURCE:-molmo}" \
-  --molmo-model-id "${MOLMO_MODEL_ID:-allenai/Molmo-7B-D-0924}" \
-  --molmo-max-attempts "${MOLMO_MAX_ATTEMPTS:-3}" \
-  --segmentation-backend "${SEGMENTATION_BACKEND:-auto}" \
-  --sam-model-id "${SAM_MODEL_ID:-facebook/sam-vit-large}" \
+  --review-model-id "${REVIEW_MODEL_ID:-gpt-5.5}" \
+  --review-api-key-env "${REVIEW_API_KEY_ENV:-OPENAI_API_KEY}" \
+  --review-base-url "${REVIEW_BASE_URL:-${OPENAI_BASE_URL:-}}" \
+  --review-timeout "${REVIEW_TIMEOUT:-120}" \
   --epsilon "${EPSILON:-0.05}" \
   --kernel-size "${KERNEL_SIZE:-5}" \
   --min-contact-pixels "${MIN_CONTACT_PIXELS:-50}" \
   --min-contact-ratio "${MIN_CONTACT_RATIO:-0.002}" \
-  --sam-point-grid-radius "${SAM_POINT_GRID_RADIUS:-10}" \
-  --sam-prompt-mode "${SAM_PROMPT_MODE:-grid}" \
-  --sam-negative-points "${SAM_NEGATIVE_POINTS:-0}" \
   --mask-clean-kernel "${MASK_CLEAN_KERNEL:-3}" \
-  --proposal-backend "${PROPOSAL_BACKEND:-sam2-auto}" \
-  --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.0015}" \
+  --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
   --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \
-  --proposal-iou-threshold "${PROPOSAL_IOU_THRESHOLD:-0.35}" \
-  --proposal-containment-threshold "${PROPOSAL_CONTAINMENT_THRESHOLD:-0.6}" \
-  --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-0.18}" \
-  --max-proposal-masks "${MAX_PROPOSAL_MASKS:-3}" \
+  --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-1.0}" \
+  --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-30}" \
+  --sam2-crop-n-layers "${SAM2_CROP_N_LAYERS:-0}" \
+  --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.75}" \
+  --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.90}" \
+  --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-24}" \
+  "${EXTRA_ARGS[@]}" \
   --device "${DEVICE:-cuda}" \
   "$@"

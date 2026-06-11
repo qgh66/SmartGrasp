@@ -226,7 +226,7 @@ def resolve_intent(
 
     summary_file = Path(summary_path)
     summary = _load_json(summary_file)
-    graph_file = Path(occlusion_graph_path) if occlusion_graph_path else _default_graph_path(summary_file)
+    graph_file = Path(occlusion_graph_path) if occlusion_graph_path else _default_graph_path(summary_file, summary)
     graph = _load_json(graph_file) if graph_file and graph_file.exists() else None
 
     objects = _objects_from_summary(summary)
@@ -357,11 +357,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _objects_from_summary(summary: dict[str, Any]) -> list[SceneObject]:
     labels = _matrix_labels(summary.get("matrix_labels", []))
-    points = {
-        int(point["molmo_id"]): point
-        for point in summary.get("molmo_points", [])
-        if "molmo_id" in point
-    }
+    points = _summary_points(summary)
 
     object_ids = sorted(labels) if labels else sorted(points)
     objects = []
@@ -378,6 +374,17 @@ def _objects_from_summary(summary: dict[str, Any]) -> list[SceneObject]:
             )
         )
     return objects
+
+
+def _summary_points(summary: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    points: dict[int, dict[str, Any]] = {}
+    for point in summary.get("molmo_points", []) or []:
+        if "molmo_id" in point:
+            points[int(point["molmo_id"])] = point
+    for point in summary.get("object_points", []) or []:
+        if "object_id" in point:
+            points[int(point["object_id"])] = point
+    return points
 
 
 def _matrix_labels(matrix_labels: Iterable[Any]) -> dict[int, str]:
@@ -462,9 +469,21 @@ def _resolve_image_paths(
     return resolved
 
 
-def _default_graph_path(summary_path: Path) -> Path | None:
-    candidate = summary_path.with_name("occlusion_graph.json")
-    return candidate if candidate.exists() else None
+def _default_graph_path(summary_path: Path, summary: dict[str, Any]) -> Path | None:
+    candidates = [
+        summary.get("graph_json"),
+        summary.get("occlusion_graph_json"),
+        summary_path.with_name("occlusion_graph.json"),
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = summary_path.parent / path
+        if path.exists():
+            return path
+    return None
 
 
 def _extract_response_text(response_payload: dict[str, Any]) -> str:
