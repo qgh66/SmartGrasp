@@ -489,13 +489,13 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         mask_clean_kernel=args.mask_clean_kernel,
         proposal_min_area_ratio=args.proposal_min_area_ratio,
         proposal_max_area_ratio=args.proposal_max_area_ratio,
-        proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
         save_candidates=args.save_candidates,
         device=args.device,
         sam2_points_per_side=args.sam2_points_per_side,
         sam2_crop_n_layers=args.sam2_crop_n_layers,
         sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
         sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+        sam2_max_candidates=args.sam2_max_candidates,
         preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
     )
     visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
@@ -560,11 +560,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mask-clean-kernel", type=int, default=3)
     parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
     parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)
-    parser.add_argument("--proposal-border-fraction-threshold", type=float, default=0.18)
-    parser.add_argument("--sam2-points-per-side", type=int, default=24)
+    parser.add_argument("--proposal-border-fraction-threshold", type=float, default=1.0)
+    parser.add_argument("--sam2-points-per-side", type=int, default=20)
     parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
-    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.7)
-    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.88)
+    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.75)
+    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.90)
+    parser.add_argument("--sam2-max-candidates", type=int, default=25)
     parser.add_argument("--preserve-unclaimed-sam2", type=int, default=24)
     parser.add_argument("--save-candidates", action="store_true")
     parser.add_argument("--device", default=None)
