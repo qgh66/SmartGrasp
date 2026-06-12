@@ -6,7 +6,7 @@ import sys
 import time
 
 # --- Config (mirrors run_perception.sh + sam2_langsam_pipeline.py) ---
-API_KEY = os.environ.get("OPENAI_API_KEY", "sk-0icgaaSMWa6ZBEmzKE960dC35DPmPuzUzN7hTGuFofOUCcHm")
+API_KEY = os.environ.get("OPENAI_API_KEY", "sk-zOddAlSLsleWkmOYXR1iDjtWwC7a745r2fKjU5wEvbGOTwMO")
 BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://www.highland-api.top/v1")
 MODEL_ID = os.environ.get("REVIEW_MODEL_ID", "gpt-5.5")
 TIMEOUT = 30.0
