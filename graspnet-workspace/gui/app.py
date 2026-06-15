@@ -506,10 +506,9 @@ def gripper_traces(position: np.ndarray, rot: np.ndarray, width: float, depth: f
 
 
 def pybullet_gripper_traces(frame: dict, rot: np.ndarray) -> list:
-    """Draw the exact boxes used by simulation/gripper.py collision bodies."""
+    """Draw the PyBullet gripper with the original compact visual style."""
     geometry = frame.get("gripper_geometry", {})
     base_size = float(geometry.get("base_size", 0.03))
-    base_width = float(geometry.get("base_width", base_size))
     finger_length = float(geometry.get("finger_length", 0.10))
     finger_width = float(geometry.get("finger_width", 0.012))
     finger_height = float(geometry.get("finger_height", 0.03))
@@ -539,7 +538,7 @@ def pybullet_gripper_traces(frame: dict, rot: np.ndarray) -> list:
         (
             base_pos,
             rot,
-            (base_size, base_width, finger_height),
+            (base_size, base_size, base_size),
             "#666666",
             "base",
         ),
@@ -732,7 +731,13 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
     frames = []; bounds_all = []
 
     # 从 case 中读取正确的 obj_path
-    obj_path = case.get("meta", {}).get("obj_path") if case else None
+    meta = case.get("meta", {}) if case else {}
+    obj_path = meta.get("obj_path")
+    object_box_size = meta.get("object_aabb_size")
+    if object_box_size is not None:
+        object_box_size = np.asarray(object_box_size, dtype=float)
+        if object_box_size.shape != (3,) or np.any(object_box_size <= 0):
+            object_box_size = None
     if not obj_path or not Path(obj_path).exists():
         rp = case.get("result_path") if case else None
         if rp:
@@ -779,6 +784,7 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
 
         obj_p = np.array(f['obj_pos'])
         obj_orn = f.get('obj_orn', [0,0,0,1])
+        obj_rot = Rot.from_quat(obj_orn).as_matrix()
         color = '#16a34a' if success else '#dc2626' if success is not None else '#2563eb'
 
         if has_mesh and not mesh_failed:
@@ -789,14 +795,27 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
                 print(f"[GUI] Mesh render failed at frame {fi}: {e}", file=sys.stderr)
                 traceback.print_exc()
                 mesh_failed = True
-        if not has_mesh or mesh_failed:
+        if not has_mesh and object_box_size is not None:
+            traces.append(box_mesh(
+                obj_p,
+                obj_rot,
+                tuple(object_box_size),
+                color,
+                "object",
+                opacity=0.92,
+            ))
+            object_edges = box_edges(
+                obj_p, obj_rot, tuple(object_box_size), color="#0f172a", width=2)
+            object_edges.name = "object edges"
+            traces.append(object_edges)
+        elif not has_mesh or mesh_failed:
             # 降级：让物体点云跟随 obj_p 平移
             if len(obj_pts):
                 delta = obj_p - initial_obj_pos
                 shifted_pts = obj_pts + delta
                 traces.append(go.Scatter3d(
                     x=shifted_pts[:,0], y=shifted_pts[:,1], z=shifted_pts[:,2],
-                    mode='markers', marker={'size':3,'color':color,'opacity':0.7},
+                    mode='markers', marker={'size':1,'color':color,'opacity':0.35},
                     name='object', hoverinfo='skip'))
             else:
                 traces.append(go.Scatter3d(
@@ -979,6 +998,17 @@ def make_summary(case, selected_index: int | None):
             html.Strong(str(max(len(case["trajectories"]), trajectory_count))),
         ]),
     ]
+    data_source = case.get("meta", {}).get("data_source", {})
+    if data_source:
+        lines.append(html.Div([
+            html.Span("Data source: ", className="metric-label"),
+            html.Strong(str(data_source.get("mode", "unknown"))),
+        ]))
+        if data_source.get("geometry"):
+            lines.append(html.Div([
+                html.Span("Object geometry: ", className="metric-label"),
+                html.Strong(str(data_source["geometry"])),
+            ]))
     if selected is not None:
         t = selected["translation"]
         action = _action_label(selected)

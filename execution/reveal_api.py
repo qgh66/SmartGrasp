@@ -24,8 +24,13 @@ def execute_reveal_action(occluder_id, center_point, action_type="push",
     # FIX: Corrected indexing to extract individual X, Y, Z elements
     print(f"[Step 1] Using occluder center: X={translation[0]:.3f}, Y={translation[1]:.3f}, Z={translation[2]:.3f}")
 
-    # 2. Default top-down gripper rotation matrix
-    rotation = np.eye(3) 
+    # 2. Vertical gripper pose for side pushing:
+    # local x (finger length) points downward, local z points along +X push.
+    rotation = np.column_stack((
+        np.array([0.0, 0.0, -1.0], dtype=np.float32),
+        np.array([0.0, 1.0, 0.0], dtype=np.float32),
+        np.array([1.0, 0.0, 0.0], dtype=np.float32),
+    ))
 
     # 3. Apply 5cm nudge strategy along X-axis
     move_dist = float(move_distance)

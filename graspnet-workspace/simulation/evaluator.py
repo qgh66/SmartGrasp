@@ -51,6 +51,48 @@ def _unit(vec, fallback):
     return np.asarray(vec, dtype=float) / norm
 
 
+def _gripper_extent_along_direction(gripper, rotation, direction, opening):
+    """Return gripper min/max projection relative to the base position."""
+    forward = gripper.BASE_SIZE / 2.0 + gripper.FINGER_LENGTH / 2.0
+    half_open = opening / 2.0 + gripper.FINGER_WIDTH / 2.0
+    boxes = [
+        (
+            np.array([0.0, 0.0, 0.0]),
+            np.array([
+                gripper.BASE_SIZE / 2.0,
+                gripper.BASE_WIDTH / 2.0,
+                gripper.FINGER_HEIGHT / 2.0,
+            ]),
+        ),
+        (
+            np.array([forward, -half_open, 0.0]),
+            np.array([
+                gripper.FINGER_LENGTH / 2.0,
+                gripper.FINGER_WIDTH / 2.0,
+                gripper.FINGER_HEIGHT / 2.0,
+            ]),
+        ),
+        (
+            np.array([forward, half_open, 0.0]),
+            np.array([
+                gripper.FINGER_LENGTH / 2.0,
+                gripper.FINGER_WIDTH / 2.0,
+                gripper.FINGER_HEIGHT / 2.0,
+            ]),
+        ),
+    ]
+    projections = []
+    signs = np.array([
+        [-1, -1, -1], [-1, -1, 1], [-1, 1, -1], [-1, 1, 1],
+        [1, -1, -1], [1, -1, 1], [1, 1, -1], [1, 1, 1],
+    ], dtype=float)
+    for offset, half_extents in boxes:
+        local_vertices = offset + signs * half_extents
+        world_vertices = (rotation @ local_vertices.T).T
+        projections.extend(world_vertices @ direction)
+    return float(np.min(projections)), float(np.max(projections))
+
+
 class GraspEvaluator:
     """基于 PyBullet 的抓取物理评估器（逐帧轨迹版）。"""
 
@@ -192,18 +234,34 @@ class GraspEvaluator:
         aabb_min = np.asarray(aabb_min, dtype=float)
         aabb_max = np.asarray(aabb_max, dtype=float)
         contact_face_x = aabb_min[0] if direction[0] > 0 else aabb_max[0]
-        finger_tip_offset = (
-            self.gripper.BASE_SIZE / 2.0 + self.gripper.FINGER_LENGTH)
-        contact_pos = np.array([
-            contact_face_x - direction[0] * (finger_tip_offset + 0.002),
-            center[1],
-            max(center[2], TABLE_Z + self.gripper.FINGER_HEIGHT / 2.0),
-        ])
-        pre_push_pos = contact_pos - direction * approach_distance
-        push_end_pos = contact_pos + direction * move_distance
 
         self.gripper.release_grasp()
         self.gripper.set_opening(closed_width)
+
+        _, gripper_max = _gripper_extent_along_direction(
+            self.gripper, rotation, direction, closed_width)
+        face_scalar = float(np.dot(
+            np.array([contact_face_x, center[1], center[2]], dtype=float),
+            direction,
+        ))
+        margin = 0.002
+        base_scalar = face_scalar - margin - gripper_max
+
+        finger_center_offset = rotation @ np.array([
+            self.gripper.BASE_SIZE / 2.0 + self.gripper.FINGER_LENGTH / 2.0,
+            0.0,
+            0.0,
+        ])
+        desired_contact_z = max(
+            center[2], TABLE_Z + self.gripper.FINGER_HEIGHT / 2.0)
+        contact_base_pos = np.array([
+            direction[0] * base_scalar,
+            center[1],
+            desired_contact_z - finger_center_offset[2],
+        ])
+        pre_push_pos = contact_base_pos - direction * approach_distance
+        push_end_pos = contact_base_pos + direction * move_distance
+
         self.gripper.set_pose(pre_push_pos, rotation)
         self._gui_step(30, sleep=0.01)
         frame_log.append({
@@ -213,7 +271,7 @@ class GraspEvaluator:
 
         for i in range(max(1, int(approach_steps))):
             frac = (i + 1) / max(1, int(approach_steps))
-            pos = pre_push_pos + (contact_pos - pre_push_pos) * frac
+            pos = pre_push_pos + (contact_base_pos - pre_push_pos) * frac
             self.gripper.set_pose(pos, rotation)
             self._gui_step(3, sleep=0.004)
             frame_log.append({
@@ -225,7 +283,7 @@ class GraspEvaluator:
             p.getBasePositionAndOrientation(self.object_id)[0], dtype=float)
         for i in range(max(1, int(push_steps))):
             frac = (i + 1) / max(1, int(push_steps))
-            pos = contact_pos + (push_end_pos - contact_pos) * frac
+            pos = contact_base_pos + (push_end_pos - contact_base_pos) * frac
             self.gripper.set_pose(pos, rotation)
             self._gui_step(4, sleep=0.004)
             frame_log.append({
