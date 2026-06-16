@@ -10,6 +10,7 @@ scene_details/
 runs/
 runs_detail/
 analysis_report/
+*data*/
 
 # 排除 Python 缓存
 __pycache__/

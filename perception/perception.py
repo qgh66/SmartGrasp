@@ -115,6 +115,44 @@ def save_depth(depth: np.ndarray, out_dir: Path) -> Path:
     return path
 
 
+def build_sam2_part_mapping(graph_payload: dict[str, Any], out_dir: Path) -> dict[str, Any]:
+    """Build object_id -> SAM2 part ids/path mapping for summary.json."""
+    graph = graph_payload.get("graph", {})
+    nodes = graph.get("nodes", [])
+    object_to_parts: dict[str, list[int]] = {}
+    object_to_part_files: dict[str, list[str]] = {}
+
+    for node in nodes:
+        try:
+            object_id = int(node.get("object_id"))
+        except Exception:
+            continue
+        raw_part_ids = node.get("sam2_ids", [])
+        if raw_part_ids is None:
+            raw_part_ids = []
+        part_ids: list[int] = []
+        for raw_part_id in raw_part_ids:
+            try:
+                part_id = int(raw_part_id)
+            except Exception:
+                continue
+            if part_id > 0:
+                part_ids.append(part_id)
+        part_ids = sorted(set(part_ids))
+        object_key = str(object_id)
+        object_to_parts[object_key] = part_ids
+        object_to_part_files[object_key] = [
+            str(Path("sam2_rgb_parts") / f"part_{part_id:03d}.png")
+            for part_id in part_ids
+        ]
+
+    return {
+        "object_id_to_sam2_part_ids": object_to_parts,
+        "object_id_to_sam2_part_files": object_to_part_files,
+        "sam2_rgb_parts_dir": str((out_dir / "sam2_rgb_parts").resolve()),
+    }
+
+
 def copy_or_save_sample_image(row: pd.Series, source_image_path: Path | None, out_dir: Path) -> Path:
     if source_image_path is not None and source_image_path.exists():
         target_path = out_dir / "scene_image.png"
@@ -516,6 +554,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
+    sam2_part_mapping = build_sam2_part_mapping(graph_payload, out_dir)
     summary = {
         "scene_id": scene_id,
         "query_obj_id": query_obj_id,
@@ -534,6 +573,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         "num_nodes": len(graph_payload["graph"]["nodes"]),
         "num_edges": len(graph_payload["graph"]["edges"]),
         "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
+        **sam2_part_mapping,
         **scene_graph_summary,
     }
     summary_path = out_dir / "summary.json"

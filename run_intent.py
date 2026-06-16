@@ -77,8 +77,6 @@ def _resolve_from_summary(
             "selected_perception_id": selected_id,
             "selected_object": result.target_object.to_json() if result.target_object else None,
             "candidate_perception_ids": candidate_ids,
-            "branch": result.branch,
-            "occluded_by": list(result.occluded_by),
             "reason": result.reason,
             "raw_vlm_decision": result.vlm_decision,
         },

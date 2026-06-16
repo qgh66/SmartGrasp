@@ -282,3 +282,5 @@ print(result.success, result.final_status)
   validate end-to-end behavior.
 - The closed-loop simulator currently does not execute the `fully_occluded`
   branch; it stops with a status message instead.
+
+## intent_handler:

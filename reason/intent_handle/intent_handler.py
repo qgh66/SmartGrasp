@@ -1,8 +1,9 @@
 """Resolve a natural-language instruction with a VLM.
 
 The VLM chooses which object(s) in the scene can solve the user's task. This
-module validates the returned object id against ``summary.json`` and uses the
-scene occlusion data to select the least-occluded candidate and branch.
+module validates the returned object id against ``summary.json`` and returns
+predicted object ids only. Visibility branch classification lives in
+``reason.branch_judge``.
 """
 
 from __future__ import annotations
@@ -18,11 +19,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Protocol
-
-
-BRANCH_FULLY_VISIBLE = "fully_visible"
-BRANCH_PARTIALLY_VISIBLE = "partially_visible"
-BRANCH_INVISIBLE = "invisible"
 
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://www.highland-api.top/v1"
@@ -102,20 +98,16 @@ class SceneObject:
 
 @dataclass(frozen=True)
 class IntentResult:
-    """Resolved target and branch decision."""
+    """Resolved target object decision."""
 
-    branch: str
     target_object: SceneObject | None
-    occluded_by: tuple[int, ...]
     candidates: tuple[SceneObject, ...]
     reason: str
     vlm_decision: dict[str, Any]
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "branch": self.branch,
             "target_object": self.target_object.to_json() if self.target_object else None,
-            "occluded_by": list(self.occluded_by),
             "candidates": [obj.to_json() for obj in self.candidates],
             "reason": self.reason,
             "vlm_decision": self.vlm_decision,
@@ -251,9 +243,7 @@ def _result_from_vlm_decision(
     object_by_id = {obj.object_id: obj for obj in objects}
     if not _as_bool(decision.get("target_present", False)):
         return IntentResult(
-            branch=BRANCH_INVISIBLE,
             target_object=None,
-            occluded_by=(),
             candidates=(),
             reason=str(decision.get("reason") or "VLM found no suitable scene object."),
             vlm_decision=decision,
@@ -267,28 +257,15 @@ def _result_from_vlm_decision(
     candidates = [object_by_id[obj_id] for obj_id in candidate_ids if obj_id in object_by_id]
     if not candidates:
         return IntentResult(
-            branch=BRANCH_INVISIBLE,
             target_object=None,
-            occluded_by=(),
             candidates=(),
             reason="VLM did not return a valid object id from summary.json.",
             vlm_decision=decision,
         )
 
-    candidates.sort(
-        key=lambda obj: (
-            len(occlusion.get(obj.object_id, ())),
-            0 if obj.object_id == target_id else 1,
-            obj.object_id,
-        )
-    )
-    target = candidates[0]
-    blockers = tuple(sorted(occlusion.get(target.object_id, ())))
-    branch = BRANCH_PARTIALLY_VISIBLE if blockers else BRANCH_FULLY_VISIBLE
+    target = object_by_id.get(target_id) if target_id in object_by_id else candidates[0]
     return IntentResult(
-        branch=branch,
         target_object=target,
-        occluded_by=blockers,
         candidates=tuple(candidates),
         reason=str(
             decision.get("reason")
@@ -300,31 +277,63 @@ def _result_from_vlm_decision(
 
 def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
     return (
-        "You are the intent handler for a robotic grasping system.\n"
-        "Use the user instruction, summary.json object table, occlusion data, "
-        "and the attached labeled scene/occlusion images to choose the target object.\n\n"
+        "You are the intent recognition module for a robotic grasping system.\n"
+        "Your role is to understand the user's natural-language instruction, "
+        "infer the underlying task or need, and select the most task-relevant "
+        "object id from summary.json.\n\n"
+
+        "You should reason like a robotic assistant operating in a real-world scene. "
+        "The user may give either an explicit object request or an implicit task request. "
+        "For explicit requests, identify the named or described object. "
+        "For implicit requests, first infer the practical task, then choose the scene object "
+        "that can best satisfy that task.\n\n"
+
+        "Important scope:\n"
+        "- Only identify the task-relevant target object.\n"
+        "- Do not select object parts.\n"
+        "- Do not generate grasp poses.\n"
+        "- Do not decide visibility branches such as fully_visible or partially_visible. "
+        "Visibility will be handled by a downstream module.\n\n"
+
+        "Reasoning procedure:\n"
+        "1. Task analysis: Infer the user's underlying task or need from the instruction. "
+        "For example, 'I am thirsty' means the task is drinking, and "
+        "'I need to tighten screws' means the task is tightening screws.\n"
+        "2. Relevant object identification: From the objects listed in summary.json and "
+        "the attached labeled images, identify which object category can best satisfy "
+        "the inferred task.\n"
+        "3. Instance selection: Choose the concrete object id or ids from the scene. "
+        "Use labeled image ids, object labels, and coordinates to distinguish instances.\n\n"
+
         "Rules:\n"
         "1. The target object must be one object id from summary.json.\n"
-        "2. If no object in the current scene can satisfy the user need, set "
-        "target_present=false.\n"
-        "3. If multiple objects of the same suitable category exist, return all "
-        "their ids in candidate_object_ids. The caller will choose the least "
-        "occluded one using the occlusion matrix.\n"
-        "4. Use the labeled image ids to distinguish instances.\n"
-        "5. Words such as top, bottom, upper, lower, up, and down refer to "
-        "physical height / stacking order in the real scene by default, not "
-        "their 2D position in the image. Only treat them as image-space "
-        "directions if the instruction explicitly says things like 'in the "
-        "image', 'in the picture', or 'on the screen'.\n"
-        "6. Return only one JSON object, with no markdown.\n\n"
+        "2. Do not invent objects or ids that are not in summary.json.\n"
+        "3. If no object in the current scene can satisfy the user need, set target_present=false.\n"
+        "4. If multiple objects of the same suitable category can satisfy the task, "
+        "return all of their ids in candidate_object_ids.\n"
+        "5. If the instruction explicitly names or describes one object instance, "
+        "prefer that specific instance.\n"
+        "6. If the instruction is implicit, choose the object that best supports the inferred task.\n"
+        "7. Use occlusion data only to understand physical scene relations or disambiguate "
+        "phrases such as top, bottom, upper, lower, front, and back. "
+        "Do not reject a suitable target only because it is occluded.\n"
+        "8. Words such as top, bottom, upper, lower, up, and down refer to physical height "
+        "or stacking order in the real scene by default, not 2D image position. "
+        "Only treat them as image-space directions if the instruction explicitly says "
+        "'in the image', 'in the picture', or 'on the screen'.\n"
+        "9. Use common everyday object names for target_category.\n"
+        "10. Return only one JSON object, with no markdown.\n\n"
+
         "Required JSON shape:\n"
         "{\n"
         '  "target_present": true or false,\n'
+        '  "inferred_task": "short phrase or null",\n'
         '  "target_object_id": integer or null,\n'
         '  "target_category": string or null,\n'
         '  "candidate_object_ids": [integers],\n'
         '  "reason": "short explanation"\n'
         "}\n\n"
+
         f"User instruction: {instruction}\n\n"
         "Scene context:\n"
         f"{json.dumps(scene_context, ensure_ascii=False, indent=2)}"
@@ -598,7 +607,6 @@ def main(argv: list[str] | None = None) -> int:
     payload = result.to_json()
 
     if not args.json_only:
-        print(f"branch: {result.branch}")
         if result.target_object:
             print(
                 "target_object: "
