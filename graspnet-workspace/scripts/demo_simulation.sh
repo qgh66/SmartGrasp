@@ -4,14 +4,14 @@
 # ============================================================
 # 用法:
 #   conda activate smartgrasp
-#   cd /home/admin128/beilei/graspnet-workspace
+#   cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 #   bash scripts/demo_simulation.sh
 # ============================================================
 
-set -e
+set -euo pipefail
 
-ROOT=$(dirname $(dirname $(realpath $0)))
-cd $ROOT
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
 echo "=========================================="
 echo " GraspNet + PyBullet Simulation Demo"
@@ -19,7 +19,7 @@ echo " ROOT: $ROOT"
 echo "=========================================="
 
 # 检查物体文件
-OBJ_PATH="/home/admin128/beilei/obj_phase3/002/textured.obj"
+OBJ_PATH="${OBJ_PATH:-/home/admin128/beilei/obj_phase3/002/textured.obj}"
 if [ ! -f "$OBJ_PATH" ]; then
     echo "⚠️ 物体文件不存在: $OBJ_PATH"
     echo "  尝试使用其他物体..."
@@ -32,7 +32,7 @@ fi
 echo "  Object: $OBJ_PATH"
 
 # 检查 checkpoint
-CKPT="$ROOT/checkpoints/checkpoint-rs.tar"
+CKPT="${CKPT:-$ROOT/checkpoints/checkpoint-rs.tar}"
 if [ ! -f "$CKPT" ]; then
     echo "⚠️ checkpoint 不存在: $CKPT"
     echo "  请将 checkpoint 放到该路径下"

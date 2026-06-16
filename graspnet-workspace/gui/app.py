@@ -566,6 +566,41 @@ def pybullet_gripper_traces(frame: dict, rot: np.ndarray) -> list:
     return traces
 
 
+def robot_model_traces(frame: dict) -> list:
+    """Draw a lightweight JAKA ZU3 skeleton from PyBullet link poses."""
+    links = frame.get("robot_links") or []
+    if len(links) < 2:
+        return []
+    points = np.asarray([link["pos"] for link in links], dtype=float)
+    names = [link.get("name", "") for link in links]
+    traces = [
+        go.Scatter3d(
+            x=points[:, 0],
+            y=points[:, 1],
+            z=points[:, 2],
+            mode="lines+markers+text",
+            line={"color": "#111827", "width": 8},
+            marker={"size": 4, "color": "#475569"},
+            text=names,
+            textposition="top center",
+            textfont={"size": 9, "color": "#334155"},
+            name=frame.get("robot_model", "robot"),
+            hoverinfo="skip",
+        )
+    ]
+    tcp = points[-1]
+    traces.append(go.Scatter3d(
+        x=[tcp[0]],
+        y=[tcp[1]],
+        z=[tcp[2]],
+        mode="markers",
+        marker={"size": 7, "color": "#f97316", "symbol": "diamond"},
+        name="robot tcp",
+        hoverinfo="skip",
+    ))
+    return traces
+
+
 def add_selected_gripper(fig: go.Figure, grasp: dict, obj_pts: np.ndarray):
     rot, center, _ = _constrained_grasp_pose(grasp, obj_pts)
     for trace in gripper_traces(center, rot, grasp.get("width", 0.06), grasp.get("depth", 0.03), "selected gripper"):
@@ -823,7 +858,11 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
                     mode='markers', marker={'size':12,'color':color,'symbol':'diamond'},
                     name='object', hoverinfo='skip'))
 
-        traces.extend(pybullet_gripper_traces(f, rot_m))
+        robot_traces = robot_model_traces(f)
+        if robot_traces:
+            traces.extend(robot_traces)
+        else:
+            traces.extend(pybullet_gripper_traces(f, rot_m))
         traces.append(go.Scatter3d(
             x=[grp[0]], y=[grp[1]], z=[grp[2]+0.06],
             mode='text',
@@ -832,6 +871,8 @@ def _animation_from_frame_log(frame_log, selected, obj_pts, table_pts, case=None
             name='stage', hoverinfo='skip'))
         frames.append(go.Frame(data=traces, name=str(fi)))
         bounds_all.extend([obj_p, grp])
+        for link in f.get("robot_links") or []:
+            bounds_all.append(np.asarray(link["pos"], dtype=float))
 
     fig = go.Figure(data=frames[0].data, frames=frames)
     ba = np.array(bounds_all); c = ba.mean(axis=0)

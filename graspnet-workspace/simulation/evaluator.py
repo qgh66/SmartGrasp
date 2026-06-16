@@ -28,7 +28,7 @@ def _snapshot(obj_id, gripper):
     base_pos, base_orn = p.getBasePositionAndOrientation(gripper.base_id)
     left_pos, left_orn = p.getBasePositionAndOrientation(gripper.left_id)
     right_pos, right_orn = p.getBasePositionAndOrientation(gripper.right_id)
-    return {
+    frame = {
         'obj_pos': list(obj_pos), 'obj_orn': list(obj_orn),
         'gripper_pos': list(base_pos), 'gripper_orn': list(base_orn),
         'left_pos': list(left_pos), 'left_orn': list(left_orn),
@@ -42,6 +42,9 @@ def _snapshot(obj_id, gripper):
             'finger_height': gripper.FINGER_HEIGHT,
         },
         }
+    if hasattr(gripper, "snapshot_extra"):
+        frame.update(gripper.snapshot_extra())
+    return frame
 
 
 def _unit(vec, fallback):

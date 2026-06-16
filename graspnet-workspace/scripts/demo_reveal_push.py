@@ -24,7 +24,7 @@ sys.path.insert(0, SMARTGRASP_ROOT)
 from execution.reveal_api import execute_reveal_action
 from simulation.camera import VirtualCamera
 from simulation.evaluator import GraspEvaluator
-from simulation.gripper import ParallelJawGripper
+from simulation.gripper import JakaZu3VisualGripper, ParallelJawGripper
 from simulation.scene import SimulationScene
 
 
@@ -59,6 +59,25 @@ def parse_args():
     parser.add_argument("--friction", type=float, default=0.7)
     parser.add_argument("--distance", type=float, default=0.05)
     parser.add_argument("--gui", action="store_true", help="Open PyBullet GUI")
+    parser.add_argument(
+        "--robot-model",
+        choices=("jaka", "simple"),
+        default="jaka",
+        help="Use local JAKA ZU3 + Robotiq model for replay visualization",
+    )
+    parser.add_argument(
+        "--jaka-urdf",
+        default=None,
+        help="Override JAKA ZU3 + gripper URDF path",
+    )
+    parser.add_argument(
+        "--robot-base",
+        type=float,
+        nargs=3,
+        default=(-0.10, -0.35, 0.0),
+        metavar=("X", "Y", "Z"),
+        help="JAKA base position in the PyBullet world",
+    )
     parser.add_argument(
         "--output",
         default=os.path.join(ROOT, "results", "reveal_push.json"),
@@ -290,7 +309,13 @@ def main():
     obj_path = scene_data["obj_path"]
 
     scene = SimulationScene(gui=args.gui)
-    gripper = ParallelJawGripper()
+    if args.robot_model == "jaka":
+        gripper = JakaZu3VisualGripper(
+            robot_urdf=args.jaka_urdf,
+            robot_base_position=tuple(args.robot_base),
+        )
+    else:
+        gripper = ParallelJawGripper()
     try:
         scene.connect()
         scene.load_plane()

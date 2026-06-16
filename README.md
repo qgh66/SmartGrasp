@@ -34,7 +34,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 ```
 
 检查 GUI 和仿真依赖是否可导入：
@@ -75,7 +75,7 @@ graspnet-workspace/checkpoints/checkpoint-rs.tar
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 
 python scripts/demo_closed_loop.py \
   --obj /home/admin128/beilei/obj_phase3/002/textured.obj \
@@ -118,6 +118,63 @@ results_phase3_002/results_viz_data.pkl
 - `results.json`：抓取分数、位姿、宽度、深度、成功/失败、失败原因、动画轨迹日志。
 - `results_viz_data.pkl`：RGB、depth、点云、物体路径、物体姿态等 GUI 需要的数据。
 
+## 运行 Reveal Push 仿真（JAKA ZU3 可视化）
+
+`scripts/demo_reveal_push.py` 在 `graspnet-workspace/` 下面，所以必须先进入这个目录。不要在 `SmartGrasp/` 根目录直接运行 `python scripts/demo_reveal_push.py`。
+
+推荐命令：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+
+bash scripts/run_reveal_push_jaka.sh
+```
+
+当前默认 `--robot-model jaka`，会加载本机已有的 JAKA ZU3 + Robotiq 模型做网页回放可视化：
+
+```text
+/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/robotiq_test/config/gazebo_jaka_zu3_robotiq.urdf
+```
+
+说明：
+
+- JAKA ZU3 模型用于可视化和 IK 跟随。
+- push 接触仍由原来的简化夹爪碰撞体完成，避免复杂 URDF 碰撞导致仿真不稳定。
+- 如果要临时切回原来的简化模型，添加 `--robot-model simple`。
+
+切回简化模型：
+
+```bash
+bash scripts/run_reveal_push_simple.sh
+```
+
+真实 RGB-D + mask 数据的 push 仿真：
+
+```bash
+RGB=/path/to/aligned_rgb.jpg \
+DEPTH=/path/to/aligned_depth.npy \
+MASK=/path/to/object_mask.png \
+INTRINSICS=/path/to/camera_intrinsics.json \
+OUTPUT=results/reveal_push_real_rgbd.json \
+bash scripts/run_reveal_push_real_rgbd.sh
+```
+
+查看 JAKA push 回放：
+
+```bash
+bash scripts/run_reveal_push_gui.sh
+```
+
+指定结果文件和端口：
+
+```bash
+RESULTS=results/reveal_push_jaka.json \
+VIZ_DATA=results/reveal_push_jaka_viz_data.pkl \
+PORT=8051 \
+bash scripts/run_reveal_push_gui.sh
+```
+
 ## 当前仿真约束
 
 当前 milestone 不是只展示网络输出，而是额外加了物理合理性限制：
@@ -156,7 +213,7 @@ results_viz_data.pkl
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 
 python gui/app.py \
   --host 0.0.0.0 \

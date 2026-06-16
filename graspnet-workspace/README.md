@@ -60,7 +60,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 ```
 
 ### 2. 安装 PyBullet
@@ -85,15 +85,103 @@ cp /home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar checkpo
 ### 纯推理 Demo（无需 PyBullet）
 
 ```bash
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
-python scripts/demo_inference.py
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+bash scripts/run_inference.sh
 ```
 
 ### 仿真 Demo（GraspNet + PyBullet）
 
 ```bash
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
-bash scripts/demo_simulation.sh
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+bash scripts/run_grasp_simulation.sh
+```
+
+可选参数通过环境变量传入：
+
+```bash
+OBJ_PATH=/path/to/textured.obj \
+CKPT=/path/to/checkpoint-rs.tar \
+DEVICE=cuda:0 \
+TOP_K=5 \
+OUTPUT=results_grasp_sim.json \
+bash scripts/run_grasp_simulation.sh
+```
+
+### Reveal Push 仿真（默认 JAKA ZU3 可视化）
+
+`scripts/demo_reveal_push.py` 的真实位置是：
+
+```text
+/home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/scripts/demo_reveal_push.py
+```
+
+因此运行前必须进入 `graspnet-workspace/`。如果在 `SmartGrasp/` 根目录运行，会报：
+
+```text
+python: can't open file '/home/admin128/sangxiyuan/SmartGrasp/scripts/demo_reveal_push.py'
+```
+
+正确命令：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+
+bash scripts/run_reveal_push_jaka.sh
+```
+
+自定义距离和输出：
+
+```bash
+DISTANCE=0.05 \
+OUTPUT=results/reveal_push_jaka.json \
+bash scripts/run_reveal_push_jaka.sh
+```
+
+当前默认 `--robot-model jaka`，会使用本机已有的 JAKA ZU3 + Robotiq URDF：
+
+```text
+/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/robotiq_test/config/gazebo_jaka_zu3_robotiq.urdf
+```
+
+这不是从网络下载的模型。代码会在运行时把 URDF 里的 `package://...` mesh 路径映射到本机已有 mesh。
+
+当前设计：
+
+- JAKA ZU3 + Robotiq 用于网页回放可视化和 IK 跟随。
+- 原简化夹爪碰撞体仍负责实际 push 接触，保证 Reveal push 验证稳定。
+- 结果文件的 `frame_log` 会包含 `robot_model=jaka_zu3_robotiq` 和 `robot_links`，GUI 会画出 JAKA 关节骨架和 TCP。
+
+如需回退到原简化夹爪：
+
+```bash
+bash scripts/run_reveal_push_simple.sh
+```
+
+使用真实 RGB-D + mask 数据：
+
+```bash
+RGB=/path/to/aligned_rgb.jpg \
+DEPTH=/path/to/aligned_depth.npy \
+MASK=/path/to/object_mask.png \
+INTRINSICS=/path/to/camera_intrinsics.json \
+OUTPUT=results/reveal_push_real_rgbd.json \
+bash scripts/run_reveal_push_real_rgbd.sh
+```
+
+启动网页查看 JAKA push 回放：
+
+```bash
+bash scripts/run_reveal_push_gui.sh
+```
+
+指定结果文件和端口：
+
+```bash
+RESULTS=results/reveal_push_jaka.json \
+VIZ_DATA=results/reveal_push_jaka_viz_data.pkl \
+PORT=8051 \
+bash scripts/run_reveal_push_gui.sh
 ```
 
 ---
@@ -164,3 +252,14 @@ pred_decode: 解析网络输出 → GraspGroup (抓取位姿 + 几何参数)
 3. 闭合手指 + 创建固定约束
 4. 向上提升（检查物体是否跟随）
 5. 判定成功/失败（物体 Z > 0.10m）
+
+### 启动jaka真实模型的仿真：
+```
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+
+conda run --no-capture-output -n smartgrasp python gui/app.py \
+  --host 0.0.0.0 \
+  --port 8051 \
+  --results results/reveal_push_jaka.json \
+  --viz-data results/reveal_push_jaka_viz_data.pkl
+```
