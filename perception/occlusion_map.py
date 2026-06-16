@@ -187,7 +187,7 @@ def _renumber_masks(mask_records: list[dict[str, Any]], output_mask_dir: Path) -
 
     # Clean up orphaned files (proposals rejected by dedup, old-format files)
     kept_names = {Path(str(r["mask_path"])).name for r in renumbered}
-    kept_names.add("000_background.png")
+    kept_names.add("000_background_mask.png")
     for f in output_mask_dir.glob("*.png"):
         if f.name not in kept_names:
             f.unlink()
@@ -589,7 +589,7 @@ def build_org_json(
             np.stack([np.asarray(record["mask_array"], dtype=bool) for record in mask_records], axis=0),
             axis=0,
         ) if mask_records else np.zeros_like(background_exclusion_mask, dtype=bool)
-        _save_mask_png(np.asarray(background_exclusion_mask, dtype=bool) & ~foreground_union, output_mask_dir / "000_background.png")
+        _save_mask_png(np.asarray(background_exclusion_mask, dtype=bool) & ~foreground_union, output_mask_dir / "000_background_mask.png")
 
     _draw_mask_records_label(
         image_path=image_path,
