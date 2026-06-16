@@ -86,6 +86,7 @@ fi
   --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.7}" \
   --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.88}" \
   --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-24}" \
+  --mode "${MODE:-vlm}" \
   "${EXTRA_ARGS[@]}" \
   --device "${DEVICE:-cuda}" \
   "$@"

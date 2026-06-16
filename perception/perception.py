@@ -21,8 +21,9 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+from SmartGrasp.perception._shared import _draw_labeled_image_matplotlib
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
-from SmartGrasp.perception.occul_map.org import build_occlusion_graph, graph_to_jsonable
+from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
 
 OUT_ROOT = SMARTGRASP_ROOT / "data"
@@ -297,12 +298,12 @@ def write_final_perception_label(
 
     out_path = out_dir / "label_1_points.png"
     with Image.open(image_path) as image:
-        draw_labeled_image_matplotlib(
+        _draw_labeled_image_matplotlib(
             image=image,
             points_with_ids=points_with_ids,
             out_png_path=str(out_path),
         )
-        draw_labeled_image_matplotlib(
+        _draw_labeled_image_matplotlib(
             image=image,
             points_with_ids=points_with_ids,
             out_png_path=str(out_dir / "perception_label.png"),
@@ -471,81 +472,88 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         source_image_path=image_path,
     )
 
-    from SmartGrasp.perception.occul_map.sam2_langsam_pipeline import build_org_json
+    if args.mode == "vlm":
+        from SmartGrasp.perception.occlusion_map import build_org_json
 
-    graph_payload = build_org_json(
-        image_path=image_path,
-        depth_path=depth_path.resolve(),
-        output_json_path=(out_dir / "occlusion_graph.json").resolve(),
-        output_mask_dir=(out_dir / "mask").resolve(),
-        review_model_id=args.review_model_id,
-        review_api_key_env=args.review_api_key_env,
-        review_base_url=args.review_base_url,
-        review_timeout=args.review_timeout,
-        epsilon=args.epsilon,
-        kernel_size=args.kernel_size,
-        min_contact_pixels=args.min_contact_pixels,
-        min_contact_ratio=args.min_contact_ratio,
-        mask_clean_kernel=args.mask_clean_kernel,
-        proposal_min_area_ratio=args.proposal_min_area_ratio,
-        proposal_max_area_ratio=args.proposal_max_area_ratio,
-        save_candidates=args.save_candidates,
-        device=args.device,
-        sam2_points_per_side=args.sam2_points_per_side,
-        sam2_crop_n_layers=args.sam2_crop_n_layers,
-        sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
-        sam2_stability_score_thresh=args.sam2_stability_score_thresh,
-        proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-        preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
-    )
-    visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
+        graph_payload = build_org_json(
+            image_path=image_path,
+            depth_path=depth_path.resolve(),
+            output_json_path=(out_dir / "occlusion_graph.json").resolve(),
+            output_mask_dir=(out_dir / "mask").resolve(),
+            review_model_id=args.review_model_id,
+            review_api_key_env=args.review_api_key_env,
+            review_base_url=args.review_base_url,
+            review_timeout=args.review_timeout,
+            epsilon=args.epsilon,
+            kernel_size=args.kernel_size,
+            min_contact_pixels=args.min_contact_pixels,
+            min_contact_ratio=args.min_contact_ratio,
+            mask_clean_kernel=args.mask_clean_kernel,
+            proposal_min_area_ratio=args.proposal_min_area_ratio,
+            proposal_max_area_ratio=args.proposal_max_area_ratio,
+            save_candidates=args.save_candidates,
+            device=args.device,
+            sam2_points_per_side=args.sam2_points_per_side,
+            sam2_crop_n_layers=args.sam2_crop_n_layers,
+            sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
+            sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+            proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
+            preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
+        )
+        visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
 
-    # Write a minimal points.json for summary generation
-    points_payload = {
-        "points": [
-            {
-                "object_id": int(node.get("object_id", node.get("node_id", 0))),
-                "x": int(node.get("point", {}).get("x", 0)),
-                "y": int(node.get("point", {}).get("y", 0)),
-                "label": str(node.get("label", "")),
-            }
-            for node in graph_payload["graph"].get("nodes", [])
-        ]
-    }
-    points_path = out_dir / "points.json"
-    points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Write a minimal points.json for summary generation
+        points_payload = {
+            "points": [
+                {
+                    "object_id": int(node.get("object_id", node.get("node_id", 0))),
+                    "x": int(node.get("point", {}).get("x", 0)),
+                    "y": int(node.get("point", {}).get("y", 0)),
+                    "label": str(node.get("label", "")),
+                }
+                for node in graph_payload["graph"].get("nodes", [])
+            ]
+        }
+        points_path = out_dir / "points.json"
+        points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
-    summary = {
-        "scene_id": scene_id,
-        "query_obj_id": query_obj_id,
-        "annotation": annotation,
-        "point_source": "sam2-langsam",
-        "output_dir": str(out_dir.resolve()),
-        "image_path": str(image_path.resolve()),
-        "depth_path": str(depth_path.resolve()),
-        "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
-        "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
-        "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
-        "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
-        "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
-        "object_sam2_review_json": str((out_dir / "sam2_review.json").resolve()),
-        "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
-        "num_nodes": len(graph_payload["graph"]["nodes"]),
-        "num_edges": len(graph_payload["graph"]["edges"]),
-        "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
-        **scene_graph_summary,
-    }
-    summary_path = out_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return summary
+        scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
+        summary = {
+            "scene_id": scene_id,
+            "query_obj_id": query_obj_id,
+            "annotation": annotation,
+            "point_source": "sam2-langsam",
+            "output_dir": str(out_dir.resolve()),
+            "image_path": str(image_path.resolve()),
+            "depth_path": str(depth_path.resolve()),
+            "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
+            "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
+            "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
+            "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+            "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
+            "object_sam2_review_json": str((out_dir / "sam2_review.json").resolve()),
+            "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
+            "num_nodes": len(graph_payload["graph"]["nodes"]),
+            "num_edges": len(graph_payload["graph"]["edges"]),
+            "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
+            **scene_graph_summary,
+        }
+        summary_path = out_dir / "summary.json"
+        summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return summary
+
+    # GT-only mode: just return the gt summary
+    print(json.dumps(gt_summary, ensure_ascii=False, indent=2))
+    return gt_summary
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> OpenAI review -> LangSAM refine -> occlusion graph.")
     parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
     parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
+    parser.add_argument("--mode", choices=["gt", "vlm"], default="vlm",
+                        help="gt: ground-truth occlusion graph only; vlm: full SAM2+VLM+LangSAM pipeline (default: vlm)")
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
     parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
