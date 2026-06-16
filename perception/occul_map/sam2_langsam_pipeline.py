@@ -489,7 +489,17 @@ def _renumber_masks(mask_records: list[dict[str, Any]], output_mask_dir: Path) -
     return renumbered
 
 
-
+def _border_touch_fraction(mask: np.ndarray, border_pixels: int = 3) -> float:
+    area = int(np.count_nonzero(mask))
+    if area == 0:
+        return 0.0
+    height, width = mask.shape
+    border = np.zeros_like(mask, dtype=bool)
+    border[:border_pixels, :] = True
+    border[max(0, height - border_pixels) :, :] = True
+    border[:, :border_pixels] = True
+    border[:, max(0, width - border_pixels) :] = True
+    return float(np.count_nonzero(mask & border) / area)
 
 
 def _proposal_color_name(image_np: np.ndarray, mask: np.ndarray) -> str:
@@ -543,11 +553,12 @@ def _proposal_label(image_np: np.ndarray, mask: np.ndarray) -> str:
     return " ".join(parts) if parts else "visible piece"
 
 
-def _proposal_score(proposal: dict[str, Any], area_ratio: float) -> float:
+def _proposal_score(proposal: dict[str, Any], area_ratio: float, border_fraction: float) -> float:
     predicted_iou = float(proposal.get("predicted_iou", proposal.get("iou", 0.0)) or 0.0)
     stability = float(proposal.get("stability_score", 0.0) or 0.0)
     area_prior = -abs(area_ratio - 0.035)
-    return predicted_iou + 0.25 * stability + area_prior
+    border_penalty = 0.5 * border_fraction
+    return predicted_iou + 0.25 * stability + area_prior - border_penalty
 
 
 def _is_support_like_horizontal_strip(mask: np.ndarray) -> bool:
@@ -879,6 +890,7 @@ def _sam2_auto_candidate_pool(
     output_mask_dir: Path,
     min_area_ratio: float,
     max_area_ratio: float,
+    border_fraction_threshold: float,
     mask_clean_kernel: int,
     save_candidates: bool,
     device: str | None,
@@ -887,7 +899,6 @@ def _sam2_auto_candidate_pool(
     crop_n_layers: int | None = None,
     pred_iou_thresh: float | None = None,
     stability_score_thresh: float | None = None,
-    max_candidates: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, Image.Image]:
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -919,6 +930,7 @@ def _sam2_auto_candidate_pool(
         if area == 0:
             continue
         area_ratio = float(area / image_area)
+        border_fraction = _border_touch_fraction(mask)
         background_overlap = _background_overlap_fraction(mask, background_exclusion_mask)
         bbox_xywh = [int(value) for value in proposal.get("bbox", _mask_bbox(mask))]
         bbox_xyxy = _box_xywh_to_xyxy(bbox_xywh)
@@ -929,6 +941,8 @@ def _sam2_auto_candidate_pool(
             reason = "too_small"
         elif area_ratio > effective_max_area_ratio:
             reason = "too_large"
+        elif border_fraction > border_fraction_threshold:
+            reason = "touches_image_border"
         elif _is_support_like_horizontal_strip(mask) or _is_tray_or_background_like_proposal(image_np, mask, background_exclusion_mask):
             reason = "support_or_tray_like"
         elif background_overlap > 0.5:
@@ -942,6 +956,7 @@ def _sam2_auto_candidate_pool(
             "bbox_xyxy": bbox_xyxy,
             "predicted_iou": float(proposal.get("predicted_iou", 0.0) or 0.0),
             "stability_score": float(proposal.get("stability_score", 0.0) or 0.0),
+            "border_fraction": border_fraction,
             "background_exclusion_overlap": background_overlap,
             "centroid": {"x": int(cx), "y": int(cy)},
         }
@@ -950,14 +965,12 @@ def _sam2_auto_candidate_pool(
             report.append(metadata)
             continue
 
-        metadata["selection_score"] = _proposal_score(proposal, area_ratio)
+        metadata["selection_score"] = _proposal_score(proposal, area_ratio, border_fraction)
         metadata["mask"] = mask
         candidates.append(metadata)
         report.append({key: value for key, value in metadata.items() if key != "mask"})
 
     candidates.sort(key=lambda item: float(item.get("selection_score", 0.0)), reverse=True)
-    if max_candidates is not None and max_candidates > 0 and len(candidates) > max_candidates:
-        candidates = candidates[:max_candidates]
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
         for candidate in candidates:
@@ -984,7 +997,7 @@ def _draw_sam2_auto_label_image(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_path: Path,
-    max_labels: int = 25,
+    max_labels: int = 80,
 ) -> None:
     points_with_ids: list[tuple[int, int, int]] = []
     masks: list[np.ndarray] = []
@@ -1028,7 +1041,7 @@ def _save_sam2_rgb_parts_sheet(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_dir: Path,
-    max_labels: int = 25,
+    max_labels: int = 40,
 ) -> Path:
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)
@@ -1249,7 +1262,7 @@ def _openai_review_sam2_candidates(
     base_url: str | None,
     timeout: float,
     out_dir: Path,
-    max_labels: int = 25,
+    max_labels: int = 40,
 ) -> tuple[list[dict[str, Any]], str]:
     t_r0 = time.time()
     candidate_lines: list[str] = []
@@ -1617,6 +1630,7 @@ def generate_masks_with_sam2_langsam_pipeline(
     review_timeout: float,
     min_area_ratio: float,
     max_area_ratio: float,
+    proposal_border_fraction_threshold: float,
     mask_clean_kernel: int,
     save_candidates: bool,
     device: str | None,
@@ -1626,7 +1640,6 @@ def generate_masks_with_sam2_langsam_pipeline(
     sam2_crop_n_layers: int | None = None,
     sam2_pred_iou_thresh: float | None = None,
     sam2_stability_score_thresh: float | None = None,
-    sam2_max_candidates: int | None = None,
     preserve_unclaimed_sam2: int = 24,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     t_p0 = _log_step("  ②a sam2_auto", None)
@@ -1644,7 +1657,7 @@ def generate_masks_with_sam2_langsam_pipeline(
         crop_n_layers=sam2_crop_n_layers,
         pred_iou_thresh=sam2_pred_iou_thresh,
         stability_score_thresh=sam2_stability_score_thresh,
-        max_candidates=sam2_max_candidates,
+        border_fraction_threshold=proposal_border_fraction_threshold,
     )
     t_p1 = _log_step("  ②a sam2_auto", t_p0)
     out_dir = output_mask_dir.parent
@@ -1771,13 +1784,13 @@ def build_org_json(
     mask_clean_kernel: int = 3,
     proposal_min_area_ratio: float = 0.006,
     proposal_max_area_ratio: float = 0.11,
+    proposal_border_fraction_threshold: float = 0.18,
     save_candidates: bool = False,
     device: str | None = None,
     sam2_points_per_side: int | None = 30,
     sam2_crop_n_layers: int | None = 0,
     sam2_pred_iou_thresh: float | None = 0.75,
     sam2_stability_score_thresh: float | None = 0.90,
-    sam2_max_candidates: int | None = 25,
     preserve_unclaimed_sam2: int = 24,
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
@@ -1813,7 +1826,7 @@ def build_org_json(
         sam2_crop_n_layers=sam2_crop_n_layers,
         sam2_pred_iou_thresh=sam2_pred_iou_thresh,
         sam2_stability_score_thresh=sam2_stability_score_thresh,
-        sam2_max_candidates=sam2_max_candidates,
+        proposal_border_fraction_threshold=proposal_border_fraction_threshold,
         preserve_unclaimed_sam2=preserve_unclaimed_sam2,
     )
     t2 = _log_step("② sam2+vlm+langsam_pipeline", t1)

@@ -80,11 +80,11 @@ fi
   --mask-clean-kernel "${MASK_CLEAN_KERNEL:-3}" \
   --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
   --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \
-  --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-1.0}" \
-  --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-30}" \
+  --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-0.18}" \
+  --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-32}" \
   --sam2-crop-n-layers "${SAM2_CROP_N_LAYERS:-0}" \
-  --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.75}" \
-  --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.90}" \
+  --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.7}" \
+  --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.88}" \
   --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-24}" \
   "${EXTRA_ARGS[@]}" \
   --device "${DEVICE:-cuda}" \
