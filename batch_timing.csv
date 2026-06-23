@@ -1,0 +1,6 @@
+scene_id,status,duration_sec,num_nodes,num_edges,error
+59,FAIL,40,,,RuntimeError: OpenAI review failed — API error. Aborting. Error: Expecting value: line 1 column 1 (char 0)
+125,PASS,167,6,2,
+222,PASS,97,6,3,
+242,PASS,171,5,4,
+691,PASS,179,9,7,

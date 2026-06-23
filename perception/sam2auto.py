@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,8 +36,11 @@ import matplotlib.pyplot as plt
 
 _LANGSAM_CACHE: dict[tuple[str, str], Any] = {}
 GROUNDING_DINO_LOCAL_MODEL_PATH = Path(
-    "/home/data/models/huggingface/hub/models--IDEA-Research--grounding-dino-base/"
-    "snapshots/12bdfa3120f3e7ec7b434d90674b3396eccf88eb"
+    os.environ.get(
+        "GROUNDING_DINO_MODEL_PATH",
+        str(Path.home() / ".cache/huggingface/hub/models--IDEA-Research--grounding-dino-base/"
+        "snapshots/12bdfa3120f3e7ec7b434d90674b3396eccf88eb"),
+    )
 )
 
 def _load_langsam(device: str) -> Any:
@@ -76,6 +80,11 @@ def _load_langsam(device: str) -> Any:
 
 
 def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
+    # Fixed seeds for reproducible SAM2 output across Mac/Linux/CUDA/MPS
+    torch.manual_seed(42)
+    np.random.seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(42)
     image_np = np.asarray(image.convert("RGB"))
     sam = getattr(model, "sam", None)
     if sam is None or not hasattr(sam, "generate"):
@@ -235,7 +244,12 @@ def _sam2_auto_candidate_pool(
     stability_score_thresh: float | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, Image.Image]:
     if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
 
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)

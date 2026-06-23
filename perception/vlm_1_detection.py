@@ -32,14 +32,22 @@ def _extract_json_from_text(text: str) -> dict[str, Any]:
 
 
 def _image_data_url(image_path: Path) -> str:
-    suffix = image_path.suffix.lower()
-    media_type = "image/png"
-    if suffix in {".jpg", ".jpeg"}:
-        media_type = "image/jpeg"
-    elif suffix == ".webp":
-        media_type = "image/webp"
-    data = base64.b64encode(image_path.read_bytes()).decode("ascii")
-    return f"data:{media_type};base64,{data}"
+    """Encode image as JPEG base64 data URL, resizing if too large."""
+    from PIL import Image
+    import io
+
+    img = Image.open(image_path).convert("RGB")
+    # Resize if larger than 768px to keep base64 + prompt under proxy token limit
+    max_dim = 768
+    if max(img.size) > max_dim:
+        ratio = max_dim / max(img.size)
+        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    data = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{data}"
 
 
 

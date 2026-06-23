@@ -90,7 +90,6 @@ def _openai_review_sam2_candidates(
             }
         ],
         max_output_tokens=2200,
-        reasoning={"effort": "medium"},
         store=False,
     )
     raw_output = _response_text(response)
