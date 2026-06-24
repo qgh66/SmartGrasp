@@ -526,7 +526,7 @@ def build_org_json(
     sam2_pred_iou_thresh: float | None = 0.75,
     sam2_stability_score_thresh: float | None = 0.90,
     preserve_unclaimed_sam2: int = 24,
-) -> dict[str, Any]:
+    debug: str | None = None,) -> dict[str, Any]:
     t0 = _log_step("start", None)
 
     _prepare_mask_output_dir(output_mask_dir, save_candidates)

@@ -443,8 +443,14 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
 
     scene_dir = OUT_ROOT / f"scene_{scene_id}"
     out_dir = scene_dir / "perception"
+    # Clean output directory by removing contents individually
+    # (avoids iCloud Drive conflict copies caused by rmtree+recreate race)
     if out_dir.exists():
-        shutil.rmtree(out_dir)
+        for child in out_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     image_path = save_sample_image(row, out_dir)
@@ -474,6 +480,75 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
 
     if args.mode == "vlm":
         from SmartGrasp.perception.occlusion_map import build_org_json
+
+        # ---- Debug: sam2 only ----
+        if args.debug == "sam2":
+            from SmartGrasp.perception.sam2auto import (
+                _sam2_auto_candidate_pool,
+                _draw_sam2_auto_label_image,
+                _save_sam2_rgb_parts_sheet,
+            )
+            from SmartGrasp.perception.background import generate_background_exclusion_mask
+            bg_mask = None
+            try:
+                bg_mask = generate_background_exclusion_mask(
+                    depth_map=depth, image=Image.open(image_path).convert("RGB"),
+                    mask_clean_kernel=args.mask_clean_kernel)
+            except Exception as exc:
+                print(f"bg_mask failed: {exc}", file=sys.stderr)
+            candidates, report, _, _ = _sam2_auto_candidate_pool(
+                image_path=image_path, output_mask_dir=out_dir / "mask",
+                min_area_ratio=args.proposal_min_area_ratio,
+                max_area_ratio=args.proposal_max_area_ratio,
+                mask_clean_kernel=args.mask_clean_kernel,
+                save_candidates=True, device=args.device,
+                background_exclusion_mask=bg_mask,
+                points_per_side=args.sam2_points_per_side,
+                crop_n_layers=args.sam2_crop_n_layers,
+                pred_iou_thresh=args.sam2_pred_iou_thresh,
+                stability_score_thresh=args.sam2_stability_score_thresh,
+                border_fraction_threshold=args.proposal_border_fraction_threshold,
+            )
+            # Generate visualization images
+            label_path = out_dir / "label_1_sam2auto.png"
+            _draw_sam2_auto_label_image(image_path, candidates, label_path)
+            _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
+            debug_out = {
+                "debug": "sam2",
+                "scene_id": scene_id,
+                "num_candidates": len(candidates),
+                "label_png": str(label_path.resolve()),
+                "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+                "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
+                "report": report,
+            }
+            debug_path = out_dir / "debug_sam2.json"
+            debug_path.write_text(json.dumps(debug_out, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(json.dumps(debug_out, ensure_ascii=False, indent=2))
+            return debug_out
+
+        # ---- Debug: vlm1 only ----
+        if args.debug == "vlm1":
+            from SmartGrasp.perception.vlm_1_detection import _openai_list_scene_objects
+            scene_objects, raw_output = _openai_list_scene_objects(
+                image_path=image_path,
+                model_id=args.review_model_id,
+                api_key_env=args.review_api_key_env,
+                base_url=args.review_base_url,
+                timeout=args.review_timeout,
+                out_dir=out_dir,
+            )
+            debug_out = {
+                "debug": "vlm1",
+                "scene_id": scene_id,
+                "num_objects": len(scene_objects),
+                "scene_objects": scene_objects,
+                "raw_output": raw_output,
+            }
+            debug_path = out_dir / "debug_vlm1.json"
+            debug_path.write_text(json.dumps(debug_out, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(json.dumps(debug_out, ensure_ascii=False, indent=2))
+            return debug_out
 
         graph_payload = build_org_json(
             image_path=image_path,
@@ -571,10 +646,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--proposal-border-fraction-threshold", type=float, default=0.18)
     parser.add_argument("--sam2-points-per-side", type=int, default=24)
     parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
-    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.7)
-    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.88)
-    parser.add_argument("--preserve-unclaimed-sam2", type=int, default=24)
+    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.85)
+    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.95)
+    parser.add_argument("--preserve-unclaimed-sam2", type=int, default=18)
     parser.add_argument("--save-candidates", action="store_true")
+    parser.add_argument("--debug", choices=["sam2", "vlm1"], default=None,
+                        help="sam2: stop after SAM2 auto; vlm1: stop after first VLM response")
     parser.add_argument("--device", default=None)
     return parser
 

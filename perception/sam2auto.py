@@ -318,6 +318,33 @@ def _sam2_auto_candidate_pool(
         candidates.append(metadata)
         report.append({key: value for key, value in metadata.items() if key != "mask"})
 
+    # ---- Post-filter: one-way containment dedup (first-come-first-served) ----
+    # If a later mask is mostly covered by the union of all earlier masks, discard it.
+    # Earlier masks are never removed.
+    containment_threshold = 0.85
+    _keep: list[dict[str, Any]] = []
+    cumulative_mask: np.ndarray | None = None  # boolean OR of all kept masks
+    for candidate in candidates:
+        new_mask = np.asarray(candidate["mask"], dtype=bool)
+        new_area = int(np.count_nonzero(new_mask))
+        if new_area == 0:
+            continue
+
+        if cumulative_mask is not None:
+            overlap = np.count_nonzero(new_mask & cumulative_mask)
+            coverage = overlap / max(1, new_area)
+            if coverage >= containment_threshold:
+                candidate["rejection_reason"] = "covered_by_earlier_masks"
+                report.append({k: v for k, v in candidate.items() if k != "mask"})
+                continue
+
+        _keep.append(candidate)
+        if cumulative_mask is None:
+            cumulative_mask = new_mask.copy()
+        else:
+            cumulative_mask |= new_mask
+
+    candidates = _keep
     candidates.sort(key=lambda item: float(item.get("selection_score", 0.0)), reverse=True)
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
@@ -390,7 +417,7 @@ def _save_sam2_rgb_parts_sheet(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_dir: Path,
-    max_labels: int = 40,
+    max_labels: int = 30,
 ) -> Path:
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)
@@ -442,7 +469,7 @@ def _save_sam2_rgb_parts_sheet(
             ax.set_title(str(part_id), fontsize=10, fontweight="bold")
             ax.axis("off")
         sheet_path = out_dir / "sam2_rgb_parts_sheet.png"
-        fig.savefig(sheet_path, bbox_inches="tight", dpi=180)
+        fig.savefig(sheet_path, bbox_inches="tight", dpi=100)
         plt.close(fig)
         return sheet_path
     except Exception:
@@ -662,30 +689,64 @@ def generate_masks_with_sam2_langsam_pipeline(
     with Image.open(image_path).convert("RGB") as source_image:
         image_np = np.asarray(source_image)
         for item in review_objects:
-            claimed_sam2_ids.update(int(value) for value in item.get("sam2_ids", []) if int(value) > 0)
+            sam2_ids = [int(v) for v in item.get("sam2_ids", []) if int(v) > 0]
+            claimed_sam2_ids.update(sam2_ids)
             object_id = int(item["id"])
             description = str(item["description"])
-            prompt = (
-                f"{description}. Segment the complete physical object instance. "
-                "Include all visible parts of this one object. Do not include the tray, table, bin, or adjacent objects."
-            )
-            masks, scores, boxes = _langsam_predict(model, source_image, prompt)
-            best_mask, selected_candidate, candidate_metadata = _select_langsam_mask_for_review_object(
-                masks=masks,
-                scores=scores,
-                review_object=item,
-                candidates=candidates,
-                background_exclusion_mask=background_exclusion_mask,
-                mask_clean_kernel=mask_clean_kernel,
-                image_shape=source_image.size[::-1],  # (H, W) from PIL (W, H)
-            )
+            status = str(item.get("status", "")).lower()
+
+            # Build SAM2 anchor mask from assigned ids
+            anchor_masks = []
+            for sam2_id in sam2_ids:
+                idx = sam2_id - 1
+                if 0 <= idx < len(candidates):
+                    anchor_masks.append(np.asarray(candidates[idx]["mask"], dtype=bool))
+            anchor_mask = np.any(np.stack(anchor_masks, axis=0), axis=0) if anchor_masks else None
+
+            best_mask: np.ndarray | None = None
+            backend = "sam2_auto_review_langsam"
+            langsam_meta: dict[str, Any] = {}
+
+            if status == "missing" or anchor_mask is None:
+                # No SAM2 parts assigned — nothing to do
+                continue
+
+            if status == "complete":
+                # VLM says SAM2 mask is good enough — skip LangSAM, use anchor directly
+                best_mask = anchor_mask
+                backend = "sam2_anchor"
+                langsam_meta = {"fallback": "complete_skip_langsam"}
+            else:
+                # incomplete or unknown — run LangSAM refinement
+                prompt = (
+                    f"{description}. Segment the complete physical object instance. "
+                    "Include all visible parts of this one object. Do not include the tray, table, bin, or adjacent objects."
+                )
+                masks, scores, boxes = _langsam_predict(model, source_image, prompt)
+                best_mask, selected_candidate, candidate_metadata = _select_langsam_mask_for_review_object(
+                    masks=masks,
+                    scores=scores,
+                    review_object=item,
+                    candidates=candidates,
+                    background_exclusion_mask=background_exclusion_mask,
+                    mask_clean_kernel=mask_clean_kernel,
+                    image_shape=source_image.size[::-1],
+                )
+                langsam_meta = selected_candidate if selected_candidate else {}
+                langsam_meta["langsam_candidates"] = candidate_metadata
+                if best_mask is None and anchor_mask is not None:
+                    # LangSAM failed, fall back to anchor
+                    best_mask = anchor_mask
+                    backend = "sam2_anchor_fallback"
+                    langsam_meta["fallback"] = langsam_meta.get("fallback", "langsam_failed")
+
             if best_mask is None:
                 continue
             best_mask = _clean_mask(best_mask, mask_clean_kernel)
             if int(np.count_nonzero(best_mask)) == 0:
                 continue
             cx, cy = _mask_centroid_xy(best_mask)
-            filename = f"{object_id:03d}_langsam_{_safe_label(description)}.png"
+            filename = f"{object_id:03d}_{backend}_{_safe_label(description)}.png"
             mask_path = output_mask_dir / filename
             _save_mask_png(best_mask, mask_path)
             mask_records.append(
@@ -695,12 +756,11 @@ def generate_masks_with_sam2_langsam_pipeline(
                     "label": description,
                     "description": description,
                     "point": {"x": int(cx), "y": int(cy)},
-                    "segmentation_backend": "sam2_auto_review_langsam",
-                    "sam2_ids": item.get("sam2_ids", []),
+                    "segmentation_backend": backend,
+                    "sam2_ids": sam2_ids,
                     "review_status": item.get("status"),
-                    "semantic_prompt": prompt,
-                    "selected_langsam_candidate": selected_candidate,
-                    "langsam_candidates": candidate_metadata,
+                    "selected_langsam_candidate": langsam_meta,
+                    "langsam_candidates": langsam_meta.get("langsam_candidates", []),
                     "mask_path": str(mask_path.resolve()),
                     "mask_area": int(np.count_nonzero(best_mask)),
                     "mask_array": best_mask,

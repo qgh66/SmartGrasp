@@ -26,7 +26,7 @@ def _openai_review_sam2_candidates(
     base_url: str | None,
     timeout: float,
     out_dir: Path,
-    max_labels: int = 40,
+    max_labels: int = 30,
 ) -> tuple[list[dict[str, Any]], str]:
     t_r0 = time.time()
     candidate_lines: list[str] = []
@@ -60,8 +60,6 @@ def _openai_review_sam2_candidates(
         "Also do not merge two separate objects just because their parts share the same color, material, category, or shape. "
         "For each scene object, output one record with all corresponding SAM2 ids in `sam2_ids`. "
         "Every object from the known scene object list must appear in the output exactly once; do not drop small bolts/screws just because they are close to a larger tool. "
-        "In the lower-left cluster, SAM2 ids 20, 21, and 24 often correspond to a blue bolt/screw-like object. Evaluate those ids as a separate object before assigning them to any blue-yellow tool or yellow knob. "
-        "If ids 20/21/24 form a separate blue vertical piece, output a separate object for it and do not include those ids in the nearby larger tool. "
         "If SAM2 missed part of that object, keep the whole-object description and set status to `incomplete`. "
         "If a listed scene object has no usable SAM2 part, include it with an empty `sam2_ids` list and status `missing`. "
         "Return only JSON with this schema: "

@@ -89,7 +89,7 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
         --review-model-id "${REVIEW_MODEL_ID:-gpt-5.5}" \
         --review-api-key-env OPENAI_API_KEY \
         --review-base-url "$OPENAI_BASE_URL" \
-        --review-timeout "${REVIEW_TIMEOUT:-120}" \
+        --review-timeout "${REVIEW_TIMEOUT:-300}" \
         --epsilon "${EPSILON:-0.05}" \
         --kernel-size "${KERNEL_SIZE:-5}" \
         --min-contact-pixels "${MIN_CONTACT_PIXELS:-50}" \
@@ -100,10 +100,11 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
         --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-0.18}" \
         --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-32}" \
         --sam2-crop-n-layers "${SAM2_CROP_N_LAYERS:-0}" \
-        --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.7}" \
-        --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.88}" \
-        --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-24}" \
+        --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.68}" \
+        --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.83}" \
+        --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-18}" \
         ${DEVICE:+--device "$DEVICE"} \
+        ${DEBUG:+--debug "$DEBUG"} \
         ${SAVE_CANDIDATES:+--save-candidates}
 
     EXIT_CODE=$?
