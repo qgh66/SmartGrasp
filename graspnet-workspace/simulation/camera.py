@@ -23,8 +23,8 @@ class VirtualCamera:
 
     def __init__(
         self,
-        width: int = 640,
-        height: int = 480,
+        width: int = 1280,
+        height: int = 720,
         fov: float = 60.0,
         near: float = 0.01,
         far: float = 5.0,
@@ -51,11 +51,11 @@ class VirtualCamera:
         self.up = up
 
         self.view_matrix = self._compute_view_matrix(position, target, up)
-        self.proj_matrix = self._compute_proj_matrix(fov, near, far)
+        self.proj_matrix = self._compute_proj_matrix(fov, near, far, width / height)
 
-        # 用虚拟相机内参构造 CameraInfo（近似针孔模型）
-        fx = (width / 2.0) / np.tan(np.deg2rad(fov) / 2.0)
-        fy = fx
+        # 用虚拟相机内参构造 CameraInfo（近似针孔模型）。fov 为垂直 FOV，焦距以 fy 为基准。
+        fy = (height / 2.0) / np.tan(np.deg2rad(fov) / 2.0)
+        fx = fy
         cx = width / 2.0
         cy = height / 2.0
         self.camera_info = CameraInfo(width, height, fx, fy, cx, cy, scale=1.0)
@@ -123,9 +123,10 @@ class VirtualCamera:
         right = right / np.linalg.norm(right)
         cam_up = np.cross(right, forward)
 
-        # 针孔模型反投影
-        fx = (W / 2.0) / np.tan(np.deg2rad(self.fov) / 2.0)
-        fy = fx
+        # 针孔模型反投影。PyBullet 的 computeProjectionMatrixFOV 用的是垂直 FOV
+        # （沿 height），水平视场由 aspect=W/H 决定，因此焦距以 fy 为基准、fx=fy。
+        fy = (H / 2.0) / np.tan(np.deg2rad(self.fov) / 2.0)
+        fx = fy
         cx, cy = W / 2.0, H / 2.0
         xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
 
@@ -195,30 +196,12 @@ class VirtualCamera:
         )
 
     @staticmethod
-    def _compute_proj_matrix(fov, near, far):
+    def _compute_proj_matrix(fov, near, far, aspect):
+        # aspect 必须与实际分辨率 (width/height) 一致，否则点云反投影会被系统性拉偏
         import pybullet as p
         return p.computeProjectionMatrixFOV(
             fov=fov,
-            aspect=1280.0 / 720.0,
-            nearVal=near,
-            farVal=far,
-        )
-
-    @staticmethod
-    def _compute_view_matrix(position, target, up):
-        import pybullet as p
-        return p.computeViewMatrix(
-            cameraEyePosition=position,
-            cameraTargetPosition=target,
-            cameraUpVector=up,
-        )
-
-    @staticmethod
-    def _compute_proj_matrix(fov, near, far):
-        import pybullet as p
-        return p.computeProjectionMatrixFOV(
-            fov=fov,
-            aspect=1280.0 / 720.0,
+            aspect=aspect,
             nearVal=near,
             farVal=far,
         )

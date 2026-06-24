@@ -2,6 +2,8 @@
 
 这个分支保存了当前的 milestone 版本：基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及用于查看结果和播放抓取动画的 **Dash GUI**。
 
+当前抓取执行采用 **JAKA Zu3 机械臂 + Robotiq-85 二指夹爪**，用 PyBullet IK 驱动机械臂、Robotiq-85 欠驱动夹爪做**真实摩擦夹持**（不再用固定约束“吸附”物体），整体流程对齐参考实现 `environment_sim.py` 的 `grasp()` 原语：张开 → 移到目标上方 → 直线下插 → 闭合 → 直线抬回 → 按夹爪关节角判定是否夹到实体。当前只抓**单个物体**，不含 VLM / LangSAM。
+
 当前重点代码在 `graspnet-workspace/` 下面。`perception/` 是 SmartGrasp 原有感知模块，本 README 主要说明 grasp execution 这部分如何运行。
 
 ## 目录结构
@@ -18,8 +20,13 @@ SG_graspmodule/
 
 ```text
 graspnet-workspace/
-├── scripts/demo_closed_loop.py # 主入口：建场景 -> 拍 RGB-D -> GraspNet -> 仿真评估
-├── simulation/                 # PyBullet 场景、相机、夹爪、抓取评估器
+├── scripts/demo_closed_loop.py # 主入口：建场景 -> 拍 RGB-D -> 裁剪点云 -> GraspNet -> JAKA 仿真评估
+├── simulation/
+│   ├── scene.py                # PyBullet 场景：桌面、加载 .obj（支持缩放）
+│   ├── camera.py               # 虚拟 RGB-D 相机（1280x720）+ 点云反投影
+│   ├── robot_gripper.py        # JAKA Zu3 + Robotiq-85 适配器（IK、欠驱动夹持、is_gripper_closed）
+│   ├── evaluator.py            # 抓取执行与物理评估（approach/close/lift，逐帧轨迹）
+│   └── planning/moveit_bridge.py # 可选的 ROS2/MoveIt 规划桥接（默认不启用）
 ├── gui/app.py                  # Dash GUI，读取结果文件并展示动画
 ├── gui/README.md               # GUI 快速启动说明
 ├── models/                     # GraspNet 网络
@@ -34,7 +41,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
 ```
 
 检查 GUI 和仿真依赖是否可导入：
@@ -51,97 +58,154 @@ python -c "import pybullet, dash, plotly, trimesh, scipy; print('deps OK')"
 
 1. GraspNet checkpoint，例如：
 
-```text
-/home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar
-```
-
-也可以放到：
 
 ```text
-graspnet-workspace/checkpoints/checkpoint-rs.tar
+/home/qiuguanhe/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
 ```
 
 2. 一个待抓取物体 mesh，例如：
 
 ```text
-/home/admin128/beilei/obj_phase3/002/textured.obj
+/home/qiuguanhe/SmartGrasp/assert/workspace/data/banana.obj
 ```
 
 运行时也可以通过 `--obj` 指定其他 `.obj` 文件。
 
+3. JAKA Zu3 与 Robotiq-85 的 URDF（已随仓库 `assert/` 提供，无需另外准备）：
+
+```text
+assert/jaka_zu3/jaka_zu3_pybullet.urdf
+assert/ur5e/gripper/robotiq_2f_85.urdf
+```
+
+> 注意 mesh 的单位：仿真按米制处理。图形学单位的 mesh（如 `duck.obj` 等）需要用
+> `--scale` 缩到约 5~8 cm 的桌面小物体尺寸，否则会因为太大/太小而抓不到。`banana.obj`
+> 本身就是米制（约 22 cm），用默认 `--scale 1.0` 即可。
+
 ## 运行闭环仿真
 
-推荐从仓库根目录下面的 `graspnet-workspace` 运行：
+推荐从仓库根目录通过 SLURM 脚本运行。脚本会进入 `graspnet-workspace`、激活环境、设置依赖路径，并把输出统一写到 `graspnet-workspace/results/`：
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/qiuguanhe/SmartGrasp
 
-python scripts/demo_closed_loop.py \
-  --obj /home/admin128/beilei/obj_phase3/002/textured.obj \
-  --ckpt /home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar \
-  --top_k 5 \
-  --device cuda:0 \
-  --output results_phase3_002/results.json
+GRASP_OBJ_PATH=/home/qiuguanhe/SmartGrasp/assert/unseen_objects/gelatin_box/textured.obj \
+GRASP_TOP_K=5 \
+sbatch run_grasp_simulation.sh
 ```
 
-如果只是调试流程、没有可用 GPU，可以用 CPU 跑小规模测试：
+如果要抓一个图形学单位的立体物体（例：duck 缩到约 6 cm），用 `--scale` 透传给主入口：
 
 ```bash
-python scripts/demo_closed_loop.py \
-  --obj /home/admin128/beilei/obj_phase3/002/textured.obj \
-  --ckpt /home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar \
+sbatch run_grasp_simulation.sh \
+  --obj /home/qiuguanhe/SmartGrasp/assert/workspace/data/duck.obj \
   --top_k 5 \
-  --device cpu \
-  --output results_phase3_002/results.json
+  --scale 0.04
 ```
+
+如果只是调试流程、没有可用 GPU，可以通过 `GRASP_DEVICE=cpu` 跑小规模测试（较慢）。默认不录制 MP4；需要视频时显式加 `GRASP_RECORD_VIDEO=1`。
+
+主要命令行参数：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `--obj` | — | 物体 `.obj` 路径 |
+| `--ckpt` | 自动查找 | GraspNet checkpoint，找不到时报错 |
+| `--top_k` | 10 | 评估打分最高的前 K 个抓取 |
+| `--scale` | 1.0 | 物体缩放因子（图形学单位 mesh 需缩小） |
+| `--device` | cuda:0 | 推理设备 `cuda:0` / `cpu` |
+| `--gui` | 关 | 打开 PyBullet 图形窗口 |
+| `--output` | results/grasp_simulation.json | 结果 JSON 路径（相对 `graspnet-workspace/`） |
 
 这个脚本会依次完成：
 
-1. 在 PyBullet 中搭建桌面和单物体场景。
-2. 加载物体 mesh，并记录物体位姿。
-3. 用虚拟相机拍 RGB-D。
-4. 将 depth 转成点云。
-5. 调用 GraspNet 生成候选抓取。
-6. 用 PyBullet evaluator 检查 top-k 抓取。
-7. 保存 JSON 结果和 GUI 可视化数据。
+1. 在 PyBullet 中搭建桌面，并按配置加载单物体 mesh（默认固定朝向；设置 `GRASP_RANDOM_ORIENTATION=1` 或 `--random-orientation` 后随机朝向），等其稳定后记录位姿。
+2. 用虚拟相机（1280×720）拍 RGB-D，将 depth 反投影为世界坐标系点云。
+3. **按物体点云的 xy 包围盒裁剪点云**（裁掉远处大片桌面，只留物体及周围一圈支撑面，对应参考流程的 crop_pointcloud 简化版），再送入 GraspNet 生成候选抓取。
+4. 加载 **JAKA Zu3 + Robotiq-85**，对 top-k 抓取逐个执行物理仿真（见下一节），逐帧记录夹爪和物体位姿。
+5. 保存 JSON 结果和 GUI 可视化数据。
 
-输出文件通常是：
+默认输出文件统一为：
 
 ```text
-results_phase3_002/results.json
-results_phase3_002/results_viz_data.pkl
+graspnet-workspace/results/grasp_simulation.json
+graspnet-workspace/results/grasp_simulation_viz_data.pkl
+graspnet-workspace/results/grasp_simulation_candidates.png
+graspnet-workspace/results/grasp_simulation_candidates.html
 ```
 
 其中：
 
-- `results.json`：抓取分数、位姿、宽度、深度、成功/失败、失败原因、动画轨迹日志。
-- `results_viz_data.pkl`：RGB、depth、点云、物体路径、物体姿态等 GUI 需要的数据。
+- `grasp_simulation.json`：每个抓取的分数、位姿、宽度、深度、是否成功、判定相关诊断字段、逐帧动画轨迹日志，以及执行用的夹爪 metadata。
+- `grasp_simulation_viz_data.pkl`：RGB、depth、点云、物体路径、物体姿态等 GUI 需要的数据。
+- `grasp_simulation_candidates.png/html`：候选抓取和实际执行姿态的静态/交互诊断图。
 
-## 当前仿真约束
-
-当前 milestone 不是只展示网络输出，而是额外加了物理合理性限制：
-
-- 夹爪不能从桌面下方接近物体。
-- 抓取中心必须落在物体点云附近，不能隔空抓取。
-- GraspNet 的 local X 轴作为 approach/depth 方向。
-- GraspNet 的 local Y 轴作为夹爪开合方向。
-- lift 阶段动画中，夹爪和物体使用相同的 z 方向位移，避免两者上升速度不一致。
-
-相关常量在：
+如果显式设置 `GRASP_RECORD_VIDEO=1`，还会生成：
 
 ```text
-graspnet-workspace/simulation/evaluator.py
-graspnet-workspace/gui/app.py
+graspnet-workspace/results/grasp_simulation_pybullet.mp4
 ```
 
-当前默认值：
+## 抓取执行流程（JAKA Zu3 + Robotiq-85）
+
+抓取执行在 `simulation/evaluator.py` 的 `GraspEvaluator` 中，对 GraspNet 输出的每个候选执行一次完整的物理抓取，流程对齐参考实现 `environment_sim.py` 的 `grasp()`：
+
+1. **抓取点修正**：抓取中心沿 z 下压 2 cm 并用桌面高度兜底（`center.z = max(center.z - 0.02, TABLE_Z)`），与参考一致。
+2. **几何护栏**：抓取中心到物体点云的最近距离若超过 `MAX_GRASP_CENTER_DIST` 则判失败（`grasp_center_not_on_object`），避免隔空抓取。（抓取中心的桌面高度限制已按需求取消。）
+3. **接近**：张开夹爪 → 移到目标正上方 `over` 点 → 直线下插到预抓取点 → 沿 approach 方向推进到抓取中心。约定 GraspNet 的 local X 轴为 approach/depth 方向、local Y 轴为夹爪开合方向。
+4. **闭合**：Robotiq-85 欠驱动夹爪慢速闭合，靠 `JOINT_GEAR` mimic 约束 + 高摩擦指垫做**真实摩擦夹持**（不创建固定约束“吸附”物体）。
+5. **抬升**：夹爪沿 z 直线抬回。
+6. **判定**：`success = gripper.is_gripper_closed()` —— 夹爪主关节角未完全合死即视为夹到实体（完全照参考）。物体能否被带起是物理自然结果，仅作诊断字段记录，不作为额外判据。
+
+机械臂运动用 PyBullet IK（`JakaZu3Robotiq85Gripper`，`planner=None`），默认**不启用** MoveIt。
+
+相关常量（`simulation/evaluator.py`）：
 
 ```text
-TABLE_Z = 0.0
-TABLE_CLEARANCE = 0.005
-MAX_GRASP_CENTER_DIST = 0.04
+TABLE_Z = 0.0                 # 桌面高度
+TABLE_CLEARANCE = 0.005       # 桌面余量
+MAX_GRASP_CENTER_DIST = 0.04  # 抓取中心到物体点云的最大允许距离（米）
 ```
+
+夹爪闭合力等参数在 `simulation/robot_gripper.py`（如 `GRIPPER_MOTOR_FORCE = 8.0`，与参考一致）。
+
+## 如何评估 / 查看评估结果
+
+`results.json` 顶层给出整体评估：
+
+- `total`：实际评估的抓取数（≤ `--top_k`）。
+- `success`：成功抓取数（即 `is_gripper_closed()` 判定为 True 的数量）。
+- `gripper`：执行用的夹爪 metadata（`model: jaka_zu3_robotiq85`、是否启用 MoveIt 等）。
+
+每个 `grasps[i]` 的关键字段：
+
+| 字段 | 含义 |
+|------|------|
+| `success` | 该抓取是否成功（= `grasped_by_gripper`） |
+| `grasped_by_gripper` | 夹爪关节角判定是否夹到实体（判定依据） |
+| `score` | GraspNet 打分 |
+| `translation` / `rotation` | 抓取中心位姿（已含下压修正） |
+| `width` / `depth` | 抓取宽度 / 深度 |
+| `obj_z_before` / `obj_z_after` / `obj_lift_delta` | 抓取前后物体高度及位移（**诊断用**：判断物体是否真被带起） |
+| `failure_reason` | 被护栏拦下时的原因（如 `grasp_center_not_on_object`），正常执行的抓取无此字段 |
+| `frame_log` | 逐帧（approach/close/lift/done）的夹爪与物体位姿，供 GUI 回放 |
+
+命令行快速查看一次评估结果：
+
+```bash
+python -c "
+import json,numpy as np
+d=json.load(open('graspnet-workspace/results/grasp_simulation.json'))
+print('gripper:', d['gripper']['model'], '| success', d['success'], '/', d['total'])
+for g in d['grasps']:
+    s='OK' if g['success'] else 'x'
+    print(f\"  {s} g{g['grasp_index']} grasped={g.get('grasped_by_gripper')} \"
+          f\"lift_delta={round(g.get('obj_lift_delta',0),4)} reason={g.get('failure_reason','-')}\")
+"
+```
+
+要按真实“物体被提起”更严格地评估，可在上面用 `obj_lift_delta`（lift 后物体相对上升量）自行加判据；当前默认判定与参考保持一致，只看夹爪关节角。
 
 ## 启动 Dash GUI
 
@@ -156,13 +220,13 @@ results_viz_data.pkl
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
 
 python gui/app.py \
   --host 0.0.0.0 \
   --port 8050 \
-  --results results_phase3_002/results.json \
-  --viz-data results_phase3_002/results_viz_data.pkl
+  --results results/grasp_simulation.json \
+  --viz-data results/grasp_simulation_viz_data.pkl
 ```
 
 如果是在服务器本机浏览器打开：
@@ -204,22 +268,30 @@ GUI 主要包含四块：
 
 ```json
 {
-  "total": 5,
-  "success": 1,
-  "obj_path": "/path/to/textured.obj",
-  "object_position": [0.3, 0.0, 0.05],
-  "object_orientation": [0.0, 0.0, 0.0, 1.0],
+  "total": 3,
+  "success": 3,
+  "obj_path": "/path/to/duck.obj",
+  "object_position": [0.31, 0.008, -0.003],
+  "object_orientation": [0.66, -0.24, -0.24, 0.66],
+  "gripper": {
+    "model": "jaka_zu3_robotiq85",
+    "execution": "jaka_ik_attached_robotiq",
+    "moveit_enabled": false
+  },
   "grasps": [
     {
       "grasp_index": 0,
-      "success": false,
-      "score": 1.0,
-      "lift_z": 0.04,
-      "width": 0.06,
-      "depth": 0.03,
-      "translation": [0.3, 0.0, 0.05],
+      "success": true,
+      "grasped_by_gripper": true,
+      "score": 0.127,
+      "translation": [0.28, -0.05, 0.045],
       "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-      "failure_reason": "approach_below_table"
+      "width": 0.066,
+      "depth": 0.02,
+      "obj_z_before": -0.003,
+      "obj_z_after": -0.003,
+      "obj_lift_delta": 0.0,
+      "frame_log": []
     }
   ]
 }
@@ -270,8 +342,8 @@ GUI 读的是磁盘上的结果文件。重新生成结果后，需要启动 GUI
 
 ```bash
 python gui/app.py \
-  --results path/to/results.json \
-  --viz-data path/to/results_viz_data.pkl
+  --results results/grasp_simulation.json \
+  --viz-data results/grasp_simulation_viz_data.pkl
 ```
 
 浏览器中可以用 `Ctrl + Shift + R` 强制刷新。
@@ -280,9 +352,13 @@ python gui/app.py \
 
 优先使用 `scripts/demo_closed_loop.py` 重新生成结果。新的结果会保存 `object_orientation`，GUI 才能更稳定地按真实姿态渲染完整 mesh。
 
-### 抓取看起来过于理想
+### 抓取成功了，但物体没真正被提起来
 
-当前 evaluator 在夹爪闭合后使用固定约束来模拟抓住物体，因此它适合 milestone 展示和方案验证，不等价于完整的接触物理 benchmark。
+当前判定与参考实现一致，只看夹爪闭合后主关节角（`is_gripper_closed()`）——指间有阻挡即判成功。真实物理夹取下，物体可能被夹到但在抬升时从指间滑脱，此时 `obj_lift_delta` 接近 0。需要“物体确实被提起”才算成功时，用结果里的 `obj_lift_delta` 字段自行加判据即可。
+
+### 抓不到 / 候选都被护栏拦下
+
+常见原因是物体尺度不对（图形学单位 mesh 没缩放，用 `--scale` 调到约 5~8 cm），或物体随机朝向下平躺导致 GraspNet 抓取质量差。可多跑几次，或换更立体、规则的物体。
 
 ## Git 备注
 

@@ -85,15 +85,19 @@ class SimulationScene:
             object_id: PyBullet 物体 ID。
         """
         if obj_path.endswith(".obj"):
+            # .obj 的缩放已写进生成的 URDF 内 <mesh scale=...>，这里不能再用
+            # globalScaling，否则会二次缩放（scale²）导致物体尺寸严重偏小。
             urdf_path = self._obj_to_urdf(obj_path, scale)
+            global_scaling = 1.0
         else:
             urdf_path = obj_path  # 直接加载 URDF
+            global_scaling = scale
 
         obj_id = p.loadURDF(
             urdf_path,
             basePosition=position,
             baseOrientation=orientation,
-            globalScaling=scale,
+            globalScaling=global_scaling,
         )
         p.changeDynamics(obj_id, -1, mass=mass,
                          lateralFriction=lateral_friction,

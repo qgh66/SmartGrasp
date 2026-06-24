@@ -24,8 +24,38 @@ from models.graspnet import GraspNet, pred_decode
 from graspnetAPI import GraspGroup
 from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
-from simulation.gripper import ParallelJawGripper
+from simulation.robot_gripper import JakaZu3Robotiq85Gripper
 from simulation.evaluator import GraspEvaluator
+
+
+def crop_to_object(pc, margin=0.05, num_points=20000, table_z=0.005):
+    """按物体点云的 xy 包围盒裁剪整幅点云，保留物体及其周围一圈桌面。
+
+    GraspNet 需要支撑面上下文，纯物体点会生成不出抓取；但整桌点云会让网络
+    把大量抓取生成在远处平坦桌面上、偏离物体。这里取物体点（z>table_z）的
+    xy 范围外扩 margin，裁掉范围外的桌面点，再重采样到 num_points。
+
+    Args:
+        pc: (1, N, 3) 点云。
+        margin: 物体 xy 包围盒外扩量（米）。
+        num_points: 输出点数。
+        table_z: 判定物体点的高度阈值。
+    Returns:
+        (1, num_points, 3) 裁剪并重采样后的点云。
+    """
+    cloud = pc[0]
+    obj = cloud[cloud[:, 2] > table_z]
+    if len(obj) == 0:
+        return pc
+    lo = obj[:, :2].min(axis=0) - margin
+    hi = obj[:, :2].max(axis=0) + margin
+    mask = ((cloud[:, 0] >= lo[0]) & (cloud[:, 0] <= hi[0]) &
+            (cloud[:, 1] >= lo[1]) & (cloud[:, 1] <= hi[1]))
+    cropped = cloud[mask]
+    if len(cropped) == 0:
+        return pc
+    idx = np.random.choice(len(cropped), num_points, replace=len(cropped) < num_points)
+    return cropped[idx][np.newaxis].astype(np.float32)
 
 
 def parse_args():
@@ -35,9 +65,11 @@ def parse_args():
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
+    p.add_argument('--scale', type=float, default=1.0,
+                   help='物体缩放因子（图形学单位 mesh 需缩到米制小物体尺寸）')
     p.add_argument('--gui', action='store_true', help='打开 PyBullet GUI')
     p.add_argument('--device', default='cuda:0', help='推理设备')
-    p.add_argument('--output', default='results_closed_loop.json', help='输出文件')
+    p.add_argument('--output', default='results/grasp_simulation.json', help='输出文件')
     return p.parse_args()
 
 
@@ -90,7 +122,7 @@ def main():
     orientation = tuple(r.as_quat()[[0, 1, 2, 3]])
 
     obj_id = scene.load_object(args.obj, position=(0.3, 0.0, 0.05),
-                                orientation=orientation, mass=0.03)
+                                orientation=orientation, scale=args.scale, mass=0.03)
     # 等待物体稳定
     for _ in range(300):
         scene.step()
@@ -108,6 +140,13 @@ def main():
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✅ 点云: {pc.shape}, 物体点数: {n_obj_pts}')
 
+    # 按物体点云 xy 包围盒裁剪，裁掉远处大片桌面，只保留物体及周围一圈支撑面。
+    # 参照参考流程的 crop_pointcloud（此处无 VLM，直接用物体点 bbox + margin），
+    # 避免 GraspNet 在平坦桌面上生成大量落在桌面、偏离物体的抓取。
+    pc = crop_to_object(pc, margin=0.05, num_points=20000)
+    n_obj_pts = (pc[0, :, 2] > 0.005).sum()
+    print(f'  ✂️  裁剪后点云: {pc.shape}, 物体点数: {n_obj_pts}')
+
     # ==============================================================
     # 4. GraspNet 推理
     # ==============================================================
@@ -124,7 +163,8 @@ def main():
     # 5. 物理仿真评估
     # ==============================================================
     print(f'[5/5] 仿真评估 Top-{args.top_k}...')
-    gripper = ParallelJawGripper()
+    # JAKA Zu3 + Robotiq-85，纯 PyBullet IK（不启用 MoveIt）
+    gripper = JakaZu3Robotiq85Gripper(planner=None)
     gripper.load()
     evaluator = GraspEvaluator(object_id=obj_id, gripper=gripper,
                                point_cloud=pc[0], gui=args.gui)
@@ -147,6 +187,7 @@ def main():
         'obj_path': args.obj,
         'object_position': list(obj_pos),
         'object_orientation': list(obj_orn),
+        'gripper': gripper.metadata(),
         'grasps': [],
     }
     for r in results:

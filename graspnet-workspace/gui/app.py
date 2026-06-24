@@ -195,15 +195,15 @@ def _constraint_status(grasp: dict, obj_pts: np.ndarray) -> tuple[bool, list[str
 def _annotate_constraints(results: list[dict], point_cloud: np.ndarray) -> None:
     obj_pts = _object_points(point_cloud)
     for grasp in results:
-        raw_success = bool(grasp.get("success", False))
         valid, reasons, metrics = _constraint_status(grasp, obj_pts)
-        grasp["raw_success"] = raw_success
+        grasp["raw_success"] = bool(grasp.get("success", False))
         grasp["physical_valid"] = valid
         grasp["center_object_dist"] = metrics["center_object_dist"]
         grasp["approach_min_z"] = metrics["approach_min_z"]
-        if not valid:
-            grasp["success"] = False
+        if reasons:
             grasp["failure_reason"] = ", ".join(reasons)
+        else:
+            grasp.pop("failure_reason", None)
 
 
 def find_result_files() -> list[Path]:
