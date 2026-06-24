@@ -318,9 +318,12 @@ def _sam2_auto_candidate_pool(
         candidates.append(metadata)
         report.append({key: value for key, value in metadata.items() if key != "mask"})
 
-    # ---- Post-filter: one-way containment dedup (first-come-first-served) ----
-    # If a later mask is mostly covered by the union of all earlier masks, discard it.
-    # Earlier masks are never removed.
+    # ---- Post-filter: bidirectional containment dedup ----
+    # Regardless of order, a larger mask that covers a smaller one wins.
+    # For each new mask:
+    #   1) If covered >=85% by any kept mask → discard new
+    #   2) If new covers >=85% of any kept mask → discard THAT kept mask
+    # - Discontiguous masks: check against cumulative union instead of pairwise
     containment_threshold = 0.85
     _keep: list[dict[str, Any]] = []
     cumulative_mask: np.ndarray | None = None  # boolean OR of all kept masks
@@ -330,13 +333,88 @@ def _sam2_auto_candidate_pool(
         if new_area == 0:
             continue
 
-        if cumulative_mask is not None:
-            overlap = np.count_nonzero(new_mask & cumulative_mask)
-            coverage = overlap / max(1, new_area)
-            if coverage >= containment_threshold:
-                candidate["rejection_reason"] = "covered_by_earlier_masks"
+        # Count connected components
+        num_components = 1
+        if cv2 is not None:
+            num_labels, _ = cv2.connectedComponents(new_mask.astype(np.uint8), connectivity=8)
+            num_components = num_labels - 1  # subtract background
+
+        rejected = False
+        if num_components <= 1:
+            # Contiguous: bidirectional pairwise check
+            # Step 1: is new mask covered by any kept mask?
+            covered_by_kept = False
+            for kept in _keep:
+                kept_mask = np.asarray(kept["mask"], dtype=bool)
+                intersection = int(np.count_nonzero(new_mask & kept_mask))
+                coverage = intersection / max(1, new_area)
+                if coverage >= containment_threshold:
+                    covered_by_kept = True
+                    break
+            if covered_by_kept:
+                candidate["rejection_reason"] = "covered_by_larger_mask"
                 report.append({k: v for k, v in candidate.items() if k != "mask"})
-                continue
+                rejected = True
+            else:
+                # Step 2: does new mask cover any kept masks? Boot ALL that are covered.
+                to_remove: list[int] = []
+                for i, kept in enumerate(_keep):
+                    kept_mask = np.asarray(kept["mask"], dtype=bool)
+                    kept_area = int(np.count_nonzero(kept_mask))
+                    intersection = int(np.count_nonzero(new_mask & kept_mask))
+                    coverage = intersection / max(1, kept_area)
+                    if coverage >= containment_threshold:
+                        kept["rejection_reason"] = "covered_by_larger_new"
+                        report.append({k: v for k, v in kept.items() if k != "mask"})
+                        to_remove.append(i)
+                        # update cumulative_mask: remove the booted mask's contribution
+                        # (rebuild from scratch below)
+                for i in reversed(to_remove):
+                    _keep.pop(i)
+                if to_remove:
+                    # Rebuild cumulative_mask from remaining kept masks
+                    if _keep:
+                        cumulative_mask = np.asarray(_keep[0]["mask"], dtype=bool).copy()
+                        for kept in _keep[1:]:
+                            cumulative_mask |= np.asarray(kept["mask"], dtype=bool)
+                    else:
+                        cumulative_mask = None
+        else:
+            # Discontiguous: Step 1 = check against cumulative union of all kept masks
+            covered_by_cumu = False
+            if cumulative_mask is not None:
+                overlap = np.count_nonzero(new_mask & cumulative_mask)
+                coverage = overlap / max(1, new_area)
+                if coverage >= containment_threshold:
+                    candidate["rejection_reason"] = "discontiguous_covered_by_cumulative"
+                    report.append({k: v for k, v in candidate.items() if k != "mask"})
+                    rejected = True
+                    covered_by_cumu = True
+
+            if not covered_by_cumu:
+                # Step 2: does this discontiguous mask cover any kept masks? Boot ALL that are covered.
+                to_remove_dc: list[int] = []
+                for i, kept in enumerate(_keep):
+                    kept_mask = np.asarray(kept["mask"], dtype=bool)
+                    kept_area = int(np.count_nonzero(kept_mask))
+                    intersection = int(np.count_nonzero(new_mask & kept_mask))
+                    coverage = intersection / max(1, kept_area)
+                    if coverage >= containment_threshold:
+                        kept["rejection_reason"] = "covered_by_larger_new"
+                        report.append({k: v for k, v in kept.items() if k != "mask"})
+                        to_remove_dc.append(i)
+                for i in reversed(to_remove_dc):
+                    _keep.pop(i)
+                if to_remove_dc:
+                    if _keep:
+                        cumulative_mask = np.asarray(_keep[0]["mask"], dtype=bool).copy()
+                        for kept in _keep[1:]:
+                            cumulative_mask |= np.asarray(kept["mask"], dtype=bool)
+                    else:
+                        cumulative_mask = None
+
+        if rejected:
+            continue
 
         _keep.append(candidate)
         if cumulative_mask is None:
