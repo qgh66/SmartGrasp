@@ -671,17 +671,17 @@ def _append_unclaimed_sam2_candidates(
         cx, cy = _mask_centroid_xy(mask)
         object_id = next_id + appended
         proposal_name = "_".join(str(index) for index in item["candidate_indices"][:8])
-        filename = f"{object_id:03d}_sam2_group_{proposal_name}.png"
+        filename = f"{object_id:03d}_anchor_group_{proposal_name}.png"
         mask_path = output_mask_dir / filename
         _save_mask_png(mask, mask_path)
         mask_records.append(
             {
                 "node_id": len(mask_records),
                 "object_id": object_id,
-                "label": f"sam2 group {proposal_name}",
+                "label": f"depth group {proposal_name}",
                 "description": label,
                 "point": {"x": int(cx), "y": int(cy)},
-                "segmentation_backend": "sam2_auto_unclaimed_depth_grouped",
+                "segmentation_backend": "anchor",
                 "sam2_ids": item["candidate_indices"],
                 "selected_sam2_candidate": _candidate_summary(item["best_candidate"]),
                 "sam2_group_members": item["members"],
@@ -782,7 +782,7 @@ def generate_masks_with_sam2_langsam_pipeline(
             anchor_mask = np.any(np.stack(anchor_masks, axis=0), axis=0) if anchor_masks else None
 
             best_mask: np.ndarray | None = None
-            backend = "sam2_auto_review_langsam"
+            backend = "anchor"
             langsam_meta: dict[str, Any] = {}
 
             if status == "missing" or anchor_mask is None:
@@ -792,7 +792,6 @@ def generate_masks_with_sam2_langsam_pipeline(
             if status == "complete":
                 # VLM says SAM2 mask is good enough — skip LangSAM, use anchor directly
                 best_mask = anchor_mask
-                backend = "sam2_anchor"
                 langsam_meta = {"fallback": "complete_skip_langsam"}
             else:
                 # incomplete or unknown — run LangSAM refinement
@@ -815,8 +814,13 @@ def generate_masks_with_sam2_langsam_pipeline(
                 if best_mask is None and anchor_mask is not None:
                     # LangSAM failed, fall back to anchor
                     best_mask = anchor_mask
-                    backend = "sam2_anchor_fallback"
                     langsam_meta["fallback"] = langsam_meta.get("fallback", "langsam_failed")
+                elif selected_candidate.get("merge_policy") == "sam2_anchor_union_langsam":
+                    backend = "fusion"
+                elif selected_candidate.get("fallback"):
+                    backend = "anchor"
+                else:
+                    backend = "langsam"
 
             if best_mask is None:
                 continue

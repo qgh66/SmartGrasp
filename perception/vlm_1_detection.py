@@ -124,13 +124,16 @@ def _openai_list_scene_objects(
     out_dir: Path,
 ) -> tuple[list[dict[str, Any]], str]:
     prompt = (
-        "List every visible graspable physical object in this scene. "
-        "Ignore the tray, table, bin, support surface, background, shadows, and reflections. "
-        "Include small objects such as loose screws, bolts, nuts, washers, clips, caps, pins, and tiny blue or metallic pieces even if they partly touch or overlap a larger object. "
-        "Treat a single tool or package as one object even when it has multiple colors or materials. "
+        "List every visible or partially visible physical object in this scene.\n\n"
+        "Important: Use the overall geometry and function of an object rather than color alone to determine object boundaries."
+        "Ignore the tray, table, bin, support surface, background and reflections. "
+        "Include small objects. Be careful with ring and fan shaped objects."      
+        "Strictly separate different instances that are overlapping or similar.\n\n"  
+        "However, treat an object as a whole when it has multiple parts with different colors or materials. "
         "For example, pliers with red/yellow handles and black jaws are one object, not separate red, yellow, and black objects. "
+        "An object may not be contiguously visible if partially occluded, whose parts may be far away from each other.\n\n"
         "Use explicit relative position words for every object, especially repeated similar objects. "
-        "For each object, describe the complete object and list its visible parts or colors when useful for later mask merging. "
+        "For each object, describe the complete object and list its visible parts.\n\n"
         "Return only JSON with this schema: "
         "{\"objects\":[{\"id\":1,\"description\":\"red and yellow handled pliers with black jaws on the right\","
         "\"relative_position\":\"lower right\",\"visible_parts\":[\"red handle\",\"yellow handle\",\"black jaws\"]}]}."

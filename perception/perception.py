@@ -597,7 +597,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "scene_id": scene_id,
             "query_obj_id": query_obj_id,
             "annotation": annotation,
-            "point_source": "sam2-langsam",
+            "point_source": "anchor-langsam-fusion",
             "output_dir": str(out_dir.resolve()),
             "image_path": str(image_path.resolve()),
             "depth_path": str(depth_path.resolve()),

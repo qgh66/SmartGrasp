@@ -64,7 +64,7 @@ def _finalize_independent_scene_masks(
     masks = [np.asarray(record["mask_array"], dtype=bool).copy() for record in kept]
     areas = [int(np.count_nonzero(mask)) for mask in masks]
     explicit_scores = [
-        0 if str(record.get("segmentation_backend", "")).startswith("sam2_auto_review") else 1
+        0 if str(record.get("segmentation_backend", "")) in ("langsam", "fusion") else 1
         for record in kept
     ]
     order = sorted(range(len(masks)), key=lambda index: (explicit_scores[index], areas[index]))
@@ -165,8 +165,7 @@ def _renumber_masks(mask_records: list[dict[str, Any]], output_mask_dir: Path) -
     for index, record in enumerate(mask_records, start=1):
         old_path = Path(str(record.get("mask_path", "")))
         label = _safe_label(str(record.get("label", f"object_{index}")))
-        backend = record.get("segmentation_backend", "")
-        source = "sam2" if "sam2" in backend else "object"
+        source = record.get("segmentation_backend", "anchor")
         new_name = f"{index:03d}_{source}_{label}.png"
         new_path = output_mask_dir / new_name
 
@@ -632,7 +631,7 @@ def build_org_json(
             "path": str(depth_path.resolve()),
             "shape": [int(depth_map.shape[0]), int(depth_map.shape[1])],
         },
-        "segmentation_backend": "sam2-langsam",
+        "segmentation_backend": "anchor-langsam-fusion",
         "anchor_report": anchor_report,
         "final_mask_quality_report": final_mask_quality_report,
         "save_candidates": bool(save_candidates),
