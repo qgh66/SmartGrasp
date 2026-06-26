@@ -281,49 +281,74 @@ def _internal_depth_edge_report(
 
 def _resolve_overlaps_by_depth(
     candidates: list[dict[str, Any]],
-    depth_map: np.ndarray | None,
 ) -> list[dict[str, Any]]:
-    """Resolve overlapping pixels between mask pairs using depth proximity.
+    """Resolve overlapping region between mask pairs using spatial k-NN voting.
 
-    For each pair of overlapping masks, every pixel in their overlap is
-    assigned to the mask whose exclusive-region median depth is closer.
+    The overlap region is sampled. Each sample finds its k nearest neighbors
+    from A's exclusive region and k nearest from B's exclusive region, then
+    votes for whichever side is closer. The entire overlap region is assigned
+    to the winner of the majority vote.
     """
-    if depth_map is None or depth_map.size == 0 or len(candidates) < 2:
+    if len(candidates) < 2:
         return candidates
 
     n = len(candidates)
     masks = [np.asarray(c["mask"], dtype=bool).copy() for c in candidates]
     modified = False
+    n_sample = 500
+    k = 7
 
     for i in range(n):
         for j in range(i + 1, n):
             overlap = masks[i] & masks[j]
-            if int(np.count_nonzero(overlap)) == 0:
+            n_overlap = int(np.count_nonzero(overlap))
+            if n_overlap == 0:
                 continue
 
             excl_i = masks[i] & ~masks[j]
             excl_j = masks[j] & ~masks[i]
+            n_i = int(np.count_nonzero(excl_i))
+            n_j = int(np.count_nonzero(excl_j))
 
-            di = float(np.median(depth_map[excl_i])) if int(np.count_nonzero(excl_i)) > 0 else None
-            dj = float(np.median(depth_map[excl_j])) if int(np.count_nonzero(excl_j)) > 0 else None
-
-            if di is None and dj is None:
+            if n_i == 0 and n_j == 0:
                 continue
-            if di is None:
+            if n_i == 0:
                 masks[i][overlap] = False
                 modified = True
                 continue
-            if dj is None:
+            if n_j == 0:
                 masks[j][overlap] = False
                 modified = True
                 continue
 
-            overlap_depths = depth_map[overlap]
-            to_i = np.abs(overlap_depths - di) <= np.abs(overlap_depths - dj)
-            to_j = ~to_i
-            coords = np.where(overlap)
-            masks[i][coords[0][to_j], coords[1][to_j]] = False
-            masks[j][coords[0][to_i], coords[1][to_i]] = False
+            # Sample exclusive region coords
+            coords_i = np.argwhere(excl_i).astype(np.float32)
+            coords_j = np.argwhere(excl_j).astype(np.float32)
+
+            # Sample overlap coords for voting
+            coords_o = np.argwhere(overlap).astype(np.float32)
+            n_o_sample = min(n_sample, n_overlap)
+            sample_o = coords_o[np.random.choice(n_overlap, n_o_sample, replace=False)]
+
+            votes_i = 0
+            for p in sample_o:
+                # Find k nearest from A exclusive, mean distance
+                dist_i = np.sum((coords_i - p) ** 2, axis=1)
+                top_i = np.partition(dist_i, min(k, n_i))[:min(k, n_i)]
+                mean_i = np.mean(top_i) if len(top_i) > 0 else float('inf')
+
+                # Find k nearest from B exclusive, mean distance
+                dist_j = np.sum((coords_j - p) ** 2, axis=1)
+                top_j = np.partition(dist_j, min(k, n_j))[:min(k, n_j)]
+                mean_j = np.mean(top_j) if len(top_j) > 0 else float('inf')
+
+                if mean_i <= mean_j:
+                    votes_i += 1
+
+            if votes_i > n_o_sample // 2:
+                masks[j][overlap] = False
+            else:
+                masks[i][overlap] = False
             modified = True
 
     if not modified:
@@ -706,7 +731,7 @@ def _sam2_auto_candidate_pool(
         initial_kept=rgb_candidates,
         reject_internal_depth_edges=True,
     )
-    candidates = _resolve_overlaps_by_depth(candidates, depth_map)
+    candidates = _resolve_overlaps_by_depth(candidates)
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
         for candidate in candidates:
