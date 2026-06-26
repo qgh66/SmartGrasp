@@ -64,6 +64,30 @@ else
 fi
 MODE="${MODE:-vlm}"
 
+# ---- SAM2 参数 ----
+# 直接改这里即可；depth 留空表示继承对应的 RGB SAM2 参数。
+SAM2_POINTS_PER_SIDE="${SAM2_POINTS_PER_SIDE:-24}"
+SAM2_CROP_N_LAYERS="${SAM2_CROP_N_LAYERS:-0}"
+SAM2_PRED_IOU_THRESH="${SAM2_PRED_IOU_THRESH:-0.68}"
+SAM2_STABILITY_SCORE_THRESH="${SAM2_STABILITY_SCORE_THRESH:-0.83}"
+DEPTH_SAM2_POINTS_PER_SIDE="${DEPTH_SAM2_POINTS_PER_SIDE:-}"
+DEPTH_SAM2_CROP_N_LAYERS="${DEPTH_SAM2_CROP_N_LAYERS:-0}"
+DEPTH_SAM2_PRED_IOU_THRESH="${DEPTH_SAM2_PRED_IOU_THRESH:-0.58}"
+DEPTH_SAM2_STABILITY_SCORE_THRESH="${DEPTH_SAM2_STABILITY_SCORE_THRESH:-0.73}"
+
+if [[ -n "${DEPTH_SAM2_POINTS_PER_SIDE:-}" ]]; then
+    SCENE_ARGS+=(--depth-sam2-points-per-side "$DEPTH_SAM2_POINTS_PER_SIDE")
+fi
+if [[ -n "${DEPTH_SAM2_CROP_N_LAYERS:-}" ]]; then
+    SCENE_ARGS+=(--depth-sam2-crop-n-layers "$DEPTH_SAM2_CROP_N_LAYERS")
+fi
+if [[ -n "${DEPTH_SAM2_PRED_IOU_THRESH:-}" ]]; then
+    SCENE_ARGS+=(--depth-sam2-pred-iou-thresh "$DEPTH_SAM2_PRED_IOU_THRESH")
+fi
+if [[ -n "${DEPTH_SAM2_STABILITY_SCORE_THRESH:-}" ]]; then
+    SCENE_ARGS+=(--depth-sam2-stability-score-thresh "$DEPTH_SAM2_STABILITY_SCORE_THRESH")
+fi
+
 # ---- 终端提示 ----
 echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
 
@@ -98,10 +122,10 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
         --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
         --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \
         --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-0.18}" \
-        --sam2-points-per-side "${SAM2_POINTS_PER_SIDE:-32}" \
-        --sam2-crop-n-layers "${SAM2_CROP_N_LAYERS:-0}" \
-        --sam2-pred-iou-thresh "${SAM2_PRED_IOU_THRESH:-0.68}" \
-        --sam2-stability-score-thresh "${SAM2_STABILITY_SCORE_THRESH:-0.83}" \
+        --sam2-points-per-side "$SAM2_POINTS_PER_SIDE" \
+        --sam2-crop-n-layers "$SAM2_CROP_N_LAYERS" \
+        --sam2-pred-iou-thresh "$SAM2_PRED_IOU_THRESH" \
+        --sam2-stability-score-thresh "$SAM2_STABILITY_SCORE_THRESH" \
         --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-18}" \
         ${DEVICE:+--device "$DEVICE"} \
         ${DEBUG:+--debug "$DEBUG"} \

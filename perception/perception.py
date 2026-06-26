@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from SmartGrasp.perception._shared import _draw_labeled_image_matplotlib
+from SmartGrasp.perception._shared import _draw_labeled_image_matplotlib, _save_mask_png
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
 from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
@@ -113,6 +113,25 @@ def write_points_json(
 def save_depth(depth: np.ndarray, out_dir: Path) -> Path:
     path = out_dir / "depth.npy"
     np.save(path, depth.astype(np.float32, copy=False))
+    return path
+
+
+def save_depth_image(depth: np.ndarray, out_dir: Path) -> Path:
+    path = out_dir / "scene_depth.png"
+    depth = np.asarray(depth, dtype=np.float32)
+    valid = np.isfinite(depth) & (depth > 0)
+    if not np.any(valid):
+        Image.new("L", depth.shape[::-1], 0).save(path)
+        return path
+
+    near, far = np.percentile(depth[valid], [2, 98])
+    if far <= near:
+        gray = np.zeros(depth.shape, dtype=np.uint8)
+    else:
+        normalized = (far - np.clip(depth, near, far)) / max(far - near, 1e-6)
+        gray = np.zeros(depth.shape, dtype=np.uint8)
+        gray[valid] = np.clip(normalized[valid] * 255.0, 0, 255).astype(np.uint8)
+    Image.fromarray(gray, mode="L").save(path)
     return path
 
 
@@ -401,6 +420,7 @@ def build_gt_reference_outputs(
     with Image.open(image_path) as image:
         width, height = image.size
     depth_path = save_depth(depth, gt_dir)
+    depth_image_path = save_depth_image(depth, gt_dir)
     points = build_gt_points(instances_objects, annotation, query_obj_id)
     points_path = write_points_json(gt_dir, image_path, width, height, prompt, points, "gt_centers")
     graph_payload = build_graph_from_gt_masks(
@@ -421,6 +441,7 @@ def build_gt_reference_outputs(
         "output_dir": str(gt_dir.resolve()),
         "image_path": str(image_path.resolve()),
         "depth_path": str(depth_path.resolve()),
+        "depth_image_path": str(depth_image_path.resolve()),
         "points_json": str(points_path.resolve()),
         "graph_json": str((gt_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((gt_dir / "occlusion_graph.png").resolve()),
@@ -463,6 +484,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         instances_objects = np.asarray(npz["instances_objects"])
 
     depth_path = save_depth(depth, out_dir)
+    depth_image_path = save_depth_image(depth, out_dir)
     prompt = args.prompt or ""
     annotation = str(row["annotation"])
 
@@ -490,10 +512,15 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             )
             from SmartGrasp.perception.background import generate_background_exclusion_mask
             bg_mask = None
+            background_mask_path = None
             try:
                 bg_mask = generate_background_exclusion_mask(
                     depth_map=depth, image=Image.open(image_path).convert("RGB"),
                     mask_clean_kernel=args.mask_clean_kernel)
+                if bg_mask is not None and int(np.count_nonzero(bg_mask)) > 0:
+                    background_path = out_dir / "mask" / "000_background_mask.png"
+                    _save_mask_png(np.asarray(bg_mask, dtype=bool), background_path)
+                    background_mask_path = str(background_path.resolve())
             except Exception as exc:
                 print(f"bg_mask failed: {exc}", file=sys.stderr)
             candidates, report, _, _ = _sam2_auto_candidate_pool(
@@ -507,7 +534,12 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 crop_n_layers=args.sam2_crop_n_layers,
                 pred_iou_thresh=args.sam2_pred_iou_thresh,
                 stability_score_thresh=args.sam2_stability_score_thresh,
+                depth_points_per_side=args.depth_sam2_points_per_side,
+                depth_crop_n_layers=args.depth_sam2_crop_n_layers,
+                depth_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
+                depth_stability_score_thresh=args.depth_sam2_stability_score_thresh,
                 border_fraction_threshold=args.proposal_border_fraction_threshold,
+                depth_map=depth,
             )
             # Generate visualization images
             label_path = out_dir / "label_1_sam2auto.png"
@@ -519,6 +551,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 "num_candidates": len(candidates),
                 "label_png": str(label_path.resolve()),
                 "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+                "background_mask_path": background_mask_path,
                 "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
                 "report": report,
             }
@@ -572,6 +605,10 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             sam2_crop_n_layers=args.sam2_crop_n_layers,
             sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
             sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+            depth_sam2_points_per_side=args.depth_sam2_points_per_side,
+            depth_sam2_crop_n_layers=args.depth_sam2_crop_n_layers,
+            depth_sam2_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
+            depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
             preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
         )
@@ -601,8 +638,10 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "output_dir": str(out_dir.resolve()),
             "image_path": str(image_path.resolve()),
             "depth_path": str(depth_path.resolve()),
+            "depth_image_path": str(depth_image_path.resolve()),
             "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
             "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
+            "background_mask_path": graph_payload.get("background_mask_path"),
             "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
             "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
             "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
@@ -648,6 +687,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
     parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.85)
     parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.95)
+    parser.add_argument("--depth-sam2-points-per-side", type=int, default=None,
+                        help="Depth SAM2 points_per_side; default: use --sam2-points-per-side")
+    parser.add_argument("--depth-sam2-crop-n-layers", type=int, default=None,
+                        help="Depth SAM2 crop_n_layers; default: use --sam2-crop-n-layers")
+    parser.add_argument("--depth-sam2-pred-iou-thresh", type=float, default=None,
+                        help="Depth SAM2 pred_iou_thresh; default: use --sam2-pred-iou-thresh")
+    parser.add_argument("--depth-sam2-stability-score-thresh", type=float, default=None,
+                        help="Depth SAM2 stability_score_thresh; default: use --sam2-stability-score-thresh")
     parser.add_argument("--preserve-unclaimed-sam2", type=int, default=18)
     parser.add_argument("--save-candidates", action="store_true")
     parser.add_argument("--debug", choices=["sam2", "vlm1"], default=None,
@@ -682,6 +729,8 @@ def main() -> None:
             item_args.serve = False
             try:
                 run_pipeline(item_args, df=df)
+                from SmartGrasp.perception.sam2auto import _clear_langsam_image_state
+                _clear_langsam_image_state()
             except Exception as exc:
                 print(f"Failed scene_id={scene_id}: {exc}", flush=True)
     elif args.scene_ids:
@@ -692,6 +741,8 @@ def main() -> None:
             item_args.scene_id = scene_id
             item_args.query_obj_id = None
             summaries.append(run_pipeline(item_args, df=df))
+            from SmartGrasp.perception.sam2auto import _clear_langsam_image_state
+            _clear_langsam_image_state()
         print(json.dumps({"runs": summaries}, ensure_ascii=False, indent=2))
     else:
         run_pipeline(args)

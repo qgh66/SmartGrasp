@@ -27,6 +27,8 @@ def _openai_review_sam2_candidates(
     timeout: float,
     out_dir: Path,
     max_labels: int = 30,
+    scene_objects: list[dict[str, Any]] | None = None,
+    scene_raw_output: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     t_r0 = time.time()
     candidate_lines: list[str] = []
@@ -35,15 +37,18 @@ def _openai_review_sam2_candidates(
         area_ratio = float(candidate.get("area_ratio", 0.0))
         candidate_lines.append(f"{index}: bbox={bbox}, area_ratio={area_ratio:.5f}")
 
-    scene_objects, scene_raw_output = _openai_list_scene_objects(
-        image_path=image_path,
-        model_id=model_id,
-        api_key_env=api_key_env,
-        base_url=base_url,
-        timeout=timeout,
-        out_dir=out_dir,
-    )
-    _log_step("    ②b1 api_scene_objects (1img)", t_r0)
+    if scene_objects is None:
+        scene_objects, scene_raw_output = _openai_list_scene_objects(
+            image_path=image_path,
+            model_id=model_id,
+            api_key_env=api_key_env,
+            base_url=base_url,
+            timeout=timeout,
+            out_dir=out_dir,
+        )
+        _log_step("    ②b1 api_scene_objects (1img)", t_r0)
+    else:
+        _log_step(f"    ②b1 api_scene_objects prefetched ({len(scene_objects)} objects)", t_r0)
     scene_lines: list[str] = []
     for obj in scene_objects:
         parts = obj.get("visible_parts", [])
@@ -151,5 +156,4 @@ def _openai_review_sam2_candidates(
     (out_dir / "sam2_review.json").write_text(json.dumps(review_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     (out_dir / "openai_sam2_review.json").write_text(json.dumps(review_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return normalized, raw_output
-
 

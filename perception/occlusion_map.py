@@ -39,6 +39,18 @@ import matplotlib.pyplot as plt
 FINALIZE_OVERLAP_LOSS_RATIO = 0.10  # If a mask loses >90% of its area during overlap resolution, treat as noise
 FINALIZE_CULLED_AREA_RATIO = 0.003  # Absolute minimum (0.3%) for a heavily-culled mask to survive
 
+
+def _save_background_exclusion_mask(
+    background_exclusion_mask: np.ndarray | None,
+    output_mask_dir: Path,
+) -> str | None:
+    if background_exclusion_mask is None or int(np.count_nonzero(background_exclusion_mask)) == 0:
+        return None
+    background_mask_path = output_mask_dir / "000_background_mask.png"
+    _save_mask_png(np.asarray(background_exclusion_mask, dtype=bool), background_mask_path)
+    return str(background_mask_path.resolve())
+
+
 def _finalize_independent_scene_masks(
     mask_records: list[dict[str, Any]],
     output_mask_dir: Path,
@@ -47,16 +59,23 @@ def _finalize_independent_scene_masks(
     containment_threshold: float = 0.92,
     overlap_threshold: float = 0.0,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Make final masks non-overlapping and report approximate scene coverage."""
+    """Make final masks non-overlapping and report finalization quality."""
+    image_area = max(1, int(image_shape[0] * image_shape[1]))
+    background_area = (
+        int(np.count_nonzero(background_exclusion_mask))
+        if background_exclusion_mask is not None
+        else 0
+    )
+    coverage = {
+        "background_mask_coverage_ratio": float(background_area / image_area),
+        "background_mask_available": bool(background_area > 0),
+        "overlap_pixels_after_finalize": 0,
+    }
     if not mask_records:
         return mask_records, {
             "dedup_report": [],
             "overlap_report": [],
-            "coverage": {
-                "foreground_coverage_ratio": 0.0,
-                "scene_coverage_ratio_with_background": 0.0,
-                "missing_non_background_ratio": 1.0,
-            },
+            "coverage": coverage,
         }
 
     kept = list(mask_records)
@@ -131,24 +150,6 @@ def _finalize_independent_scene_masks(
             _save_mask_png(mask, old_path)
         finalized.append(record)
 
-    foreground_union = np.zeros(image_shape, dtype=bool)
-    if finalized:
-        foreground_union = np.any(np.stack([np.asarray(record["mask_array"], dtype=bool) for record in finalized], axis=0), axis=0)
-    background = np.asarray(background_exclusion_mask, dtype=bool) if background_exclusion_mask is not None else np.zeros(image_shape, dtype=bool)
-    background_only = background & ~foreground_union
-    scene_union = foreground_union | background_only
-    image_area = max(1, int(image_shape[0] * image_shape[1]))
-    non_background = ~background
-    non_background_area = max(1, int(np.count_nonzero(non_background)))
-    missing_non_background = non_background & ~foreground_union
-    coverage = {
-        "foreground_coverage_ratio": float(np.count_nonzero(foreground_union) / image_area),
-        "background_coverage_ratio": float(np.count_nonzero(background_only) / image_area),
-        "scene_coverage_ratio_with_background": float(np.count_nonzero(scene_union) / image_area),
-        "missing_non_background_ratio": float(np.count_nonzero(missing_non_background) / non_background_area),
-        "overlap_pixels_after_finalize": 0,
-        "background_mask_included_in_scene_coverage": bool(background_exclusion_mask is not None),
-    }
     return finalized, {
         "dedup_report": dedup_report + removed_empty,
         "overlap_report": overlap_report,
@@ -524,6 +525,10 @@ def build_org_json(
     sam2_crop_n_layers: int | None = 0,
     sam2_pred_iou_thresh: float | None = 0.75,
     sam2_stability_score_thresh: float | None = 0.90,
+    depth_sam2_points_per_side: int | None = None,
+    depth_sam2_crop_n_layers: int | None = None,
+    depth_sam2_pred_iou_thresh: float | None = None,
+    depth_sam2_stability_score_thresh: float | None = None,
     preserve_unclaimed_sam2: int = 24,
     debug: str | None = None,) -> dict[str, Any]:
     t0 = _log_step("start", None)
@@ -539,6 +544,7 @@ def build_org_json(
         )
     except Exception as exc:
         print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
+    background_mask_path = _save_background_exclusion_mask(background_exclusion_mask, output_mask_dir)
     t1 = _log_step("① background_mask", t0)
 
     from SmartGrasp.perception.sam2auto import generate_masks_with_sam2_langsam_pipeline  # lazy import
@@ -561,6 +567,10 @@ def build_org_json(
         sam2_crop_n_layers=sam2_crop_n_layers,
         sam2_pred_iou_thresh=sam2_pred_iou_thresh,
         sam2_stability_score_thresh=sam2_stability_score_thresh,
+        depth_sam2_points_per_side=depth_sam2_points_per_side,
+        depth_sam2_crop_n_layers=depth_sam2_crop_n_layers,
+        depth_sam2_pred_iou_thresh=depth_sam2_pred_iou_thresh,
+        depth_sam2_stability_score_thresh=depth_sam2_stability_score_thresh,
         proposal_border_fraction_threshold=proposal_border_fraction_threshold,
         preserve_unclaimed_sam2=preserve_unclaimed_sam2,
     )
@@ -582,13 +592,6 @@ def build_org_json(
     )
     mask_records = _renumber_masks(mask_records, output_mask_dir)
     t3 = _log_step("③ finalize_non_overlap", t2)
-
-    if background_exclusion_mask is not None and np.count_nonzero(background_exclusion_mask) > 0:
-        foreground_union = np.any(
-            np.stack([np.asarray(record["mask_array"], dtype=bool) for record in mask_records], axis=0),
-            axis=0,
-        ) if mask_records else np.zeros_like(background_exclusion_mask, dtype=bool)
-        _save_mask_png(np.asarray(background_exclusion_mask, dtype=bool) & ~foreground_union, output_mask_dir / "000_background_mask.png")
 
     _draw_mask_records_label(
         image_path=image_path,
@@ -634,6 +637,7 @@ def build_org_json(
         "segmentation_backend": "anchor-langsam-fusion",
         "anchor_report": anchor_report,
         "final_mask_quality_report": final_mask_quality_report,
+        "background_mask_path": background_mask_path,
         "save_candidates": bool(save_candidates),
         "graph": graph_payload,
     }
@@ -651,4 +655,3 @@ def build_org_json(
     t4 = _log_step("④ occlusion_graph", t3)
     _log_step("total", t0)
     return payload
-

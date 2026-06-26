@@ -1,3 +1,0 @@
-
-Scene 59 (40s): RuntimeError: OpenAI review failed — API error. Aborting. Error: Expecting value: line 1 column 1 (char 0)
-

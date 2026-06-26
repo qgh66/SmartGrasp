@@ -78,6 +78,32 @@ def _load_langsam(device: str) -> Any:
     return _LANGSAM_CACHE[cache_key]
 
 
+def _clear_langsam_image_state() -> None:
+    """Release SAM predictor image embeddings between consecutive scenes."""
+    import gc
+    for model in _LANGSAM_CACHE.values():
+        sam = getattr(model, "sam", None)
+        if sam is not None:
+            predictor = getattr(sam, "predictor", None)
+            if predictor is not None:
+                for attr in ("_features", "_original_image", "_input_image", "_is_image_set"):
+                    try:
+                        setattr(predictor, attr, None)
+                    except Exception:
+                        pass
+                reset = getattr(predictor, "reset_image", None)
+                if callable(reset):
+                    try:
+                        reset()
+                    except Exception:
+                        pass
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
 
 def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     # Fixed seeds for reproducible SAM2 output across Mac/Linux/CUDA/MPS
@@ -159,13 +185,155 @@ def _border_touch_fraction(mask: np.ndarray, border_pixels: int = 3) -> float:
 
 
 
-def _proposal_score(proposal: dict[str, Any], area_ratio: float, border_fraction: float) -> float:
+def _proposal_score(proposal: dict[str, Any]) -> float:
     predicted_iou = float(proposal.get("predicted_iou", proposal.get("iou", 0.0)) or 0.0)
     stability = float(proposal.get("stability_score", 0.0) or 0.0)
-    area_prior = -abs(area_ratio - 0.035)
-    border_penalty = 0.5 * border_fraction
-    return predicted_iou + 0.25 * stability + area_prior - border_penalty
+    return predicted_iou + 0.25 * stability
 
+
+def _depth_map_to_near_white_image(depth_map: np.ndarray | None, image_shape: tuple[int, int]) -> Image.Image | None:
+    if depth_map is None or depth_map.size == 0:
+        return None
+    depth = np.asarray(depth_map, dtype=np.float32)
+    if depth.shape[:2] != image_shape:
+        return None
+    valid = np.isfinite(depth) & (depth > 0)
+    if not np.any(valid):
+        return None
+    near, far = np.percentile(depth[valid], [2, 98])
+    if far <= near:
+        return None
+    normalized = (far - np.clip(depth, near, far)) / max(far - near, 1e-6)
+    gray = np.zeros(depth.shape, dtype=np.uint8)
+    gray[valid] = np.clip(normalized[valid] * 255.0, 0, 255).astype(np.uint8)
+    return Image.fromarray(gray, mode="L").convert("RGB")
+
+
+def _normalized_depth_gradient(
+    depth_map: np.ndarray | None,
+    image_shape: tuple[int, int],
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    if depth_map is None or depth_map.size == 0 or cv2 is None:
+        return None, None
+    depth = np.asarray(depth_map, dtype=np.float32)
+    if depth.shape[:2] != image_shape:
+        return None, None
+    valid = np.isfinite(depth) & (depth > 0)
+    if not np.any(valid):
+        return None, None
+    fill_value = float(np.median(depth[valid]))
+    depth_filled = np.where(valid, depth, fill_value).astype(np.float32)
+    depth_smooth = cv2.GaussianBlur(depth_filled, (5, 5), 0)
+    grad_x = cv2.Sobel(depth_smooth, cv2.CV_32F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(depth_smooth, cv2.CV_32F, 0, 1, ksize=3)
+    gradient = np.sqrt(grad_x * grad_x + grad_y * grad_y)
+    scale = float(np.percentile(gradient[valid], 95))
+    if scale <= 1e-6:
+        return np.zeros_like(gradient, dtype=np.float32), valid
+    return np.clip(gradient / scale, 0.0, 1.0).astype(np.float32), valid
+
+
+def _internal_depth_edge_report(
+    mask: np.ndarray,
+    depth_gradient: np.ndarray | None,
+    valid_depth_mask: np.ndarray | None,
+) -> dict[str, Any]:
+    if depth_gradient is None or valid_depth_mask is None or cv2 is None:
+        return {"has_internal_depth_edge": False, "reason": "depth_gradient_unavailable"}
+
+    mask_u8 = np.asarray(mask, dtype=np.uint8)
+    num_labels, labels = cv2.connectedComponents(mask_u8, connectivity=8)
+    kernel = np.ones((3, 3), np.uint8)
+    checked_components = 0
+    strongest_edge_fraction = 0.0
+    strongest_edge_p90 = 0.0
+
+    for label in range(1, num_labels):
+        component = labels == label
+        if int(np.count_nonzero(component)) < 64:
+            continue
+        interior = cv2.erode(component.astype(np.uint8), kernel, iterations=2).astype(bool)
+        interior &= valid_depth_mask
+        if int(np.count_nonzero(interior)) < 32:
+            continue
+        values = depth_gradient[interior]
+        edge_fraction = float(np.mean(values >= 0.45))
+        edge_p90 = float(np.percentile(values, 90))
+        checked_components += 1
+        strongest_edge_fraction = max(strongest_edge_fraction, edge_fraction)
+        strongest_edge_p90 = max(strongest_edge_p90, edge_p90)
+        if edge_fraction >= 0.08 and edge_p90 >= 0.70:
+            return {
+                "has_internal_depth_edge": True,
+                "checked_components": checked_components,
+                "internal_edge_fraction": edge_fraction,
+                "internal_edge_p90": edge_p90,
+            }
+
+    return {
+        "has_internal_depth_edge": False,
+        "checked_components": checked_components,
+        "internal_edge_fraction": strongest_edge_fraction,
+        "internal_edge_p90": strongest_edge_p90,
+    }
+
+
+
+def _resolve_overlaps_by_depth(
+    candidates: list[dict[str, Any]],
+    depth_map: np.ndarray | None,
+) -> list[dict[str, Any]]:
+    """Resolve overlapping pixels between mask pairs using depth proximity.
+
+    For each pair of overlapping masks, every pixel in their overlap is
+    assigned to the mask whose exclusive-region median depth is closer.
+    """
+    if depth_map is None or depth_map.size == 0 or len(candidates) < 2:
+        return candidates
+
+    n = len(candidates)
+    masks = [np.asarray(c["mask"], dtype=bool).copy() for c in candidates]
+    modified = False
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            overlap = masks[i] & masks[j]
+            if int(np.count_nonzero(overlap)) == 0:
+                continue
+
+            excl_i = masks[i] & ~masks[j]
+            excl_j = masks[j] & ~masks[i]
+
+            di = float(np.median(depth_map[excl_i])) if int(np.count_nonzero(excl_i)) > 0 else None
+            dj = float(np.median(depth_map[excl_j])) if int(np.count_nonzero(excl_j)) > 0 else None
+
+            if di is None and dj is None:
+                continue
+            if di is None:
+                masks[i][overlap] = False
+                modified = True
+                continue
+            if dj is None:
+                masks[j][overlap] = False
+                modified = True
+                continue
+
+            overlap_depths = depth_map[overlap]
+            to_i = np.abs(overlap_depths - di) <= np.abs(overlap_depths - dj)
+            to_j = ~to_i
+            coords = np.where(overlap)
+            masks[i][coords[0][to_j], coords[1][to_j]] = False
+            masks[j][coords[0][to_i], coords[1][to_i]] = False
+            modified = True
+
+    if not modified:
+        return candidates
+
+    for idx, c in enumerate(candidates):
+        c["mask"] = masks[idx]
+        c["mask_area"] = int(np.count_nonzero(masks[idx]))
+
+    return candidates
 
 
 def _is_support_like_horizontal_strip(mask: np.ndarray) -> bool:
@@ -228,48 +396,24 @@ def _is_tray_or_background_like_proposal(
     return False
 
 
-def _sam2_auto_candidate_pool(
-    image_path: Path,
-    output_mask_dir: Path,
+def _hard_filter_sam2_proposals(
+    raw_proposals: list[dict[str, Any]],
+    source: str,
+    image_np: np.ndarray,
+    image_area: float,
     min_area_ratio: float,
     max_area_ratio: float,
     border_fraction_threshold: float,
     mask_clean_kernel: int,
-    save_candidates: bool,
-    device: str | None,
     background_exclusion_mask: np.ndarray | None,
-    points_per_side: int | None = None,
-    crop_n_layers: int | None = None,
-    pred_iou_thresh: float | None = None,
-    stability_score_thresh: float | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, Image.Image]:
-    if device is None:
-        if torch.cuda.is_available():
-            device = "cuda"
-        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-            device = "mps"
-        else:
-            device = "cpu"
-
-    image = Image.open(image_path).convert("RGB")
-    image_np = np.asarray(image)
-    image_area = float(image_np.shape[0] * image_np.shape[1])
-    model = _load_langsam(device)
-    generator_settings = _configure_sam2_auto_generator(
-        model,
-        points_per_side=points_per_side,
-        crop_n_layers=crop_n_layers,
-        pred_iou_thresh=pred_iou_thresh,
-        stability_score_thresh=stability_score_thresh,
-    )
-    raw_proposals = _sam2_auto_generate(model, image)
-    candidates: list[dict[str, Any]] = []
-    report: list[dict[str, Any]] = [{"stage": "sam2_auto_generator", **generator_settings}]
-
+    max_candidates: int | None,
+    report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     effective_min_area_ratio = max(0.0002, min_area_ratio * 0.15)
     effective_max_area_ratio = max(max_area_ratio, 0.45)
+    candidates: list[dict[str, Any]] = []
 
-    for idx, proposal in enumerate(raw_proposals):
+    for index, proposal in enumerate(raw_proposals):
         raw_mask = proposal.get("segmentation")
         if raw_mask is None:
             continue
@@ -297,7 +441,8 @@ def _sam2_auto_candidate_pool(
             reason = "overlaps_background_exclusion"
 
         metadata = {
-            "proposal_index": int(idx),
+            "source": source,
+            "proposal_index": int(index),
             "area": area,
             "area_ratio": area_ratio,
             "bbox": bbox_xywh,
@@ -313,121 +458,260 @@ def _sam2_auto_candidate_pool(
             report.append(metadata)
             continue
 
-        metadata["selection_score"] = _proposal_score(proposal, area_ratio, border_fraction)
+        metadata["selection_score"] = _proposal_score(proposal)
         metadata["mask"] = mask
         candidates.append(metadata)
         report.append({key: value for key, value in metadata.items() if key != "mask"})
 
-    # ---- Post-filter: bidirectional containment dedup ----
-    # Regardless of order, a larger mask that covers a smaller one wins.
-    # For each new mask:
-    #   1) If covered >=85% by any kept mask → discard new
-    #   2) If new covers >=85% of any kept mask → discard THAT kept mask
-    # - Discontiguous masks: check against cumulative union instead of pairwise
-    containment_threshold = 0.85
-    _keep: list[dict[str, Any]] = []
-    cumulative_mask: np.ndarray | None = None  # boolean OR of all kept masks
+    candidates.sort(key=lambda item: float(item.get("selection_score", 0.0)), reverse=True)
+    if max_candidates is None:
+        return candidates
+    return candidates[:max_candidates]
+
+
+def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": candidate.get("source"),
+        "proposal_index": int(candidate.get("proposal_index", -1)),
+        "area": int(candidate.get("area", 0)),
+        "selection_score": float(candidate.get("selection_score", 0.0)),
+    }
+
+
+def _refresh_candidate_geometry(candidate: dict[str, Any], mask: np.ndarray, image_area: float) -> None:
+    area = int(np.count_nonzero(mask))
+    bbox_xywh = _mask_bbox(mask)
+    bbox_xyxy = _box_xywh_to_xyxy(bbox_xywh)
+    center_x, center_y = _mask_centroid_xy(mask)
+    candidate["mask"] = mask
+    candidate["area"] = area
+    candidate["area_ratio"] = float(area / image_area)
+    candidate["bbox"] = bbox_xywh
+    candidate["bbox_xyxy"] = bbox_xyxy
+    candidate["centroid"] = {"x": int(center_x), "y": int(center_y)}
+
+
+def _merge_candidate_union(
+    kept: list[dict[str, Any]],
+    matched_indices: list[int],
+    candidate: dict[str, Any],
+    image_area: float,
+    report: list[dict[str, Any]],
+) -> None:
+    primary = kept[matched_indices[0]]
+    merged_mask = np.asarray(candidate["mask"], dtype=bool).copy()
+    merged_sources = set(candidate.get("merged_sources", [candidate.get("source")]))
+    merged_records = list(candidate.get("merged_candidates", [_candidate_summary(candidate)]))
+
+    for kept_index in matched_indices:
+        kept_candidate = kept[kept_index]
+        merged_mask |= np.asarray(kept_candidate["mask"], dtype=bool)
+        merged_sources.update(kept_candidate.get("merged_sources", [kept_candidate.get("source")]))
+        merged_records.extend(kept_candidate.get("merged_candidates", [_candidate_summary(kept_candidate)]))
+
+    for kept_index in reversed(matched_indices[1:]):
+        kept.pop(kept_index)
+
+    _refresh_candidate_geometry(primary, merged_mask, image_area)
+    if len(merged_sources) > 1:
+        merged_records.sort(key=lambda r: int(r.get("area", 0)), reverse=True)
+        primary["source"] = "-".join(str(r.get("source", "?")) for r in merged_records) + "-merged"
+    else:
+        primary["source"] = next(iter(merged_sources))
+    primary["merged_sources"] = sorted(source for source in merged_sources if source is not None)
+    primary["merged_candidates"] = merged_records
+    primary["selection_score"] = max(
+        float(primary.get("selection_score", 0.0)),
+        float(candidate.get("selection_score", 0.0)),
+    )
+    primary["predicted_iou"] = max(
+        float(primary.get("predicted_iou", 0.0)),
+        float(candidate.get("predicted_iou", 0.0)),
+    )
+    primary["stability_score"] = max(
+        float(primary.get("stability_score", 0.0)),
+        float(candidate.get("stability_score", 0.0)),
+    )
+    report.append({
+        "stage": "union_merge",
+        "merged_into": _candidate_summary(primary),
+        "merged_from": _candidate_summary(candidate),
+        "num_merged_candidates": len(merged_records),
+    })
+
+
+def _merge_candidates_with_depth_edges(
+    candidates: list[dict[str, Any]],
+    image_area: float,
+    depth_gradient: np.ndarray | None,
+    valid_depth_mask: np.ndarray | None,
+    report: list[dict[str, Any]],
+    initial_kept: list[dict[str, Any]] | None = None,
+    reject_internal_depth_edges: bool = True,
+    containment_threshold: float = 0.82,
+) -> list[dict[str, Any]]:
+    kept: list[dict[str, Any]] = list(initial_kept or [])
+    cumulative_mask: np.ndarray | None = None
+    for kept_candidate in kept:
+        kept_mask = np.asarray(kept_candidate["mask"], dtype=bool)
+        cumulative_mask = kept_mask.copy() if cumulative_mask is None else (cumulative_mask | kept_mask)
+
     for candidate in candidates:
         new_mask = np.asarray(candidate["mask"], dtype=bool)
         new_area = int(np.count_nonzero(new_mask))
         if new_area == 0:
             continue
 
-        # Count connected components
+        if reject_internal_depth_edges:
+            depth_edge_report = _internal_depth_edge_report(new_mask, depth_gradient, valid_depth_mask)
+            candidate["depth_edge_report"] = depth_edge_report
+            if depth_edge_report.get("has_internal_depth_edge"):
+                candidate["rejection_reason"] = "internal_depth_edge"
+                report.append({key: value for key, value in candidate.items() if key != "mask"})
+                continue
+
         num_components = 1
         if cv2 is not None:
             num_labels, _ = cv2.connectedComponents(new_mask.astype(np.uint8), connectivity=8)
-            num_components = num_labels - 1  # subtract background
+            num_components = num_labels - 1
+        if num_components > 1 and cumulative_mask is not None:
+            coverage = float(np.count_nonzero(new_mask & cumulative_mask) / max(1, new_area))
+            if coverage >= containment_threshold:
+                candidate["rejection_reason"] = "discontiguous_covered_by_cumulative"
+                candidate["cumulative_coverage"] = coverage
+                report.append({key: value for key, value in candidate.items() if key != "mask"})
+                continue
 
-        rejected = False
-        if num_components <= 1:
-            # Contiguous: bidirectional pairwise check
-            # Step 1: is new mask covered by any kept mask?
-            covered_by_kept = False
-            for kept in _keep:
-                kept_mask = np.asarray(kept["mask"], dtype=bool)
-                intersection = int(np.count_nonzero(new_mask & kept_mask))
-                coverage = intersection / max(1, new_area)
-                if coverage >= containment_threshold:
-                    covered_by_kept = True
-                    break
-            if covered_by_kept:
-                candidate["rejection_reason"] = "covered_by_larger_mask"
-                report.append({k: v for k, v in candidate.items() if k != "mask"})
-                rejected = True
-            else:
-                # Step 2: does new mask cover any kept masks? Boot ALL that are covered.
-                to_remove: list[int] = []
-                for i, kept in enumerate(_keep):
-                    kept_mask = np.asarray(kept["mask"], dtype=bool)
-                    kept_area = int(np.count_nonzero(kept_mask))
-                    intersection = int(np.count_nonzero(new_mask & kept_mask))
-                    coverage = intersection / max(1, kept_area)
-                    if coverage >= containment_threshold:
-                        kept["rejection_reason"] = "covered_by_larger_new"
-                        report.append({k: v for k, v in kept.items() if k != "mask"})
-                        to_remove.append(i)
-                        # update cumulative_mask: remove the booted mask's contribution
-                        # (rebuild from scratch below)
-                for i in reversed(to_remove):
-                    _keep.pop(i)
-                if to_remove:
-                    # Rebuild cumulative_mask from remaining kept masks
-                    if _keep:
-                        cumulative_mask = np.asarray(_keep[0]["mask"], dtype=bool).copy()
-                        for kept in _keep[1:]:
-                            cumulative_mask |= np.asarray(kept["mask"], dtype=bool)
-                    else:
-                        cumulative_mask = None
+        matched_indices: list[int] = []
+        for kept_index, kept_candidate in enumerate(kept):
+            kept_mask = np.asarray(kept_candidate["mask"], dtype=bool)
+            kept_area = int(np.count_nonzero(kept_mask))
+            intersection = int(np.count_nonzero(new_mask & kept_mask))
+            new_coverage = intersection / max(1, new_area)
+            kept_coverage = intersection / max(1, kept_area)
+            if new_coverage >= containment_threshold or kept_coverage >= containment_threshold:
+                matched_indices.append(kept_index)
+
+        if matched_indices:
+            _merge_candidate_union(kept, matched_indices, candidate, image_area, report)
         else:
-            # Discontiguous: Step 1 = check against cumulative union of all kept masks
-            covered_by_cumu = False
-            if cumulative_mask is not None:
-                overlap = np.count_nonzero(new_mask & cumulative_mask)
-                coverage = overlap / max(1, new_area)
-                if coverage >= containment_threshold:
-                    candidate["rejection_reason"] = "discontiguous_covered_by_cumulative"
-                    report.append({k: v for k, v in candidate.items() if k != "mask"})
-                    rejected = True
-                    covered_by_cumu = True
+            kept.append(candidate)
 
-            if not covered_by_cumu:
-                # Step 2: does this discontiguous mask cover any kept masks? Boot ALL that are covered.
-                to_remove_dc: list[int] = []
-                for i, kept in enumerate(_keep):
-                    kept_mask = np.asarray(kept["mask"], dtype=bool)
-                    kept_area = int(np.count_nonzero(kept_mask))
-                    intersection = int(np.count_nonzero(new_mask & kept_mask))
-                    coverage = intersection / max(1, kept_area)
-                    if coverage >= containment_threshold:
-                        kept["rejection_reason"] = "covered_by_larger_new"
-                        report.append({k: v for k, v in kept.items() if k != "mask"})
-                        to_remove_dc.append(i)
-                for i in reversed(to_remove_dc):
-                    _keep.pop(i)
-                if to_remove_dc:
-                    if _keep:
-                        cumulative_mask = np.asarray(_keep[0]["mask"], dtype=bool).copy()
-                        for kept in _keep[1:]:
-                            cumulative_mask |= np.asarray(kept["mask"], dtype=bool)
-                    else:
-                        cumulative_mask = None
+        cumulative_mask = None
+        for kept_candidate in kept:
+            kept_mask = np.asarray(kept_candidate["mask"], dtype=bool)
+            cumulative_mask = kept_mask.copy() if cumulative_mask is None else (cumulative_mask | kept_mask)
 
-        if rejected:
-            continue
+    kept.sort(key=lambda item: float(item.get("selection_score", 0.0)), reverse=True)
+    return kept
 
-        _keep.append(candidate)
-        if cumulative_mask is None:
-            cumulative_mask = new_mask.copy()
+
+def _sam2_auto_candidate_pool(
+    image_path: Path,
+    output_mask_dir: Path,
+    min_area_ratio: float,
+    max_area_ratio: float,
+    border_fraction_threshold: float,
+    mask_clean_kernel: int,
+    save_candidates: bool,
+    device: str | None,
+    background_exclusion_mask: np.ndarray | None,
+    points_per_side: int | None = None,
+    crop_n_layers: int | None = None,
+    pred_iou_thresh: float | None = None,
+    stability_score_thresh: float | None = None,
+    depth_map: np.ndarray | None = None,
+    depth_points_per_side: int | None = None,
+    depth_crop_n_layers: int | None = None,
+    depth_pred_iou_thresh: float | None = None,
+    depth_stability_score_thresh: float | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, Image.Image]:
+    if device is None:
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            device = "mps"
         else:
-            cumulative_mask |= new_mask
+            device = "cpu"
 
-    candidates = _keep
-    candidates.sort(key=lambda item: float(item.get("selection_score", 0.0)), reverse=True)
+    image = Image.open(image_path).convert("RGB")
+    image_np = np.asarray(image)
+    image_area = float(image_np.shape[0] * image_np.shape[1])
+    model = _load_langsam(device)
+    generator_settings = _configure_sam2_auto_generator(
+        model,
+        points_per_side=points_per_side,
+        crop_n_layers=crop_n_layers,
+        pred_iou_thresh=pred_iou_thresh,
+        stability_score_thresh=stability_score_thresh,
+    )
+    report: list[dict[str, Any]] = [{"stage": "sam2_auto_generator", **generator_settings}]
+
+    rgb_proposals = _sam2_auto_generate(model, image)
+    rgb_candidates = _hard_filter_sam2_proposals(
+        raw_proposals=rgb_proposals,
+        source="rgb",
+        image_np=image_np,
+        image_area=image_area,
+        min_area_ratio=min_area_ratio,
+        max_area_ratio=max_area_ratio,
+        border_fraction_threshold=border_fraction_threshold,
+        mask_clean_kernel=mask_clean_kernel,
+        background_exclusion_mask=background_exclusion_mask,
+        max_candidates=None,
+        report=report,
+    )
+
+    depth_candidates: list[dict[str, Any]] = []
+    depth_image = _depth_map_to_near_white_image(depth_map, image_np.shape[:2])
+    if depth_image is not None:
+        depth_generator_settings = _configure_sam2_auto_generator(
+            model,
+            points_per_side=depth_points_per_side if depth_points_per_side is not None else points_per_side,
+            crop_n_layers=depth_crop_n_layers if depth_crop_n_layers is not None else crop_n_layers,
+            pred_iou_thresh=depth_pred_iou_thresh if depth_pred_iou_thresh is not None else pred_iou_thresh,
+            stability_score_thresh=depth_stability_score_thresh if depth_stability_score_thresh is not None else stability_score_thresh,
+        )
+        report.append({"stage": "depth_sam2_auto_generator", **depth_generator_settings})
+        depth_proposals = _sam2_auto_generate(model, depth_image)
+        depth_candidates = _hard_filter_sam2_proposals(
+            raw_proposals=depth_proposals,
+            source="depth",
+            image_np=image_np,
+            image_area=image_area,
+            min_area_ratio=min_area_ratio,
+            max_area_ratio=max_area_ratio,
+            border_fraction_threshold=border_fraction_threshold,
+            mask_clean_kernel=mask_clean_kernel,
+            background_exclusion_mask=background_exclusion_mask,
+            max_candidates=None,
+            report=report,
+        )
+
+    depth_gradient, valid_depth_mask = _normalized_depth_gradient(depth_map, image_np.shape[:2])
+    rgb_candidates = _merge_candidates_with_depth_edges(
+        candidates=rgb_candidates,
+        image_area=image_area,
+        depth_gradient=depth_gradient,
+        valid_depth_mask=valid_depth_mask,
+        report=report,
+        reject_internal_depth_edges=False,
+    )
+    candidates = _merge_candidates_with_depth_edges(
+        candidates=depth_candidates,
+        image_area=image_area,
+        depth_gradient=depth_gradient,
+        valid_depth_mask=valid_depth_mask,
+        report=report,
+        initial_kept=rgb_candidates,
+        reject_internal_depth_edges=True,
+    )
+    candidates = _resolve_overlaps_by_depth(candidates, depth_map)
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
         for candidate in candidates:
-            candidate_path = candidate_dir / f"proposal_{int(candidate['proposal_index']):03d}.png"
+            source = str(candidate.get("source", "rgb"))
+            candidate_path = candidate_dir / f"{source}_proposal_{int(candidate['proposal_index']):03d}.png"
             _save_mask_png(candidate["mask"], candidate_path)
             candidate["mask_path"] = str(candidate_path.resolve())
     return candidates, report, model, image
@@ -718,31 +1002,66 @@ def generate_masks_with_sam2_langsam_pipeline(
     sam2_crop_n_layers: int | None = None,
     sam2_pred_iou_thresh: float | None = None,
     sam2_stability_score_thresh: float | None = None,
+    depth_sam2_points_per_side: int | None = None,
+    depth_sam2_crop_n_layers: int | None = None,
+    depth_sam2_pred_iou_thresh: float | None = None,
+    depth_sam2_stability_score_thresh: float | None = None,
     preserve_unclaimed_sam2: int = 24,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    t_p0 = _log_step("  ②a sam2_auto", None)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from SmartGrasp.perception.vlm_1_detection import _openai_list_scene_objects
 
-    candidates, sam2_report, model, image = _sam2_auto_candidate_pool(
-        image_path=image_path,
-        output_mask_dir=output_mask_dir,
-        min_area_ratio=min_area_ratio,
-        max_area_ratio=max_area_ratio,
-        mask_clean_kernel=mask_clean_kernel,
-        save_candidates=save_candidates,
-        device=device,
-        background_exclusion_mask=background_exclusion_mask,
-        points_per_side=sam2_points_per_side,
-        crop_n_layers=sam2_crop_n_layers,
-        pred_iou_thresh=sam2_pred_iou_thresh,
-        stability_score_thresh=sam2_stability_score_thresh,
-        border_fraction_threshold=proposal_border_fraction_threshold,
-    )
-    t_p1 = _log_step("  ②a sam2_auto", t_p0)
     out_dir = output_mask_dir.parent
+
+    t_parallel = _log_step("  ②a sam2_auto + vlm1 parallel", None)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        sam2_future = executor.submit(
+            _sam2_auto_candidate_pool,
+            image_path=image_path,
+            output_mask_dir=output_mask_dir,
+            min_area_ratio=min_area_ratio,
+            max_area_ratio=max_area_ratio,
+            mask_clean_kernel=mask_clean_kernel,
+            save_candidates=save_candidates,
+            device=device,
+            background_exclusion_mask=background_exclusion_mask,
+            points_per_side=sam2_points_per_side,
+            crop_n_layers=sam2_crop_n_layers,
+            pred_iou_thresh=sam2_pred_iou_thresh,
+            stability_score_thresh=sam2_stability_score_thresh,
+            border_fraction_threshold=proposal_border_fraction_threshold,
+            depth_map=depth_map,
+            depth_points_per_side=depth_sam2_points_per_side,
+            depth_crop_n_layers=depth_sam2_crop_n_layers,
+            depth_pred_iou_thresh=depth_sam2_pred_iou_thresh,
+            depth_stability_score_thresh=depth_sam2_stability_score_thresh,
+        )
+        vlm1_future = executor.submit(
+            _openai_list_scene_objects,
+            image_path=image_path,
+            model_id=review_model_id,
+            api_key_env=review_api_key_env,
+            base_url=review_base_url,
+            timeout=review_timeout,
+            out_dir=out_dir,
+        )
+
+        candidates = sam2_report = model = image = None
+        scene_objects = scene_raw_output = None
+        for future in as_completed([sam2_future, vlm1_future]):
+            if future == sam2_future:
+                candidates, sam2_report, model, image = future.result()
+                _log_step("  ②a sam2_auto done", t_parallel)
+            else:
+                scene_objects, scene_raw_output = future.result()
+                _log_step("  ②a vlm1_scene_objects done", t_parallel)
+    t_parallel_done = _log_step("  ②a parallel total", t_parallel)
+
     label_path = out_dir / "label_1_sam2auto.png"
     _draw_sam2_auto_label_image(image_path, candidates, label_path)
     parts_sheet_path = _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
     try:
+        t_review = _log_step("  ②b vlm2_sam2_review", None)
         review_objects, raw_review = _openai_review_sam2_candidates(
             image_path=image_path,
             label_image_path=label_path,
@@ -753,15 +1072,19 @@ def generate_masks_with_sam2_langsam_pipeline(
             base_url=review_base_url,
             timeout=review_timeout,
             out_dir=out_dir,
+            scene_objects=scene_objects,
+            scene_raw_output=scene_raw_output,
         )
+        _log_step("  ②b vlm2_sam2_review", t_review)
     except Exception as exc:
-        _log_step("  ②b openai_review FAILED", t_p1)
+        _log_step("  ②b openai_review FAILED", t_parallel_done)
         raise RuntimeError(f"OpenAI review failed — API error. Aborting. Error: {exc}") from exc
 
     if not review_objects:
-        _log_step("  ②b openai_review returned empty", t_p1)
+        _log_step("  ②b openai_review returned empty", t_parallel_done)
         raise RuntimeError("OpenAI review returned no objects — empty response. Aborting.")
 
+    t_finalize = _log_step("  ②c langsam_refine + unclaimed", None)
     mask_records: list[dict[str, Any]] = []
     claimed_sam2_ids: set[int] = set()
     with Image.open(image_path).convert("RGB") as source_image:
@@ -869,7 +1192,5 @@ def generate_masks_with_sam2_langsam_pipeline(
         {"stage": "openai_sam2_review", "objects": review_objects, "raw_model_output": raw_review, "error": None},
         {"stage": "sam2_unclaimed_preservation", "max_unclaimed": int(preserve_unclaimed_sam2), "claimed_sam2_ids": sorted(claimed_sam2_ids)},
     ]
-    _log_step("  ②c langsam_refine + unclaimed", t_p1)
+    _log_step("  ②c langsam_refine + unclaimed", t_finalize)
     return mask_records, report
-
-
