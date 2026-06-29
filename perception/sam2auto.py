@@ -21,7 +21,6 @@ from SmartGrasp.perception.background import (
     LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD,
 )
 from SmartGrasp.perception.vlm_2_assemble import _openai_review_sam2_candidates
-from SmartGrasp.perception.langsam import _langsam_predict, _select_langsam_mask_for_review_object
 
 try:
     import cv2  # type: ignore
@@ -1104,102 +1103,42 @@ def generate_masks_with_sam2_langsam_pipeline(
         _log_step("  ②b openai_review returned empty", t_parallel_done)
         raise RuntimeError("OpenAI review returned no objects — empty response. Aborting.")
 
-    t_finalize = _log_step("  ②c langsam_refine + unclaimed", None)
+    t_finalize = _log_step("  ②c anchor_assembly", None)
     mask_records: list[dict[str, Any]] = []
-    claimed_sam2_ids: set[int] = set()
-    with Image.open(image_path).convert("RGB") as source_image:
-        image_np = np.asarray(source_image)
-        for item in review_objects:
-            sam2_ids = [int(v) for v in item.get("sam2_ids", []) if int(v) > 0]
-            claimed_sam2_ids.update(sam2_ids)
-            object_id = int(item["id"])
-            description = str(item["description"])
-            status = str(item.get("status", "")).lower()
+    for item in review_objects:
+        sam2_ids = [int(v) for v in item.get("sam2_ids", []) if int(v) > 0]
+        object_id = int(item["id"])
+        description = str(item["description"])
 
-            # Build SAM2 anchor mask from assigned ids
-            anchor_masks = []
-            for sam2_id in sam2_ids:
-                idx = sam2_id - 1
-                if 0 <= idx < len(candidates):
-                    anchor_masks.append(np.asarray(candidates[idx]["mask"], dtype=bool))
-            anchor_mask = np.any(np.stack(anchor_masks, axis=0), axis=0) if anchor_masks else None
-
-            best_mask: np.ndarray | None = None
-            backend = "anchor"
-            langsam_meta: dict[str, Any] = {}
-
-            if status == "missing" or anchor_mask is None:
-                # No SAM2 parts assigned — nothing to do
-                continue
-
-            if status == "complete":
-                # VLM says SAM2 mask is good enough — skip LangSAM, use anchor directly
-                best_mask = anchor_mask
-                langsam_meta = {"fallback": "complete_skip_langsam"}
-            else:
-                # incomplete or unknown — run LangSAM refinement
-                prompt = (
-                    f"{description}. Segment the complete physical object instance. "
-                    "Include all visible parts of this one object. Do not include the tray, table, bin, or adjacent objects."
-                )
-                masks, scores, boxes = _langsam_predict(model, source_image, prompt)
-                best_mask, selected_candidate, candidate_metadata = _select_langsam_mask_for_review_object(
-                    masks=masks,
-                    scores=scores,
-                    review_object=item,
-                    candidates=candidates,
-                    background_exclusion_mask=background_exclusion_mask,
-                    mask_clean_kernel=mask_clean_kernel,
-                    image_shape=source_image.size[::-1],
-                )
-                langsam_meta = selected_candidate if selected_candidate else {}
-                langsam_meta["langsam_candidates"] = candidate_metadata
-                if best_mask is None and anchor_mask is not None:
-                    # LangSAM failed, fall back to anchor
-                    best_mask = anchor_mask
-                    langsam_meta["fallback"] = langsam_meta.get("fallback", "langsam_failed")
-                elif selected_candidate.get("merge_policy") == "sam2_anchor_union_langsam":
-                    backend = "fusion"
-                elif selected_candidate.get("fallback"):
-                    backend = "anchor"
-                else:
-                    backend = "langsam"
-
-            if best_mask is None:
-                continue
-            best_mask = _clean_mask(best_mask, mask_clean_kernel)
-            if int(np.count_nonzero(best_mask)) == 0:
-                continue
-            cx, cy = _mask_centroid_xy(best_mask)
-            filename = f"{object_id:03d}_{backend}_{_safe_label(description)}.png"
-            mask_path = output_mask_dir / filename
-            _save_mask_png(best_mask, mask_path)
-            mask_records.append(
-                {
-                    "node_id": len(mask_records),
-                    "object_id": object_id,
-                    "label": description,
-                    "description": description,
-                    "point": {"x": int(cx), "y": int(cy)},
-                    "segmentation_backend": backend,
-                    "sam2_ids": sam2_ids,
-                    "review_status": item.get("status"),
-                    "selected_langsam_candidate": langsam_meta,
-                    "langsam_candidates": langsam_meta.get("langsam_candidates", []),
-                    "mask_path": str(mask_path.resolve()),
-                    "mask_area": int(np.count_nonzero(best_mask)),
-                    "mask_array": best_mask,
-                }
-            )
-
-        mask_records = _append_unclaimed_sam2_candidates(
-            mask_records=mask_records,
-            candidates=candidates,
-            claimed_sam2_ids=claimed_sam2_ids,
-            image_np=image_np,
-            output_mask_dir=output_mask_dir,
-            max_unclaimed=preserve_unclaimed_sam2,
-            depth_map=depth_map,
+        # Build SAM2 anchor mask from assigned ids
+        anchor_masks = []
+        for sam2_id in sam2_ids:
+            idx = sam2_id - 1
+            if 0 <= idx < len(candidates):
+                anchor_masks.append(np.asarray(candidates[idx]["mask"], dtype=bool))
+        if not anchor_masks:
+            continue
+        best_mask = np.any(np.stack(anchor_masks, axis=0), axis=0)
+        best_mask = _clean_mask(best_mask, mask_clean_kernel)
+        if int(np.count_nonzero(best_mask)) == 0:
+            continue
+        cx, cy = _mask_centroid_xy(best_mask)
+        filename = f"{object_id:03d}_anchor_{_safe_label(description)}.png"
+        mask_path = output_mask_dir / filename
+        _save_mask_png(best_mask, mask_path)
+        mask_records.append(
+            {
+                "node_id": len(mask_records),
+                "object_id": object_id,
+                "label": description,
+                "description": description,
+                "point": {"x": int(cx), "y": int(cy)},
+                "segmentation_backend": "anchor",
+                "sam2_ids": sam2_ids,
+                "mask_path": str(mask_path.resolve()),
+                "mask_area": int(np.count_nonzero(best_mask)),
+                "mask_array": best_mask,
+            }
         )
 
     report = [
@@ -1210,7 +1149,6 @@ def generate_masks_with_sam2_langsam_pipeline(
             "candidates": sam2_report[:200],
         },
         {"stage": "openai_sam2_review", "objects": review_objects, "raw_model_output": raw_review, "error": None},
-        {"stage": "sam2_unclaimed_preservation", "max_unclaimed": int(preserve_unclaimed_sam2), "claimed_sam2_ids": sorted(claimed_sam2_ids)},
     ]
-    _log_step("  ②c langsam_refine + unclaimed", t_finalize)
+    _log_step("  ②c anchor_assembly", t_finalize)
     return mask_records, report

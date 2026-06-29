@@ -125,7 +125,8 @@ def _openai_list_scene_objects(
         "Important: Use the overall geometry and function of an object rather than color or distance alone to determine object boundaries.\n\n"
         "Ignore the tray, table, bin, support surface, background and reflections. "
         "Count only real three-dimensional physical objects, not printed graphics, logos, labels, patterns, or illustrations. "
-        "Include small objects. "      
+        "Include small objects. "
+        "Don't merge different instances unless very confident."      
         "Strictly separate different instances that are overlapping or similar.\n\n"  
 
         "However, treat an object as a whole when it has multiple parts with different colors or materials. "

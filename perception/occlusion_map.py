@@ -584,21 +584,6 @@ def build_org_json(
         out_path=output_mask_dir.parent / "label_2_VLM_langsam.png",
     )
 
-    final_mask_quality_report: dict[str, Any] = {}
-    mask_records, final_mask_quality_report = _finalize_independent_scene_masks(
-        mask_records=mask_records,
-        background_exclusion_mask=background_exclusion_mask,
-        image_shape=tuple(depth_map.shape),
-    )
-    mask_records = _renumber_masks(mask_records, output_mask_dir)
-    t3 = _log_step("③ finalize_non_overlap", t2)
-
-    _draw_mask_records_label(
-        image_path=image_path,
-        mask_records=mask_records,
-        out_path=output_mask_dir.parent / "label_3_final.png",
-    )
-
     masks = np.stack([record["mask_array"] for record in mask_records], axis=0)
 
     if masks.shape[1:] != depth_map.shape:
@@ -634,9 +619,8 @@ def build_org_json(
             "path": str(depth_path.resolve()),
             "shape": [int(depth_map.shape[0]), int(depth_map.shape[1])],
         },
-        "segmentation_backend": "anchor-langsam-fusion",
+        "segmentation_backend": "anchor",
         "anchor_report": anchor_report,
-        "final_mask_quality_report": final_mask_quality_report,
         "background_mask_path": background_mask_path,
         "background_mask_source": background_mask_source,
         "save_candidates": bool(save_candidates),
@@ -653,6 +637,6 @@ def build_org_json(
 
     _write_json(output_json_path, payload)
 
-    t4 = _log_step("④ occlusion_graph", t3)
+    t4 = _log_step("④ occlusion_graph", t2)
     _log_step("total", t0)
     return payload
