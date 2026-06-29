@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,13 +11,12 @@ import numpy as np
 from PIL import Image
 
 from SmartGrasp.perception._shared import (
-    _clean_mask, _draw_mask_records_label, _load_depth_map,
+    _draw_mask_records_label, _load_depth_map,
     _log_step, _mask_centroid_xy, _prepare_mask_output_dir,
     _safe_label, _save_mask_png, _write_json, SMARTGRASP_ROOT,
 )
 from SmartGrasp.perception.background import (
-    generate_background_exclusion_mask,
-    background_overlap_fraction,
+    generate_background_exclusion_mask_from_source,
 )
 from SmartGrasp.perception.langsam import LANGSAM_MIN_AREA_RATIO
 
@@ -53,7 +51,6 @@ def _save_background_exclusion_mask(
 
 def _finalize_independent_scene_masks(
     mask_records: list[dict[str, Any]],
-    output_mask_dir: Path,
     background_exclusion_mask: np.ndarray | None,
     image_shape: tuple[int, int],
     containment_threshold: float = 0.92,
@@ -530,16 +527,20 @@ def build_org_json(
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
     preserve_unclaimed_sam2: int = 24,
-    debug: str | None = None,) -> dict[str, Any]:
+    background_mask_source: str = "depth",
+    gt_instances_objects: np.ndarray | None = None,
+) -> dict[str, Any]:
     t0 = _log_step("start", None)
 
     _prepare_mask_output_dir(output_mask_dir, save_candidates)
     depth_map = _load_depth_map(depth_path)
     background_exclusion_mask: np.ndarray | None = None
     try:
-        background_exclusion_mask = generate_background_exclusion_mask(
+        background_exclusion_mask = generate_background_exclusion_mask_from_source(
+            mask_source=background_mask_source,
             depth_map=depth_map,
             image=Image.open(image_path).convert("RGB"),
+            instances_objects=gt_instances_objects,
             mask_clean_kernel=mask_clean_kernel,
         )
     except Exception as exc:
@@ -586,7 +587,6 @@ def build_org_json(
     final_mask_quality_report: dict[str, Any] = {}
     mask_records, final_mask_quality_report = _finalize_independent_scene_masks(
         mask_records=mask_records,
-        output_mask_dir=output_mask_dir,
         background_exclusion_mask=background_exclusion_mask,
         image_shape=tuple(depth_map.shape),
     )
@@ -638,6 +638,7 @@ def build_org_json(
         "anchor_report": anchor_report,
         "final_mask_quality_report": final_mask_quality_report,
         "background_mask_path": background_mask_path,
+        "background_mask_source": background_mask_source,
         "save_candidates": bool(save_candidates),
         "graph": graph_payload,
     }

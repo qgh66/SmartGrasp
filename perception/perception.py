@@ -21,7 +21,8 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from SmartGrasp.perception._shared import _draw_labeled_image_matplotlib, _save_mask_png
+from SmartGrasp.perception._shared import _save_mask_png
+from SmartGrasp.perception.background import generate_background_exclusion_mask_from_source
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
 from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
@@ -165,6 +166,14 @@ def save_gt_masks(instances_objects: np.ndarray, out_dir: Path) -> list[dict[str
     return records
 
 
+def save_background_exclusion_mask(background: np.ndarray | None, mask_dir: Path) -> str | None:
+    if background is None or int(np.count_nonzero(background)) == 0:
+        return None
+    background_path = mask_dir / "000_background_mask.png"
+    _save_mask_png(np.asarray(background, dtype=bool), background_path)
+    return str(background_path.resolve())
+
+
 def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Path, title: str) -> None:
     fig, ax = plt.subplots(figsize=(8, 6))
     if graph.number_of_nodes() > 0:
@@ -301,33 +310,6 @@ def build_graph_from_gt_masks(
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     visualize_graph(graph, graph_payload, out_dir / "occlusion_graph.png", "GT Mask Occlusion Graph")
     return payload
-
-
-def write_final_perception_label(
-    image_path: Path,
-    graph_payload: dict[str, Any],
-    out_dir: Path,
-) -> Path:
-    points_with_ids: list[tuple[int, int, int]] = []
-    for node in graph_payload.get("graph", {}).get("nodes", []):
-        point = node.get("point", {})
-        if "x" not in point or "y" not in point:
-            continue
-        points_with_ids.append((int(node.get("object_id", node["node_id"])), int(point["x"]), int(point["y"])))
-
-    out_path = out_dir / "label_1_points.png"
-    with Image.open(image_path) as image:
-        _draw_labeled_image_matplotlib(
-            image=image,
-            points_with_ids=points_with_ids,
-            out_png_path=str(out_path),
-        )
-        _draw_labeled_image_matplotlib(
-            image=image,
-            points_with_ids=points_with_ids,
-            out_png_path=str(out_dir / "perception_label.png"),
-        )
-    return out_path
 
 
 def reset_output_dir(out_dir: Path) -> None:
@@ -510,17 +492,17 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 _draw_sam2_auto_label_image,
                 _save_sam2_rgb_parts_sheet,
             )
-            from SmartGrasp.perception.background import generate_background_exclusion_mask
             bg_mask = None
             background_mask_path = None
             try:
-                bg_mask = generate_background_exclusion_mask(
-                    depth_map=depth, image=Image.open(image_path).convert("RGB"),
-                    mask_clean_kernel=args.mask_clean_kernel)
-                if bg_mask is not None and int(np.count_nonzero(bg_mask)) > 0:
-                    background_path = out_dir / "mask" / "000_background_mask.png"
-                    _save_mask_png(np.asarray(bg_mask, dtype=bool), background_path)
-                    background_mask_path = str(background_path.resolve())
+                bg_mask = generate_background_exclusion_mask_from_source(
+                    mask_source=args.mask,
+                    depth_map=depth,
+                    image=Image.open(image_path).convert("RGB"),
+                    instances_objects=instances_objects,
+                    mask_clean_kernel=args.mask_clean_kernel,
+                )
+                background_mask_path = save_background_exclusion_mask(bg_mask, out_dir / "mask")
             except Exception as exc:
                 print(f"bg_mask failed: {exc}", file=sys.stderr)
             candidates, report, _, _ = _sam2_auto_candidate_pool(
@@ -552,6 +534,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 "label_png": str(label_path.resolve()),
                 "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
                 "background_mask_path": background_mask_path,
+                "background_mask_source": args.mask,
                 "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
                 "report": report,
             }
@@ -611,6 +594,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
             preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
+            background_mask_source=args.mask,
+            gt_instances_objects=instances_objects if args.mask == "gt" else None,
         )
         visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
 
@@ -642,6 +627,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
             "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
             "background_mask_path": graph_payload.get("background_mask_path"),
+            "background_mask_source": graph_payload.get("background_mask_source"),
             "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
             "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
             "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
@@ -671,6 +657,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
     parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
+    parser.add_argument(
+        "--mask",
+        choices=["gt", "depth"],
+        default="gt",
+        help="Background exclusion mask source. gt uses the inverse union of GT object masks; depth uses depth+HSV generation. Default: gt.",
+    )
     parser.add_argument("--review-model-id", default="gpt-5.5")
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--review-base-url", default=None)

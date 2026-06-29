@@ -36,11 +36,6 @@ def _safe_label(label: str, max_len: int = 200) -> str:
     return normalized or "object"
 
 
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as file:
@@ -56,24 +51,6 @@ def _prepare_mask_output_dir(output_mask_dir: Path, save_candidates: bool) -> No
             candidate_dir = output_mask_dir.parent / candidate_dir_name
             if candidate_dir.exists():
                 shutil.rmtree(candidate_dir)
-
-
-def _resolve_path(points_json_path: Path, candidate: str) -> Path:
-    raw = Path(candidate)
-    if raw.is_absolute() and raw.exists():
-        return raw
-
-    search_roots = [
-        points_json_path.parent,
-        points_json_path.parent.parent,
-        Path.cwd(),
-    ]
-    for root in search_roots:
-        resolved = (root / raw).resolve()
-        if resolved.exists():
-            return resolved
-
-    raise FileNotFoundError(f"Could not resolve path {candidate!r} relative to {points_json_path}.")
 
 
 def _load_depth_map(depth_path: Path) -> np.ndarray:
@@ -259,14 +236,6 @@ def _box_xywh_to_xyxy(box: list[int]) -> list[int] | None:
     if width <= 0 or height <= 0:
         return None
     return [x, y, x + width, y + height]
-
-
-def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in candidate.items()
-        if key not in {"mask"}
-    }
 
 
 def _log_step(step: str, start: float | None = None) -> float:

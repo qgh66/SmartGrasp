@@ -5,14 +5,11 @@ from __future__ import annotations
 import base64
 import json
 import os
-import time
 from html import unescape
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
-
-from SmartGrasp.perception._shared import _log_step
 
 def _extract_json_from_text(text: str) -> dict[str, Any]:
     stripped = text.strip()
@@ -135,6 +132,9 @@ def _openai_list_scene_objects(
         "For example, pliers with red/yellow handles and black jaws are one object, not separate red, yellow, and black objects. "
         "A package with different parts, different labels and printed patterns is one object. "        
         "An object may not be contiguously visible if partially occluded.\n\n"
+
+        "Please examine clusters to identify clear boundaries of object instances when they are" \
+        "occluding each other. Then separate them. \n\n"
 
         "Use explicit and clear relative position words for every object, especially repeated similar objects. "
         "For each object, describe the complete object and list its visible parts.\n\n"

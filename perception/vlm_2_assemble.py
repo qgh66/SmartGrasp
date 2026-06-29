@@ -8,8 +8,6 @@ from html import unescape
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 from SmartGrasp.perception._shared import _log_step
 from SmartGrasp.perception.vlm_1_detection import (
     _openai_client, _image_data_url, _response_text,

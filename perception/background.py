@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 from PIL import Image
 
@@ -141,6 +139,48 @@ def generate_background_exclusion_mask(
     return _expand_background_from_seed(background, image, depth, mask_clean_kernel)
 
 
+def generate_gt_background_exclusion_mask(instances_objects: np.ndarray) -> np.ndarray:
+    """Build an exclusion mask from GT object instance ids.
+
+    Pixels with object id > 0 are foreground. Every remaining pixel is treated
+    as background/tray/table exclusion area.
+    """
+    instances = np.asarray(instances_objects)
+    if instances.ndim != 2:
+        raise ValueError(f"GT instances_objects must be 2D, got shape {instances.shape}.")
+    return instances <= 0
+
+
+def generate_background_exclusion_mask_from_source(
+    mask_source: str,
+    depth_map: np.ndarray,
+    image: Image.Image | None = None,
+    instances_objects: np.ndarray | None = None,
+    mask_clean_kernel: int = 3,
+) -> np.ndarray:
+    """Generate a background exclusion mask from the requested source."""
+    depth = np.asarray(depth_map, dtype=np.float32)
+
+    if mask_source == "gt":
+        if instances_objects is None:
+            raise ValueError("mask_source='gt' requires instances_objects.")
+        background = generate_gt_background_exclusion_mask(instances_objects)
+    elif mask_source == "depth":
+        background = generate_background_exclusion_mask(
+            depth_map=depth,
+            image=image,
+            mask_clean_kernel=mask_clean_kernel,
+        )
+    else:
+        raise ValueError(f"Unsupported background mask source: {mask_source}")
+
+    if background.shape != depth.shape:
+        raise ValueError(
+            f"Background mask shape must match depth shape: {background.shape} vs {depth.shape}."
+        )
+    return np.asarray(background, dtype=bool)
+
+
 def background_overlap_fraction(mask: np.ndarray, background_mask: np.ndarray | None) -> float:
     if background_mask is None or int(np.count_nonzero(background_mask)) == 0:
         return 0.0
@@ -178,5 +218,3 @@ def mask_boundary_depth_delta(
         return None, contact_pixels
 
     return float(abs(np.median(depth_a) - np.median(depth_b))), contact_pixels
-
-

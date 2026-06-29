@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,18 +11,17 @@ import torch
 from PIL import Image
 
 from SmartGrasp.perception._shared import (
-    _as_numpy_mask, _box_xywh_to_xyxy, _candidate_summary,
+    _as_numpy_mask, _box_xywh_to_xyxy,
     _clean_mask, _draw_labeled_image_matplotlib, _log_step,
-    _mask_bbox, _mask_centroid_xy, _mask_iou, _mask_overlap_fraction,
+    _mask_bbox, _mask_centroid_xy, _mask_iou,
     _proposal_label, _safe_label, _save_mask_png, _dilate_mask,
-    SMARTGRASP_ROOT,
 )
 from SmartGrasp.perception.background import (
     background_overlap_fraction, mask_boundary_depth_delta,
     LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD,
 )
 from SmartGrasp.perception.vlm_2_assemble import _openai_review_sam2_candidates
-from SmartGrasp.perception.langsam import _langsam_predict, _select_langsam_mask_for_review_object, LANGSAM_MIN_AREA_RATIO
+from SmartGrasp.perception.langsam import _langsam_predict, _select_langsam_mask_for_review_object
 
 try:
     import cv2  # type: ignore
@@ -871,9 +869,6 @@ def _save_sam2_rgb_parts_sheet(
         sheet_path = out_dir / "sam2_rgb_parts_sheet.png"
         sheet.save(sheet_path)
         return sheet_path
-
-
-UNCLAIMED_MIN_AREA_RATIO = 0.0007  # Minimum fraction of image area for an unclaimed SAM2 candidate (0.07%)
 
 
 def _append_unclaimed_sam2_candidates(

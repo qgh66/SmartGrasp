@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
 from SmartGrasp.perception._shared import (
-    _as_numpy_mask, _clean_mask, _mask_bbox, _mask_centroid_xy,
-    _mask_overlap_fraction, _normalize_box, _safe_label,
-    _save_mask_png,
+    _as_numpy_mask,
+    _clean_mask,
+    _mask_overlap_fraction,
+    _normalize_box,
 )
 from SmartGrasp.perception.background import (
     background_overlap_fraction,
     LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD,
 )
-from SmartGrasp.perception._shared import _proposal_label
 
 LANGSAM_MIN_AREA_RATIO = 0.0007  # Minimum fraction of image area for a valid LangSAM mask (0.07%)
 
@@ -169,4 +168,3 @@ def _select_langsam_mask_for_review_object(
         selected["merged_area"] = int(np.count_nonzero(merged))
         return merged, selected, metadata
     return best_mask, selected, metadata
-
