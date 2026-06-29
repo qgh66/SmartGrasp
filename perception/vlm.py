@@ -85,7 +85,7 @@ def review_and_assign_sam2(
     base_url: str | None,
     timeout: float,
     out_dir: Path,
-    max_labels: int = 30,
+    max_labels: int = 35,
 ) -> list[dict[str, Any]]:
     """Single VLM call: list objects + assign SAM2 parts in one prompt.
 
@@ -100,31 +100,33 @@ def review_and_assign_sam2(
     ]
 
     prompt = (
-        "You are looking at a top-down bin-picking scene. "
+        "You are looking at a top-down scene photo. "
         "Three images are provided: (1) the original RGB photo, "
         "(2) a numbered overlay where each colored region is a SAM2 mask candidate, "
         "(3) a contact sheet of numbered RGB cutouts, one per SAM2 candidate.\n\n"
 
-        "==== STEP 1: LIST OBJECTS ====\n"
-        "Examine the original scene image. Ignore the tray, table, bin, "
-        "background surface, shadows, and reflections. "
-        "List every real physical object that is visible or partially visible. "
+        "==== STEP 1: LIST OBJECT INSTANCES ====\n"
+        "Examine the original scene image. Ignore the tray, table, background surface, and shadows. "
+        "List every real physical object instance that is visible or partially visible. "
+        "Important: Use the general geometries and usages of the objects to identify their boundaries. "
         "Apart from the original RGB photo, you can use the numbered overlay and the cutout sheet to help understand the scene."
-        "Include small objects (bolts, screws, small tools).\n\n"
+        "Include small objects (e.g. bolts, screws). Separate different object instances, especially when they are similar.\n"
 
-        "An OBJECT is one complete physical entity. It may have multiple parts "
-        "with different colors or materials (e.g. pliers with red/yellow handles "
-        "and black jaws is ONE object. A package with labels, flaps, or printed "
-        "patterns is ONE object. Printed graphics on a surface are NOT separate objects.)\n\n"
+        "An OBJECT INSTANCE is one complete physical entity. It may have multiple parts with different colors, shapes or materials "
+        "The parts may be disconnected visually if partially occluded."
+        "(e.g. pliers with red/yellow handles and black jaws is ONE object. "
+        "A package with labels, flaps, or printed patterns is ONE object. "
+        "Printed graphics on a surface are NOT separate objects.)\n"
 
-        "Two object instances that touch, overlap, look similar or even same are STILL separate "
-        "if they are physically different instances. Never merge different objects.\n\n"
+        "Strictly separate two object instances that touch if they are physically different instances. "
+        "Strictly separate two object instances that are same but are different instances. "
+        "Never merge object instances especially when they are of the same category. "
+        "Use relative position words (e.g. upper left, lower right, top center) to describe where each object is.\n\n"
 
         "==== STEP 2: ASSIGN SAM2 MASKS ====\n"
         "For each object, look at the numbered overlay and the cutout sheet. "
         "Assign the SAM2 mask ids that belong to that object. "
-        "A single object may have multiple SAM2 masks if it is fragmented "
-        "(e.g. partially occluded, or has multiple disconnected visible parts). "
+        "A single object may have multiple SAM2 masks if it is fragmented. "
         "Each SAM2 mask may be assigned to AT MOST ONE object.\n\n"
 
         "==== STEP 3: MAP VISIBLE PARTS ====\n"
@@ -134,9 +136,11 @@ def review_and_assign_sam2(
         "If an object has no usable SAM2 masks, give it empty sam2_ids.\n\n"
 
         "==== OUTPUT ====\n"
+        "Include relative position for every object, especially for multiple instances of the same category.\n"
         "Return only valid JSON with this schema:\n"
         '{"objects":[\n'
         '  {"id":1, "description":"red and yellow handled pliers",\n'
+        '   "relative_position":"lower right",\n'
         '   "sam2_ids":[3,7,12],\n'
         '   "visible_parts":[\n'
         '     {"description":"red handle","sam2_ids":[3]},\n'
@@ -145,8 +149,7 @@ def review_and_assign_sam2(
         '   ]}\n'
         ']}\n\n'
 
-        "Available SAM2 mask ids:\n" + "\n".join(candidate_lines)
-        + "\nImage order: original scene, numbered SAM2 overlay, numbered RGB cutout sheet."
+        #"Available SAM2 mask ids:\n" + "\n".join(candidate_lines)
     )
 
     client = _openai_client(api_key_env, base_url, timeout)
@@ -162,6 +165,7 @@ def review_and_assign_sam2(
             ],
         }],
         max_output_tokens=3000,
+        #reasoning={"effort": "high"},
         store=False,
     )
 
@@ -202,6 +206,7 @@ def review_and_assign_sam2(
         normalized.append({
             "id": int(item.get("id") or idx),
             "description": desc,
+            "relative_position": unescape(str(item.get("relative_position") or "").strip()),
             "sam2_ids": sam2_ids,
             "visible_parts": visible_parts,
         })

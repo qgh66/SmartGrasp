@@ -238,11 +238,20 @@ def _box_xywh_to_xyxy(box: list[int]) -> list[int] | None:
     return [x, y, x + width, y + height]
 
 
+_SCENE_ID: int | None = None
+
+
+def set_log_scene_id(scene_id: int) -> None:
+    global _SCENE_ID
+    _SCENE_ID = scene_id
+
+
 def _log_step(step: str, start: float | None = None) -> float:
     now = time.time()
+    prefix = f"[scene_{_SCENE_ID}]" if _SCENE_ID is not None else "[perception]"
     if start is not None:
         elapsed = now - start
-        print(f"[perception] {step}  ({elapsed:.1f}s)", flush=True)
+        print(f"{prefix} {step}  ({elapsed:.1f}s)", flush=True)
     else:
-        print(f"[perception] {step} ...", flush=True)
+        print(f"{prefix} {step} ...", flush=True)
     return now

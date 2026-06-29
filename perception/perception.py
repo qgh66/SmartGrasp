@@ -443,6 +443,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     row = select_sample(df, args.scene_id, args.query_obj_id)
     scene_id = int(row["sceneId"])
     query_obj_id = int(row["queryObjId"])
+    from SmartGrasp.perception._shared import set_log_scene_id
+    set_log_scene_id(scene_id)
 
     scene_dir = OUT_ROOT / f"scene_{scene_id}"
     out_dir = scene_dir / "perception"
@@ -540,7 +542,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             }
             debug_path = out_dir / "debug_sam2.json"
             debug_path.write_text(json.dumps(debug_out, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(json.dumps(debug_out, ensure_ascii=False, indent=2))
             return debug_out
 
         graph_payload = build_org_json(
@@ -616,12 +617,12 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         }
         summary_path = out_dir / "summary.json"
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return summary
 
     # GT-only mode: just return the gt summary
-    print(json.dumps(gt_summary, ensure_ascii=False, indent=2))
-    return gt_summary
+    summary_path = gt_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    return summary
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

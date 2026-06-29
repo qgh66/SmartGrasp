@@ -455,8 +455,6 @@ def _hard_filter_sam2_proposals(
             reason = "too_small"
         elif area_ratio > effective_max_area_ratio:
             reason = "too_large"
-        elif border_fraction > border_fraction_threshold:
-            reason = "touches_image_border"
         elif _is_support_like_horizontal_strip(mask) or _is_tray_or_background_like_proposal(image_np, mask, background_exclusion_mask):
             reason = "support_or_tray_like"
         elif background_overlap > 0.5:
@@ -801,7 +799,7 @@ def _save_sam2_rgb_parts_sheet(
     image_path: Path,
     candidates: list[dict[str, Any]],
     out_dir: Path,
-    max_labels: int = 30,
+    max_labels: int = 35,
 ) -> Path:
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)
