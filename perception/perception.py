@@ -543,29 +543,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             print(json.dumps(debug_out, ensure_ascii=False, indent=2))
             return debug_out
 
-        # ---- Debug: vlm1 only ----
-        if args.debug == "vlm1":
-            from SmartGrasp.perception.vlm_1_detection import _openai_list_scene_objects
-            scene_objects, raw_output = _openai_list_scene_objects(
-                image_path=image_path,
-                model_id=args.review_model_id,
-                api_key_env=args.review_api_key_env,
-                base_url=args.review_base_url,
-                timeout=args.review_timeout,
-                out_dir=out_dir,
-            )
-            debug_out = {
-                "debug": "vlm1",
-                "scene_id": scene_id,
-                "num_objects": len(scene_objects),
-                "scene_objects": scene_objects,
-                "raw_output": raw_output,
-            }
-            debug_path = out_dir / "debug_vlm1.json"
-            debug_path.write_text(json.dumps(debug_out, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(json.dumps(debug_out, ensure_ascii=False, indent=2))
-            return debug_out
-
         graph_payload = build_org_json(
             image_path=image_path,
             depth_path=depth_path.resolve(),
@@ -593,7 +570,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             depth_sam2_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
             depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-            preserve_unclaimed_sam2=args.preserve_unclaimed_sam2,
             background_mask_source=args.mask,
             gt_instances_objects=instances_objects if args.mask == "gt" else None,
         )
@@ -687,9 +663,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Depth SAM2 pred_iou_thresh; default: use --sam2-pred-iou-thresh")
     parser.add_argument("--depth-sam2-stability-score-thresh", type=float, default=None,
                         help="Depth SAM2 stability_score_thresh; default: use --sam2-stability-score-thresh")
-    parser.add_argument("--preserve-unclaimed-sam2", type=int, default=18)
     parser.add_argument("--save-candidates", action="store_true")
-    parser.add_argument("--debug", choices=["sam2", "vlm1"], default=None,
+    parser.add_argument("--debug", choices=["sam2"], default=None,
                         help="sam2: stop after SAM2 auto; vlm1: stop after first VLM response")
     parser.add_argument("--device", default=None)
     return parser

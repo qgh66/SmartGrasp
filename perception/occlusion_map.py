@@ -18,7 +18,6 @@ from SmartGrasp.perception._shared import (
 from SmartGrasp.perception.background import (
     generate_background_exclusion_mask_from_source,
 )
-from SmartGrasp.perception.langsam import LANGSAM_MIN_AREA_RATIO
 
 try:
     import networkx as nx
@@ -34,10 +33,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-FINALIZE_OVERLAP_LOSS_RATIO = 0.10  # If a mask loses >90% of its area during overlap resolution, treat as noise
-FINALIZE_CULLED_AREA_RATIO = 0.003  # Absolute minimum (0.3%) for a heavily-culled mask to survive
-
-
 def _save_background_exclusion_mask(
     background_exclusion_mask: np.ndarray | None,
     output_mask_dir: Path,
@@ -47,114 +42,6 @@ def _save_background_exclusion_mask(
     background_mask_path = output_mask_dir / "000_background_mask.png"
     _save_mask_png(np.asarray(background_exclusion_mask, dtype=bool), background_mask_path)
     return str(background_mask_path.resolve())
-
-
-def _finalize_independent_scene_masks(
-    mask_records: list[dict[str, Any]],
-    background_exclusion_mask: np.ndarray | None,
-    image_shape: tuple[int, int],
-    containment_threshold: float = 0.92,
-    overlap_threshold: float = 0.0,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Make final masks non-overlapping and report finalization quality."""
-    image_area = max(1, int(image_shape[0] * image_shape[1]))
-    background_area = (
-        int(np.count_nonzero(background_exclusion_mask))
-        if background_exclusion_mask is not None
-        else 0
-    )
-    coverage = {
-        "background_mask_coverage_ratio": float(background_area / image_area),
-        "background_mask_available": bool(background_area > 0),
-        "overlap_pixels_after_finalize": 0,
-    }
-    if not mask_records:
-        return mask_records, {
-            "dedup_report": [],
-            "overlap_report": [],
-            "coverage": coverage,
-        }
-
-    kept = list(mask_records)
-    dedup_report: list[dict[str, Any]] = []
-    masks = [np.asarray(record["mask_array"], dtype=bool).copy() for record in kept]
-    areas = [int(np.count_nonzero(mask)) for mask in masks]
-    explicit_scores = [
-        0 if str(record.get("segmentation_backend", "")) in ("langsam", "fusion") else 1
-        for record in kept
-    ]
-    order = sorted(range(len(masks)), key=lambda index: (explicit_scores[index], areas[index]))
-    owner = np.full(image_shape, -1, dtype=np.int32)
-    overlap_report: list[dict[str, Any]] = []
-
-    for index in order:
-        mask = masks[index]
-        overlap = mask & (owner >= 0)
-        overlap_pixels = int(np.count_nonzero(overlap))
-        if overlap_pixels > 0:
-            owner_ids, counts = np.unique(owner[overlap], return_counts=True)
-            overlap_report.append(
-                {
-                    "object_id": int(kept[index].get("object_id", index + 1)),
-                    "removed_overlap_pixels": overlap_pixels,
-                    "removed_overlap_fraction": float(overlap_pixels / max(1, areas[index])),
-                    "overlap_with": [
-                        {
-                            "object_id": int(kept[int(owner_id)].get("object_id", int(owner_id) + 1)),
-                            "pixels": int(count),
-                        }
-                        for owner_id, count in zip(owner_ids, counts)
-                        if int(owner_id) >= 0
-                    ],
-                }
-            )
-            mask = mask & (owner < 0)
-        masks[index] = mask
-        owner[mask] = index
-
-    finalized: list[dict[str, Any]] = []
-    removed_empty: list[dict[str, Any]] = []
-    image_area = max(1.0, float(image_shape[0] * image_shape[1]))
-    for index, record in enumerate(kept):
-        mask = masks[index]
-        area = int(np.count_nonzero(mask))
-        area_ratio = float(area) / image_area
-        original_area = max(1, areas[index])
-        overlap_loss = 1.0 - float(area) / float(original_area)
-        # Heavily culled mask: lost >90% during overlap resolution and remaining is tiny → noise
-        heavily_culled = overlap_loss > (1.0 - FINALIZE_OVERLAP_LOSS_RATIO) and area_ratio < FINALIZE_CULLED_AREA_RATIO
-        if area == 0 or heavily_culled or area_ratio < LANGSAM_MIN_AREA_RATIO:
-            removed = {key: value for key, value in record.items() if key != "mask_array"}
-            if heavily_culled:
-                removed["duplicate_reason"] = "removed_heavily_culled_by_overlap"
-                removed["overlap_loss_ratio"] = float(overlap_loss)
-                removed["original_area"] = int(original_area)
-            elif area == 0:
-                removed["duplicate_reason"] = "removed_after_overlap_exclusivity"
-            else:
-                removed["duplicate_reason"] = "removed_too_small_after_overlap"
-            if area_ratio < LANGSAM_MIN_AREA_RATIO and area > 0:
-                removed["removed_area_ratio"] = float(area_ratio)
-                removed["min_area_ratio_threshold"] = float(LANGSAM_MIN_AREA_RATIO)
-            removed_empty.append(removed)
-            continue
-        record["mask_array"] = mask
-        record["mask_area"] = area
-        cx, cy = _mask_centroid_xy(mask)
-        record["point"] = {"x": int(cx), "y": int(cy)}
-        old_path = Path(str(record.get("mask_path", "")))
-        if old_path.exists():
-            _save_mask_png(mask, old_path)
-        finalized.append(record)
-
-    return finalized, {
-        "dedup_report": dedup_report + removed_empty,
-        "overlap_report": overlap_report,
-        "coverage": coverage,
-        "containment_threshold": float(containment_threshold),
-        "overlap_threshold": float(overlap_threshold),
-    }
-
 
 
 def _renumber_masks(mask_records: list[dict[str, Any]], output_mask_dir: Path) -> list[dict[str, Any]]:
@@ -526,7 +413,6 @@ def build_org_json(
     depth_sam2_crop_n_layers: int | None = None,
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
-    preserve_unclaimed_sam2: int = 24,
     background_mask_source: str = "depth",
     gt_instances_objects: np.ndarray | None = None,
 ) -> dict[str, Any]:
@@ -573,15 +459,14 @@ def build_org_json(
         depth_sam2_pred_iou_thresh=depth_sam2_pred_iou_thresh,
         depth_sam2_stability_score_thresh=depth_sam2_stability_score_thresh,
         proposal_border_fraction_threshold=proposal_border_fraction_threshold,
-        preserve_unclaimed_sam2=preserve_unclaimed_sam2,
     )
-    t2 = _log_step("② sam2+vlm+langsam_pipeline", t1)
+    t2 = _log_step("② sam2+vlm_pipeline", t1)
 
     mask_records = _renumber_masks(mask_records, output_mask_dir)
     _draw_mask_records_label(
         image_path=image_path,
         mask_records=mask_records,
-        out_path=output_mask_dir.parent / "label_2_VLM_langsam.png",
+        out_path=output_mask_dir.parent / "label_2_vlm.png",
     )
 
     masks = np.stack([record["mask_array"] for record in mask_records], axis=0)

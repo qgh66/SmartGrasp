@@ -126,7 +126,6 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
         --sam2-crop-n-layers "$SAM2_CROP_N_LAYERS" \
         --sam2-pred-iou-thresh "$SAM2_PRED_IOU_THRESH" \
         --sam2-stability-score-thresh "$SAM2_STABILITY_SCORE_THRESH" \
-        --preserve-unclaimed-sam2 "${PRESERVE_UNCLAIMED_SAM2:-18}" \
         ${DEVICE:+--device "$DEVICE"} \
         ${DEBUG:+--debug "$DEBUG"} \
         ${SAVE_CANDIDATES:+--save-candidates}

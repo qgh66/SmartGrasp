@@ -13,14 +13,14 @@ from PIL import Image
 from SmartGrasp.perception._shared import (
     _as_numpy_mask, _box_xywh_to_xyxy,
     _clean_mask, _draw_labeled_image_matplotlib, _log_step,
-    _mask_bbox, _mask_centroid_xy, _mask_iou,
-    _proposal_label, _safe_label, _save_mask_png, _dilate_mask,
+    _mask_bbox, _mask_centroid_xy,
+    _safe_label, _save_mask_png,
 )
 from SmartGrasp.perception.background import (
-    background_overlap_fraction, mask_boundary_depth_delta,
+    background_overlap_fraction,
     LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD,
 )
-from SmartGrasp.perception.vlm_2_assemble import _openai_review_sam2_candidates
+from SmartGrasp.perception.vlm import review_and_assign_sam2
 
 try:
     import cv2  # type: ignore
@@ -870,138 +870,6 @@ def _save_sam2_rgb_parts_sheet(
         return sheet_path
 
 
-def _append_unclaimed_sam2_candidates(
-    mask_records: list[dict[str, Any]],
-    candidates: list[dict[str, Any]],
-    claimed_sam2_ids: set[int],
-    image_np: np.ndarray,
-    output_mask_dir: Path,
-    max_unclaimed: int,
-    depth_map: np.ndarray | None = None,
-    depth_threshold: float = 0.012,
-    min_contact_pixels: int = 4,
-    max_area_ratio: float = 0.18,
-    min_area_ratio: float = 0.0007,
-    iou_threshold: float = 0.55,
-) -> list[dict[str, Any]]:
-    if max_unclaimed <= 0:
-        return mask_records
-
-    image_area = float(image_np.shape[0] * image_np.shape[1])
-    existing_masks = [np.asarray(record["mask_array"], dtype=bool) for record in mask_records]
-    seed_items: list[dict[str, Any]] = []
-    for candidate_index, candidate in enumerate(candidates, start=1):
-        if candidate_index in claimed_sam2_ids:
-            continue
-        mask = np.asarray(candidate["mask"], dtype=bool)
-        if any(_mask_iou(mask, existing) > iou_threshold for existing in existing_masks):
-            continue
-        seed_items.append({"candidate_index": candidate_index, "candidate": candidate, "mask": mask})
-
-    if not seed_items:
-        return mask_records
-
-    parent = list(range(len(seed_items)))
-
-    def find(index: int) -> int:
-        while parent[index] != index:
-            parent[index] = parent[parent[index]]
-            index = parent[index]
-        return index
-
-    def union(left: int, right: int) -> None:
-        root_left = find(left)
-        root_right = find(right)
-        if root_left != root_right:
-            parent[root_right] = root_left
-
-    dilated = [_dilate_mask(item["mask"], 3) for item in seed_items]
-    for left in range(len(seed_items)):
-        for right in range(left + 1, len(seed_items)):
-            left_mask = seed_items[left]["mask"]
-            right_mask = seed_items[right]["mask"]
-            if not (np.any(dilated[left] & right_mask) or np.any(dilated[right] & left_mask)):
-                continue
-            should_merge = True
-            if depth_map is not None:
-                depth_delta, contact_pixels = mask_boundary_depth_delta(
-                    left_mask,
-                    right_mask,
-                    depth_map,
-                    boundary_kernel_size=3,
-                )
-                should_merge = (
-                    depth_delta is not None
-                    and contact_pixels >= min_contact_pixels
-                    and depth_delta <= depth_threshold
-                )
-            if should_merge:
-                union(left, right)
-
-    groups: dict[int, list[dict[str, Any]]] = {}
-    for index, item in enumerate(seed_items):
-        groups.setdefault(find(index), []).append(item)
-
-    grouped_items: list[dict[str, Any]] = []
-    for members in groups.values():
-        merged_mask = np.any(np.stack([member["mask"] for member in members], axis=0), axis=0)
-        area = int(np.count_nonzero(merged_mask))
-        area_ratio = float(area / max(1.0, image_area))
-        if area_ratio > max_area_ratio or area_ratio < min_area_ratio:
-            continue
-        best_member = max(members, key=lambda item: float(item["candidate"].get("selection_score", 0.0)))
-        grouped_items.append(
-            {
-                "mask": merged_mask,
-                "area": area,
-                "area_ratio": area_ratio,
-                "candidate_indices": [int(member["candidate_index"]) for member in members],
-                "members": [_candidate_summary(member["candidate"]) for member in members],
-                "selection_score": max(float(member["candidate"].get("selection_score", 0.0)) for member in members),
-                "best_candidate": best_member["candidate"],
-            }
-        )
-
-    grouped_items.sort(key=lambda item: (int(item["area"]), float(item["selection_score"])), reverse=True)
-
-    appended = 0
-    next_id = max([int(record.get("object_id", 0)) for record in mask_records] + [0]) + 1
-    for item in grouped_items:
-        mask = np.asarray(item["mask"], dtype=bool)
-        if any(_mask_iou(mask, existing) > iou_threshold for existing in existing_masks):
-            continue
-        label = _proposal_label(image_np, mask)
-        cx, cy = _mask_centroid_xy(mask)
-        object_id = next_id + appended
-        proposal_name = "_".join(str(index) for index in item["candidate_indices"][:8])
-        filename = f"{object_id:03d}_anchor_group_{proposal_name}.png"
-        mask_path = output_mask_dir / filename
-        _save_mask_png(mask, mask_path)
-        mask_records.append(
-            {
-                "node_id": len(mask_records),
-                "object_id": object_id,
-                "label": f"depth group {proposal_name}",
-                "description": label,
-                "point": {"x": int(cx), "y": int(cy)},
-                "segmentation_backend": "anchor",
-                "sam2_ids": item["candidate_indices"],
-                "selected_sam2_candidate": _candidate_summary(item["best_candidate"]),
-                "sam2_group_members": item["members"],
-                "sam2_group_area_ratio": float(item["area_ratio"]),
-                "mask_path": str(mask_path.resolve()),
-                "mask_area": int(np.count_nonzero(mask)),
-                "mask_array": mask,
-            }
-        )
-        existing_masks.append(mask)
-        appended += 1
-        if appended >= max_unclaimed:
-            break
-    return mask_records
-
-
-
 def generate_masks_with_sam2_langsam_pipeline(
     image_path: Path,
     output_mask_dir: Path,
@@ -1025,63 +893,38 @@ def generate_masks_with_sam2_langsam_pipeline(
     depth_sam2_crop_n_layers: int | None = None,
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
-    preserve_unclaimed_sam2: int = 24,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from SmartGrasp.perception.vlm_1_detection import _openai_list_scene_objects
-
     out_dir = output_mask_dir.parent
 
-    t_parallel = _log_step("  ②a sam2_auto + vlm1 parallel", None)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        sam2_future = executor.submit(
-            _sam2_auto_candidate_pool,
-            image_path=image_path,
-            output_mask_dir=output_mask_dir,
-            min_area_ratio=min_area_ratio,
-            max_area_ratio=max_area_ratio,
-            mask_clean_kernel=mask_clean_kernel,
-            save_candidates=save_candidates,
-            device=device,
-            background_exclusion_mask=background_exclusion_mask,
-            points_per_side=sam2_points_per_side,
-            crop_n_layers=sam2_crop_n_layers,
-            pred_iou_thresh=sam2_pred_iou_thresh,
-            stability_score_thresh=sam2_stability_score_thresh,
-            border_fraction_threshold=proposal_border_fraction_threshold,
-            depth_map=depth_map,
-            depth_points_per_side=depth_sam2_points_per_side,
-            depth_crop_n_layers=depth_sam2_crop_n_layers,
-            depth_pred_iou_thresh=depth_sam2_pred_iou_thresh,
-            depth_stability_score_thresh=depth_sam2_stability_score_thresh,
-        )
-        vlm1_future = executor.submit(
-            _openai_list_scene_objects,
-            image_path=image_path,
-            model_id=review_model_id,
-            api_key_env=review_api_key_env,
-            base_url=review_base_url,
-            timeout=review_timeout,
-            out_dir=out_dir,
-        )
-
-        candidates = sam2_report = model = image = None
-        scene_objects = scene_raw_output = None
-        for future in as_completed([sam2_future, vlm1_future]):
-            if future == sam2_future:
-                candidates, sam2_report, model, image = future.result()
-                _log_step("  ②a sam2_auto done", t_parallel)
-            else:
-                scene_objects, scene_raw_output = future.result()
-                _log_step("  ②a vlm1_scene_objects done", t_parallel)
-    t_parallel_done = _log_step("  ②a parallel total", t_parallel)
+    t_sam2 = _log_step("  ②a sam2_auto", None)
+    candidates, sam2_report, model, image = _sam2_auto_candidate_pool(
+        image_path=image_path,
+        output_mask_dir=output_mask_dir,
+        min_area_ratio=min_area_ratio,
+        max_area_ratio=max_area_ratio,
+        mask_clean_kernel=mask_clean_kernel,
+        save_candidates=save_candidates,
+        device=device,
+        background_exclusion_mask=background_exclusion_mask,
+        points_per_side=sam2_points_per_side,
+        crop_n_layers=sam2_crop_n_layers,
+        pred_iou_thresh=sam2_pred_iou_thresh,
+        stability_score_thresh=sam2_stability_score_thresh,
+        border_fraction_threshold=proposal_border_fraction_threshold,
+        depth_map=depth_map,
+        depth_points_per_side=depth_sam2_points_per_side,
+        depth_crop_n_layers=depth_sam2_crop_n_layers,
+        depth_pred_iou_thresh=depth_sam2_pred_iou_thresh,
+        depth_stability_score_thresh=depth_sam2_stability_score_thresh,
+    )
+    _log_step("  ②a sam2_auto", t_sam2)
 
     label_path = out_dir / "label_1_sam2auto.png"
     _draw_sam2_auto_label_image(image_path, candidates, label_path)
     parts_sheet_path = _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
     try:
-        t_review = _log_step("  ②b vlm2_sam2_review", None)
-        review_objects, raw_review = _openai_review_sam2_candidates(
+        t_review = _log_step("  ②b vlm_review", None)
+        review_objects = review_and_assign_sam2(
             image_path=image_path,
             label_image_path=label_path,
             parts_sheet_path=parts_sheet_path,
@@ -1091,17 +934,15 @@ def generate_masks_with_sam2_langsam_pipeline(
             base_url=review_base_url,
             timeout=review_timeout,
             out_dir=out_dir,
-            scene_objects=scene_objects,
-            scene_raw_output=scene_raw_output,
         )
-        _log_step("  ②b vlm2_sam2_review", t_review)
+        _log_step("  ②b vlm_review", t_review)
     except Exception as exc:
-        _log_step("  ②b openai_review FAILED", t_parallel_done)
-        raise RuntimeError(f"OpenAI review failed — API error. Aborting. Error: {exc}") from exc
+        _log_step("  ②b vlm_review FAILED", t_sam2)
+        raise RuntimeError(f"VLM review failed — API error. Aborting. Error: {exc}") from exc
 
     if not review_objects:
-        _log_step("  ②b openai_review returned empty", t_parallel_done)
-        raise RuntimeError("OpenAI review returned no objects — empty response. Aborting.")
+        _log_step("  ②b vlm_review returned empty", t_sam2)
+        raise RuntimeError("VLM review returned no objects — empty response. Aborting.")
 
     t_finalize = _log_step("  ②c anchor_assembly", None)
     mask_records: list[dict[str, Any]] = []
@@ -1148,7 +989,7 @@ def generate_masks_with_sam2_langsam_pipeline(
             "rgb_parts_sheet_png": str(parts_sheet_path.resolve()),
             "candidates": sam2_report[:200],
         },
-        {"stage": "openai_sam2_review", "objects": review_objects, "raw_model_output": raw_review, "error": None},
+        {"stage": "vlm_review", "objects": review_objects, "error": None},
     ]
     _log_step("  ②c anchor_assembly", t_finalize)
     return mask_records, report
