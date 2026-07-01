@@ -24,7 +24,7 @@ from models.graspnet import GraspNet, pred_decode
 from graspnetAPI import GraspGroup
 from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
-from simulation.gripper import ParallelJawGripper
+from simulation.gripper import JakaZu3VisualGripper, ParallelJawGripper
 from simulation.evaluator import GraspEvaluator
 
 
@@ -38,6 +38,32 @@ def parse_args():
     p.add_argument('--gui', action='store_true', help='打开 PyBullet GUI')
     p.add_argument('--device', default='cuda:0', help='推理设备')
     p.add_argument('--output', default='results_closed_loop.json', help='输出文件')
+    p.add_argument(
+        '--robot-model',
+        choices=('jaka', 'simple'),
+        default='jaka',
+        help='抓取回放使用的机器人模型；jaka=JAKA ZU3+Robotiq 可视化，simple=简化夹爪',
+    )
+    p.add_argument(
+        '--jaka-urdf',
+        default=None,
+        help='覆盖默认 JAKA ZU3 + Robotiq URDF 路径',
+    )
+    p.add_argument(
+        '--robot-base',
+        type=float,
+        nargs=3,
+        default=(-0.10, -0.35, 0.0),
+        metavar=('X', 'Y', 'Z'),
+        help='JAKA 机器人基座在 PyBullet 世界坐标中的位置',
+    )
+    p.add_argument(
+        '--no-demo-snap-to-object',
+        dest='demo_snap_to_object',
+        action='store_false',
+        help='关闭展示模式下的抓取中心吸附，使用严格候选抓取判定',
+    )
+    p.set_defaults(demo_snap_to_object=True)
     return p.parse_args()
 
 
@@ -124,10 +150,17 @@ def main():
     # 5. 物理仿真评估
     # ==============================================================
     print(f'[5/5] 仿真评估 Top-{args.top_k}...')
-    gripper = ParallelJawGripper()
+    if args.robot_model == 'jaka':
+        gripper = JakaZu3VisualGripper(
+            robot_urdf=args.jaka_urdf,
+            robot_base_position=tuple(args.robot_base),
+        )
+    else:
+        gripper = ParallelJawGripper()
     gripper.load()
     evaluator = GraspEvaluator(object_id=obj_id, gripper=gripper,
-                               point_cloud=pc[0], gui=args.gui)
+                               point_cloud=pc[0], gui=args.gui,
+                               demo_snap_to_object=args.demo_snap_to_object)
     results = evaluator.evaluate(gg, top_k=args.top_k)
 
     n_ok = sum(1 for r in results if r['success'])

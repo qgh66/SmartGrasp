@@ -138,13 +138,19 @@ OUTPUT=results/reveal_push_jaka.json \
 bash scripts/run_reveal_push_jaka.sh
 ```
 
-当前默认 `--robot-model jaka`，会使用本机已有的 JAKA ZU3 + Robotiq URDF：
+当前默认 `--robot-model jaka`，会使用仓库内复制好的 JAKA ZU3 + Robotiq URDF：
 
 ```text
-/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/robotiq_test/config/gazebo_jaka_zu3_robotiq.urdf
+/home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/assets/robots/jaka_zu3/gazebo_jaka_zu3_robotiq.urdf
 ```
 
-这不是从网络下载的模型。代码会在运行时把 URDF 里的 `package://...` mesh 路径映射到本机已有 mesh。
+这不是从网络下载的模型。URDF 和它依赖的 JAKA/Robotiq mesh 都已经放在仓库内：
+
+```text
+/home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/assets/robots/jaka_zu3/
+```
+
+代码会在运行时把 URDF 里的 `package://...` mesh 路径映射到这个仓库内目录，因此不再依赖 `/home/admin128/Desktop/...` 或 `/home/admin128/JunyuFan/...` 里的机器人模型文件。
 
 当前设计：
 
@@ -253,13 +259,106 @@ pred_decode: 解析网络输出 → GraspGroup (抓取位姿 + 几何参数)
 4. 向上提升（检查物体是否跟随）
 5. 判定成功/失败（物体 Z > 0.10m）
 
-### 启动jaka真实模型的仿真：
-```
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+---
 
-conda run --no-capture-output -n smartgrasp python gui/app.py \
-  --host 0.0.0.0 \
-  --port 8051 \
-  --results results/reveal_push_jaka.json \
-  --viz-data results/reveal_push_jaka_viz_data.pkl
+# 常用仿真命令（直接复制）
+
+所有命令都从 `graspnet-workspace` 目录运行：
+
+```bash
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+```
+
+## 1. 生成 JAKA ZU3 + Robotiq 可视化的 push 仿真结果
+
+```bash
+conda run -n smartgrasp bash scripts/run_reveal_push_jaka.sh
+```
+
+输出：
+
+```text
+results/reveal_push_jaka.json
+results/reveal_push_jaka_viz_data.pkl
+```
+
+## 2. 打开网页查看 JAKA push 回放
+
+```bash
+conda run --no-capture-output -n smartgrasp bash scripts/run_reveal_push_gui.sh
+```
+
+默认端口：
+
+```text
+http://127.0.0.1:8051
+```
+
+## 3. 使用原简化夹爪做 push 仿真
+
+```bash
+conda run -n smartgrasp bash scripts/run_reveal_push_simple.sh
+```
+
+## 4. 使用真实 RGB-D + mask 做 push 仿真
+
+需要把下面四个路径替换成真实文件：
+
+```bash
+RGB=/path/to/aligned_rgb.jpg \
+DEPTH=/path/to/aligned_depth.npy \
+MASK=/path/to/object_mask.png \
+INTRINSICS=/path/to/camera_intrinsics.json \
+conda run -n smartgrasp bash scripts/run_reveal_push_real_rgbd.sh
+```
+
+## 5. 生成 JAKA ZU3 + Robotiq 可视化的 GraspNet 抓取仿真
+
+```bash
+conda activate smartgrasp
+bash scripts/run_grasp_closed_loop.sh
+```
+
+输出：
+
+```text
+results/grasp_closed_loop.json
+results/grasp_closed_loop_viz_data.pkl
+```
+
+默认启用展示模式：如果 GraspNet 候选中心偏到桌面，会吸附到物体点云中心附近再执行完整 JAKA 回放。这样用于检查 JAKA/夹爪展示效果，不等价于严格抓取 benchmark。
+
+如需关闭展示模式，使用严格候选抓取判定：
+
+```bash
+DEMO_SNAP_TO_OBJECT=0 bash scripts/run_grasp_closed_loop.sh
+```
+
+如需回退到原简化夹爪抓取仿真：
+
+```bash
+ROBOT_MODEL=simple \
+PYTORCH_NVML_BASED_CUDA_CHECK=0 bash scripts/run_grasp_closed_loop.sh
+```
+
+## 6. 打开网页查看抓取仿真回放
+
+```bash
+RESULTS=results/grasp_closed_loop.json \
+VIZ_DATA=results/grasp_closed_loop_viz_data.pkl \
+conda run --no-capture-output -n smartgrasp bash scripts/run_reveal_push_gui.sh
+```
+
+## 7. 旧版 GraspNet + PyBullet 命令行抓取验证
+
+这个入口主要用于终端验证，不是最推荐的网页展示入口。
+
+```bash
+conda run -n smartgrasp bash scripts/run_grasp_simulation.sh
+```
+
+## 8. 纯 GraspNet 推理 Demo
+
+```bash
+conda run -n smartgrasp bash scripts/run_inference.sh
 ```

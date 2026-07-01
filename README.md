@@ -131,15 +131,16 @@ cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
 bash scripts/run_reveal_push_jaka.sh
 ```
 
-当前默认 `--robot-model jaka`，会加载本机已有的 JAKA ZU3 + Robotiq 模型做网页回放可视化：
+当前默认 `--robot-model jaka`，会加载仓库内复制好的 JAKA ZU3 + Robotiq URDF 做网页回放可视化：
 
 ```text
-/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/robotiq_test/config/gazebo_jaka_zu3_robotiq.urdf
+/home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/assets/robots/jaka_zu3/gazebo_jaka_zu3_robotiq.urdf
 ```
 
 说明：
 
 - JAKA ZU3 模型用于可视化和 IK 跟随。
+- JAKA/Robotiq 的 URDF 和 mesh 都在 `graspnet-workspace/assets/robots/jaka_zu3/`，不再依赖外部机器人模型目录。
 - push 接触仍由原来的简化夹爪碰撞体完成，避免复杂 URDF 碰撞导致仿真不稳定。
 - 如果要临时切回原来的简化模型，添加 `--robot-model simple`。
 
@@ -355,4 +356,90 @@ env -u LD_LIBRARY_PATH git status
 env -u LD_LIBRARY_PATH \
   GIT_SSH_COMMAND='ssh -i /home/admin128/.ssh/beilei_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o KexAlgorithms=ecdh-sha2-nistp256' \
   git push origin feat/GraspExecutionModule
+```
+
+---
+
+# 常用仿真命令（直接复制）
+
+所有命令都从 `graspnet-workspace` 目录运行：
+
+```bash
+cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+```
+
+## 1. 生成 JAKA ZU3 + Robotiq 可视化的 push 仿真结果
+
+```bash
+conda run -n smartgrasp bash scripts/run_reveal_push_jaka.sh
+```
+
+## 2. 打开网页查看 JAKA push 回放
+
+```bash
+conda run --no-capture-output -n smartgrasp bash scripts/run_reveal_push_gui.sh
+```
+
+默认端口：
+
+```text
+http://127.0.0.1:8051
+```
+
+## 3. 使用原简化夹爪做 push 仿真
+
+```bash
+conda run -n smartgrasp bash scripts/run_reveal_push_simple.sh
+```
+
+## 4. 使用真实 RGB-D + mask 做 push 仿真
+
+```bash
+RGB=/path/to/aligned_rgb.jpg \
+DEPTH=/path/to/aligned_depth.npy \
+MASK=/path/to/object_mask.png \
+INTRINSICS=/path/to/camera_intrinsics.json \
+conda run -n smartgrasp bash scripts/run_reveal_push_real_rgbd.sh
+```
+
+## 5. 生成 JAKA ZU3 + Robotiq 可视化的 GraspNet 抓取仿真
+
+```bash
+conda activate smartgrasp
+bash scripts/run_grasp_closed_loop.sh
+```
+
+默认启用展示模式：如果 GraspNet 候选中心偏到桌面，会吸附到物体点云中心附近再执行完整 JAKA 回放。这样用于检查 JAKA/夹爪展示效果，不等价于严格抓取 benchmark。
+
+如需关闭展示模式，使用严格候选抓取判定：
+
+```bash
+DEMO_SNAP_TO_OBJECT=0 bash scripts/run_grasp_closed_loop.sh
+```
+
+如需回退到原简化夹爪抓取仿真：
+
+```bash
+ROBOT_MODEL=simple \
+PYTORCH_NVML_BASED_CUDA_CHECK=0 bash scripts/run_grasp_closed_loop.sh
+```
+
+## 6. 打开网页查看抓取仿真回放
+
+```bash
+RESULTS=results/grasp_closed_loop.json \
+VIZ_DATA=results/grasp_closed_loop_viz_data.pkl \
+conda run --no-capture-output -n smartgrasp bash scripts/run_reveal_push_gui.sh
+```
+
+## 7. 旧版 GraspNet + PyBullet 命令行抓取验证
+
+```bash
+conda run -n smartgrasp bash scripts/run_grasp_simulation.sh
+```
+
+## 8. 纯 GraspNet 推理 Demo
+
+```bash
+conda run -n smartgrasp bash scripts/run_inference.sh
 ```

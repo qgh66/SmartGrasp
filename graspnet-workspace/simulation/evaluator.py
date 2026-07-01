@@ -100,10 +100,12 @@ class GraspEvaluator:
     """基于 PyBullet 的抓取物理评估器（逐帧轨迹版）。"""
 
     def __init__(self, object_id: int, gripper: ParallelJawGripper,
-                 point_cloud: np.ndarray = None, gui: bool = False):
+                 point_cloud: np.ndarray = None, gui: bool = False,
+                 demo_snap_to_object: bool = False):
         self.object_id = object_id
         self.gripper = gripper
         self.gui = gui
+        self.demo_snap_to_object = demo_snap_to_object
         if point_cloud is not None:
             self.obj_pts = point_cloud[point_cloud[:, 2] > 0.005]
         else:
@@ -138,24 +140,42 @@ class GraspEvaluator:
         depth = grasp.depth
         approach_dir = _unit(rot_m[:, 0], [0, 0, -1])
         pre_grasp_pos = center - approach_dir * (depth + approach_depth_offset)
+        snapped_from = None
 
         if self.obj_pts is not None and len(self.obj_pts) > 0:
             center_dist = float(np.linalg.norm(self.obj_pts - center, axis=1).min())
             if center_dist > MAX_GRASP_CENTER_DIST:
+                if self.demo_snap_to_object:
+                    snapped_from = center.copy()
+                    center, rot_m = self._snap_grasp_to_object(center, rot_m)
+                    approach_dir = _unit(rot_m[:, 0], [0, 0, -1])
+                    pre_grasp_pos = center - approach_dir * (depth + approach_depth_offset)
+                else:
+                    obj_pos_before, _ = p.getBasePositionAndOrientation(self.object_id)
+                    self._record_invalid_grasp_frame(
+                        frame_log, center, rot_m, width, 'grasp_center_not_on_object')
+                    return {'success': False, 'lift_z': obj_pos_before[2],
+                            'score': grasp.score, 'translation': center,
+                            'rotation': rot_m, 'width': width, 'depth': depth,
+                            'failure_reason': 'grasp_center_not_on_object',
+                            'center_object_dist': center_dist}
+
+        if min(float(center[2]), float(pre_grasp_pos[2])) < TABLE_Z + TABLE_CLEARANCE:
+            if self.demo_snap_to_object:
+                if snapped_from is None:
+                    snapped_from = center.copy()
+                center, rot_m = self._snap_grasp_to_object(center, rot_m)
+                approach_dir = _unit(rot_m[:, 0], [0, 0, -1])
+                pre_grasp_pos = center - approach_dir * (depth + approach_depth_offset)
+            else:
                 obj_pos_before, _ = p.getBasePositionAndOrientation(self.object_id)
+                self._record_invalid_grasp_frame(
+                    frame_log, center, rot_m, width, 'approach_below_table')
                 return {'success': False, 'lift_z': obj_pos_before[2],
                         'score': grasp.score, 'translation': center,
                         'rotation': rot_m, 'width': width, 'depth': depth,
-                        'failure_reason': 'grasp_center_not_on_object',
-                        'center_object_dist': center_dist}
-
-        if min(float(center[2]), float(pre_grasp_pos[2])) < TABLE_Z + TABLE_CLEARANCE:
-            obj_pos_before, _ = p.getBasePositionAndOrientation(self.object_id)
-            return {'success': False, 'lift_z': obj_pos_before[2],
-                    'score': grasp.score, 'translation': center,
-                    'rotation': rot_m, 'width': width, 'depth': depth,
-                    'failure_reason': 'approach_below_table',
-                    'approach_min_z': min(float(center[2]), float(pre_grasp_pos[2]))}
+                        'failure_reason': 'approach_below_table',
+                        'approach_min_z': min(float(center[2]), float(pre_grasp_pos[2]))}
 
         obj_pos_before = np.array(p.getBasePositionAndOrientation(self.object_id)[0])
 
@@ -201,9 +221,51 @@ class GraspEvaluator:
                                [0, 1, 0] if success else [1, 0, 0], 2.5, lifeTime=0)
             time.sleep(1.0)
 
-        return {'success': success, 'lift_z': obj_pos_after[2],
-                'score': grasp.score, 'translation': center,
-                'rotation': rot_m, 'width': width, 'depth': depth}
+        result = {'success': success, 'lift_z': obj_pos_after[2],
+                  'score': grasp.score, 'translation': center,
+                  'rotation': rot_m, 'width': width, 'depth': depth}
+        if snapped_from is not None:
+            result['demo_snapped_to_object'] = True
+            result['original_translation'] = snapped_from
+        return result
+
+    def _snap_grasp_to_object(self, center, rot_m):
+        obj_min = self.obj_pts.min(axis=0)
+        obj_max = self.obj_pts.max(axis=0)
+        snapped_center = (obj_min + obj_max) / 2.0
+        snapped_center[2] = max(
+            float(snapped_center[2]),
+            TABLE_Z + getattr(self.gripper, "FINGER_HEIGHT", 0.03) / 2.0 + TABLE_CLEARANCE,
+        )
+
+        x_axis = np.array([0.0, 0.0, -1.0])
+        y_hint = np.asarray(rot_m[:, 1], dtype=float).copy()
+        y_hint[2] = 0.0
+        y_axis = _unit(y_hint, [0.0, 1.0, 0.0])
+        z_axis = _unit(np.cross(x_axis, y_axis), [1.0, 0.0, 0.0])
+        y_axis = _unit(np.cross(z_axis, x_axis), [0.0, 1.0, 0.0])
+        snapped_rot = np.column_stack([x_axis, y_axis, z_axis])
+        return snapped_center, snapped_rot
+
+    def _record_invalid_grasp_frame(self, frame_log, center, rot_m, width, reason):
+        """Record a short replay for grasps rejected before execution.
+
+        This keeps the Dash animation on the real PyBullet/JAKA replay path
+        instead of falling back to the older synthetic gripper drawing.
+        """
+        preview_pos = np.asarray(center, dtype=float).copy()
+        min_z = TABLE_Z + getattr(self.gripper, "FINGER_HEIGHT", 0.03) / 2.0 + TABLE_CLEARANCE
+        preview_pos[2] = max(float(preview_pos[2]), min_z)
+        self.gripper.release_grasp()
+        self.gripper.set_opening(max(float(width), 0.06))
+        self.gripper.set_pose(preview_pos, rot_m)
+        self._gui_step(5, sleep=0.0)
+        frame_log.append({
+            'phase': reason,
+            'step': 'invalid',
+            'success': False,
+            **_snapshot(self.object_id, self.gripper),
+        })
 
     def _reset_object(self):
         pos, orn = p.getBasePositionAndOrientation(self.object_id)

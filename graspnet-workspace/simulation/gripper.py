@@ -121,22 +121,22 @@ class JakaZu3VisualGripper(ParallelJawGripper):
     existing evaluator's success/failure semantics.
     """
 
-    DEFAULT_URDF = (
-        "/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/"
-        "robotiq_test/config/gazebo_jaka_zu3_robotiq.urdf"
+    ASSET_DIR = (
+        Path(__file__).resolve().parents[1]
+        / "assets"
+        / "robots"
+        / "jaka_zu3"
     )
+    DEFAULT_URDF = str(ASSET_DIR / "gazebo_jaka_zu3_robotiq.urdf")
     PACKAGE_MAP = {
-        "package://jaka_description/meshes/jaka_zu3_meshes": (
-            "/home/admin128/JunyuFan/phantom/submodules/phantom-robosuite/"
-            "robosuite/models/assets/robots/jaka_zu3/meshes"
+        "package://jaka_description/meshes/jaka_zu3_meshes": str(
+            ASSET_DIR / "meshes" / "jaka_zu3_meshes"
         ),
-        "package://jaka_rviz/meshes/jaka_zu3_meshes": (
-            "/home/admin128/JunyuFan/phantom/submodules/phantom-robosuite/"
-            "robosuite/models/assets/robots/jaka_zu3/meshes"
+        "package://jaka_rviz/meshes/jaka_zu3_meshes": str(
+            ASSET_DIR / "meshes" / "jaka_zu3_meshes"
         ),
-        "package://robotiq_description/meshes": (
-            "/home/admin128/Desktop/liboyan/Trans_MP/lby_moveit/src/"
-            "robotiq_new/robotiq_description/meshes"
+        "package://robotiq_description/meshes": str(
+            ASSET_DIR / "meshes" / "robotiq_description"
         ),
     }
     DEFAULT_HOME = [0.0, 1.5708, 0.0, 0.0, 1.5708, 0.7854]
