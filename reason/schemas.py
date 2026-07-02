@@ -29,6 +29,12 @@ class PerceptionOutput:
     # Optional scene artifacts
     depth: Optional[np.ndarray] = None
     labeled_rgb: Optional[np.ndarray] = None
+    sam2_rgb_parts_sheet: Optional[np.ndarray] = None
+    sam2_rgb_parts_sheet_path: Optional[Path] = None
+    object_id_to_sam2_part_ids: Optional[dict[int, tuple[int, ...]]] = None
+    object_id_to_sam2_part_files: Optional[dict[int, tuple[str, ...]]] = None
+    prior_prompt_mode: str = "original"
+    ranking_score: str = "legacy"
     scene_id: Optional[int] = None
     annotation: Optional[str] = None
     point_source: Optional[str] = None

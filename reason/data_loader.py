@@ -38,6 +38,8 @@ def load_sample(
 
     depth = _load_depth(summary.get("depth_path"), summary_path.parent)
     labeled_rgb = _load_labeled_rgb(summary_path.parent)
+    parts_sheet_path = _resolve_parts_sheet_path(summary, summary_path.parent)
+    sam2_rgb_parts_sheet = _load_rgb_image(parts_sheet_path) if parts_sheet_path else None
 
     return PerceptionOutput(
         target_molmo_id=target_mid,
@@ -47,6 +49,14 @@ def load_sample(
         molmo_to_node=molmo_to_node,
         depth=depth,
         labeled_rgb=labeled_rgb,
+        sam2_rgb_parts_sheet=sam2_rgb_parts_sheet,
+        sam2_rgb_parts_sheet_path=parts_sheet_path,
+        object_id_to_sam2_part_ids=_parse_int_tuple_mapping(
+            summary.get("object_id_to_sam2_part_ids", {})
+        ),
+        object_id_to_sam2_part_files=_parse_str_tuple_mapping(
+            summary.get("object_id_to_sam2_part_files", {})
+        ),
         scene_id=summary.get("scene_id"),
         annotation=summary.get("annotation"),
         point_source=summary.get("point_source"),
@@ -114,6 +124,56 @@ def _load_depth(depth_path: str | None, scene_dir: Path) -> np.ndarray | None:
     if fallback.exists():
         return np.load(fallback)
     return None
+
+
+def _resolve_parts_sheet_path(summary: dict, scene_dir: Path) -> Path | None:
+    candidates = []
+    if summary.get("sam2_rgb_parts_sheet_png"):
+        candidates.append(Path(summary["sam2_rgb_parts_sheet_png"]))
+    candidates.append(scene_dir / "sam2_rgb_parts_sheet.png")
+
+    for path in candidates:
+        if not path.is_absolute():
+            path = scene_dir / path
+        if path.exists():
+            return path
+    return None
+
+
+def _load_rgb_image(path: Path) -> np.ndarray:
+    return np.array(Image.open(path).convert("RGB"))
+
+
+def _parse_int_tuple_mapping(raw: dict) -> dict[int, tuple[int, ...]]:
+    out: dict[int, tuple[int, ...]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, values in raw.items():
+        try:
+            object_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        parsed = []
+        for value in values or []:
+            try:
+                parsed.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        out[object_id] = tuple(sorted(set(parsed)))
+    return out
+
+
+def _parse_str_tuple_mapping(raw: dict) -> dict[int, tuple[str, ...]]:
+    out: dict[int, tuple[str, ...]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, values in raw.items():
+        try:
+            object_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        out[object_id] = tuple(str(value) for value in (values or []))
+    return out
 
 
 def _load_labeled_rgb(scene_dir: Path) -> np.ndarray | None:

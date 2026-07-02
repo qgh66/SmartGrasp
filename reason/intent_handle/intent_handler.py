@@ -14,8 +14,6 @@ import json
 import mimetypes
 import os
 import re
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Protocol
@@ -23,6 +21,7 @@ from typing import Any, Iterable, Protocol
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://www.highland-api.top/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
+DEFAULT_TIMEOUT = 300.0
 
 _SIDE_WORDS = {
     "left",
@@ -65,7 +64,7 @@ class IntentHandleError(RuntimeError):
 
 
 class VLMClient(Protocol):
-    """Client interface used by tests and the real Responses API client."""
+    """Client interface used by tests and the real VLM client."""
 
     def choose_target(
         self,
@@ -115,7 +114,7 @@ class IntentResult:
 
 
 class ResponsesVLMClient:
-    """Minimal Responses API client for api111/OpenAI-compatible providers."""
+    """OpenAI-compatible chat-completions client for intent recognition."""
 
     def __init__(
         self,
@@ -123,7 +122,7 @@ class ResponsesVLMClient:
         *,
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
-        timeout: float = 60.0,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         if not api_key:
             raise IntentHandleError(
@@ -133,6 +132,18 @@ class ResponsesVLMClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise IntentHandleError(
+                "openai package not installed. Run: pip install openai"
+            ) from exc
+
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+        )
 
     @classmethod
     def from_env(
@@ -141,13 +152,13 @@ class ResponsesVLMClient:
         api_key_env: str = DEFAULT_API_KEY_ENV,
         base_url: str | None = None,
         model: str | None = None,
-        timeout: float = 60.0,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> "ResponsesVLMClient":
         api_key = os.environ.get(api_key_env) or os.environ.get("OPENAI_API_KEY", "")
         return cls(
             api_key,
-            base_url=base_url or os.environ.get("API111_BASE_URL", DEFAULT_BASE_URL),
-            model=model or os.environ.get("INTENT_HANDLE_MODEL", DEFAULT_MODEL),
+            base_url=base_url or DEFAULT_BASE_URL,
+            model=model or DEFAULT_MODEL,
             timeout=timeout,
         )
 
@@ -157,37 +168,38 @@ class ResponsesVLMClient:
         scene_context: dict[str, Any],
         image_paths: Iterable[Path],
     ) -> dict[str, Any]:
-        payload = {
-            "model": self.model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": self._content_parts(instruction, scene_context, image_paths),
-                }
-            ],
-        }
-        request = urllib.request.Request(
-            f"{self.base_url}/responses",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                raw = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the intent recognition module for a "
+                            "robotic grasping system. Return only one JSON "
+                            "object with no markdown."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": self._content_parts(
+                            instruction, scene_context, image_paths
+                        ),
+                    },
+                ],
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+        except TimeoutError as exc:
             raise IntentHandleError(
-                f"VLM request failed with HTTP {exc.code}: {error_body}"
+                f"VLM request timed out after {self.timeout}s: {exc}"
             ) from exc
-        except urllib.error.URLError as exc:
-            raise IntentHandleError(f"VLM request failed: {exc}") from exc
+        except Exception as exc:
+            raise IntentHandleError(
+                f"VLM chat-completions request failed: {exc}"
+            ) from exc
 
-        response_payload = json.loads(raw)
-        response_text = _extract_response_text(response_payload)
+        response_text = resp.choices[0].message.content or ""
         return _parse_json_object(response_text)
 
     def _content_parts(
@@ -197,9 +209,14 @@ class ResponsesVLMClient:
         image_paths: Iterable[Path],
     ) -> list[dict[str, Any]]:
         prompt = _build_prompt(instruction, scene_context)
-        parts: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+        parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for image_path in image_paths:
-            parts.append({"type": "input_image", "image_url": _image_data_url(image_path)})
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": _image_data_url(image_path), "detail": "high"},
+                }
+            )
         return parts
 
 
@@ -213,6 +230,7 @@ def resolve_intent(
     api_key_env: str = DEFAULT_API_KEY_ENV,
     base_url: str | None = None,
     model: str | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> IntentResult:
     """Resolve ``instruction`` by calling a VLM and validating its answer."""
 
@@ -229,6 +247,15 @@ def resolve_intent(
         api_key_env=api_key_env,
         base_url=base_url,
         model=model,
+        timeout=timeout,
+    )
+    print(
+        "[INTENT] calling VLM "
+        f"model={getattr(vlm_client, 'model', model)}, "
+        f"instruction={instruction!r}, "
+        f"summary={summary_file}, "
+        f"graph={graph_file}, "
+        f"images={[str(path) for path in resolved_images]}"
     )
 
     decision = vlm_client.choose_target(instruction, scene_context, resolved_images)
@@ -277,52 +304,31 @@ def _result_from_vlm_decision(
 
 def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
     return (
-        "You are the intent recognition module for a robotic grasping system.\n"
-        "Your role is to understand the user's natural-language instruction, "
-        "infer the underlying task or need, and select the most task-relevant "
-        "object id from summary.json.\n\n"
+        "You are a highly capable robotic assistant designed to support grasping "
+        "tasks in real-world environments. Your role here is intent recognition: "
+        "analyze the user instruction, identify the task-relevant scene object, "
+        "and return only the selected object information.\n\n"
 
-        "You should reason like a robotic assistant operating in a real-world scene. "
-        "The user may give either an explicit object request or an implicit task request. "
-        "For explicit requests, identify the named or described object. "
-        "For implicit requests, first infer the practical task, then choose the scene object "
-        "that can best satisfy that task.\n\n"
-
-        "Important scope:\n"
-        "- Only identify the task-relevant target object.\n"
-        "- Do not select object parts.\n"
-        "- Do not generate grasp poses.\n"
-        "- Do not decide visibility branches such as fully_visible or partially_visible. "
-        "Visibility will be handled by a downstream module.\n\n"
-
-        "Reasoning procedure:\n"
-        "1. Task analysis: Infer the user's underlying task or need from the instruction. "
-        "For example, 'I am thirsty' means the task is drinking, and "
-        "'I need to tighten screws' means the task is tightening screws.\n"
-        "2. Relevant object identification: From the objects listed in summary.json and "
-        "the attached labeled images, identify which object category can best satisfy "
-        "the inferred task.\n"
-        "3. Instance selection: Choose the concrete object id or ids from the scene. "
-        "Use labeled image ids, object labels, and coordinates to distinguish instances.\n\n"
+        "Follow these reasoning steps internally:\n"
+        "Step 1. Task analysis: understand the user's underlying intention and "
+        "any implicit task requirements.\n"
+        "Step 2. Relevant object identification: from the listed objects and "
+        "attached labeled image, select the object most relevant to the task.\n"
+        "Step 3. Spatial reasoning: if the instruction uses words such as top, "
+        "bottom, upper, lower, front, or back, interpret them as real scene height "
+        "or stacking order by default. Use occlusion data and the occlusion graph "
+        "for this disambiguation, not only 2D image position.\n\n"
 
         "Rules:\n"
-        "1. The target object must be one object id from summary.json.\n"
-        "2. Do not invent objects or ids that are not in summary.json.\n"
-        "3. If no object in the current scene can satisfy the user need, set target_present=false.\n"
-        "4. If multiple objects of the same suitable category can satisfy the task, "
-        "return all of their ids in candidate_object_ids.\n"
-        "5. If the instruction explicitly names or describes one object instance, "
-        "prefer that specific instance.\n"
-        "6. If the instruction is implicit, choose the object that best supports the inferred task.\n"
-        "7. Use occlusion data only to understand physical scene relations or disambiguate "
-        "phrases such as top, bottom, upper, lower, front, and back. "
-        "Do not reject a suitable target only because it is occluded.\n"
-        "8. Words such as top, bottom, upper, lower, up, and down refer to physical height "
-        "or stacking order in the real scene by default, not 2D image position. "
-        "Only treat them as image-space directions if the instruction explicitly says "
-        "'in the image', 'in the picture', or 'on the screen'.\n"
-        "9. Use common everyday object names for target_category.\n"
-        "10. Return only one JSON object, with no markdown.\n\n"
+        "- The target object must be one object id from summary.json.\n"
+        "- Do not invent objects or ids that are not in summary.json.\n"
+        "- Do not select object parts.\n"
+        "- Do not generate grasp poses.\n"
+        "- Do not decide visibility branches such as fully_visible or partially_visible.\n"
+        "- If no listed object can satisfy the instruction, set target_present=false.\n"
+        "- If multiple objects are plausible, include them in candidate_object_ids "
+        "but still choose the best target_object_id.\n"
+        "- Return a concise reason explaining the task interpretation and object choice.\n\n"
 
         "Required JSON shape:\n"
         "{\n"
@@ -454,16 +460,29 @@ def _resolve_image_paths(
         return [Path(path) for path in explicit_paths if Path(path).exists()]
 
     summary_dir = summary_path.parent
-    candidates = [
+    primary_candidates = [
         summary.get("perception_label_png"),
         summary.get("graph_png"),
-        summary.get("image_path"),
         summary_dir / "label_3_final.png",
         summary_dir / "scene_labeled.png",
         summary_dir / "occlusion_graph.png",
+    ]
+    fallback_candidates = [
+        summary.get("image_path"),
         summary_dir / "scene_image.png",
         summary_dir / "scene.png",
     ]
+
+    resolved = _existing_unique_paths(summary_dir, primary_candidates)
+    if resolved:
+        return resolved
+    return _existing_unique_paths(summary_dir, fallback_candidates)
+
+
+def _existing_unique_paths(
+    summary_dir: Path,
+    candidates: Iterable[Any],
+) -> list[Path]:
     resolved: list[Path] = []
     seen = set()
     for candidate in candidates:
@@ -472,9 +491,12 @@ def _resolve_image_paths(
         path = Path(candidate)
         if not path.exists() and not path.is_absolute():
             path = summary_dir / path
-        if path.exists() and path not in seen:
+        if not path.exists():
+            continue
+        key = path.resolve()
+        if key not in seen:
             resolved.append(path)
-            seen.add(path)
+            seen.add(key)
     return resolved
 
 
@@ -493,21 +515,6 @@ def _default_graph_path(summary_path: Path, summary: dict[str, Any]) -> Path | N
         if path.exists():
             return path
     return None
-
-
-def _extract_response_text(response_payload: dict[str, Any]) -> str:
-    if isinstance(response_payload.get("output_text"), str):
-        return response_payload["output_text"]
-
-    parts = []
-    for output in response_payload.get("output", []):
-        for content in output.get("content", []) if isinstance(output, dict) else []:
-            text = content.get("text") if isinstance(content, dict) else None
-            if isinstance(text, str):
-                parts.append(text)
-    if parts:
-        return "\n".join(parts)
-    raise IntentHandleError("VLM response did not contain output text.")
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -592,6 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV)
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--model", default=None)
+    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     parser.add_argument("--json-only", action="store_true")
     args = parser.parse_args(argv)
 
@@ -603,6 +611,7 @@ def main(argv: list[str] | None = None) -> int:
         api_key_env=args.api_key_env,
         base_url=args.base_url,
         model=args.model,
+        timeout=args.timeout,
     )
     payload = result.to_json()
 

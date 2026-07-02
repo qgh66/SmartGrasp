@@ -58,11 +58,17 @@ def simulate_remove(
 def run_closed_loop(
     perception: PerceptionOutput,
     max_steps: int = 20,
+    prior_prompt_mode: str | None = None,
+    ranking_score: str | None = None,
 ) -> ClosedLoopResult:
     """Run the full branch -> action -> remove loop for one target."""
     target_mid = perception.target_molmo_id
     result = ClosedLoopResult(target_molmo_id=target_mid)
-    current = perception
+    current = replace(
+        perception,
+        prior_prompt_mode=prior_prompt_mode or perception.prior_prompt_mode,
+        ranking_score=ranking_score or perception.ranking_score,
+    )
 
     for step in range(max_steps):
         # Step 1: classify the current target state.

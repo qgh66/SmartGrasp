@@ -8,6 +8,7 @@ Returns mutually-exclusive probabilities (normalized to sum=1).
 from __future__ import annotations
 
 import numpy as np
+from typing import Any
 
 from ..vlm import VLMClient, get_default_client
 
@@ -29,11 +30,24 @@ def compute_semantic_prior(
     client: VLMClient | None = None,
 ) -> dict[int, float]:
     """Return VLM probabilities for which visible object hides the target."""
+    payload = compute_semantic_prior_payload(
+        occluder_mids, target_mid, perception, client
+    )
+    return payload["scores"]
+
+
+def compute_semantic_prior_payload(
+    occluder_mids: list[int],
+    target_mid: int,
+    perception,
+    client: VLMClient | None = None,
+) -> dict[str, Any]:
+    """Return VLM probabilities for which visible object hides the target."""
     print(f"[PRIOR-INV] called: target={target_mid}, occluders={occluder_mids}")
 
     if not occluder_mids:
         print("[PRIOR-INV] no occluders -> empty")
-        return {}
+        return {"scores": {}, "graspability": {}, "reason": "no occluders available"}
 
     # The hidden target is usually described by the language annotation.
     target_label = "unknown target"
@@ -48,7 +62,13 @@ def compute_semantic_prior(
     occluders = []
     for mid in occluder_mids:
         info = perception.node_info[perception.molmo_to_node[mid]]
-        occluders.append({"mid": mid, "label": info["label"]})
+        occluders.append(
+            {
+                "mid": mid,
+                "label": info["label"],
+                "part_ids": _part_ids(perception, mid),
+            }
+        )
 
     # The current VLM prompt requires a labeled RGB image.
     labeled_rgb = getattr(perception, "labeled_rgb", None)
@@ -58,7 +78,12 @@ def compute_semantic_prior(
     if labeled_rgb is None:
         print("[PRIOR-INV] no labeled_rgb -> uniform fallback")
         n = len(occluder_mids)
-        return {mid: 1.0 / n for mid in occluder_mids}
+        scores = {mid: 1.0 / n for mid in occluder_mids}
+        return {
+            "scores": scores,
+            "graspability": {mid: 1.0 for mid in occluder_mids},
+            "reason": "no labeled RGB image; used uniform fallback scores",
+        }
 
     if not isinstance(labeled_rgb, np.ndarray):
         labeled_rgb = np.asarray(labeled_rgb)
@@ -67,14 +92,30 @@ def compute_semantic_prior(
 
     # Query the VLM and keep a normalized probability distribution.
     c = client or _client()
+    prompt_mode = getattr(perception, "prior_prompt_mode", "original")
     raw = c.score_occluders_invisible(
         target_label=target_label,
         occluders=occluders,
         labeled_rgb=labeled_rgb,
+        parts_sheet_rgb=getattr(perception, "sam2_rgb_parts_sheet", None),
+        prompt_mode=prompt_mode,
     )
 
     # Fill missing ids with a uniform fallback.
+    raw.setdefault("scores", {})
+    raw.setdefault("graspability", {})
+    raw.setdefault("graspability_part_id", {})
+    raw.setdefault("graspability_parts", {})
+    raw.setdefault("reason", "")
     for mid in occluder_mids:
-        raw.setdefault(mid, 1.0 / len(occluder_mids))
+        raw["scores"].setdefault(mid, 1.0 / len(occluder_mids))
+        raw["graspability"].setdefault(mid, 1.0)
+        raw["graspability_part_id"].setdefault(mid, None)
+        raw["graspability_parts"].setdefault(mid, {})
 
     return raw
+
+
+def _part_ids(perception, mid: int) -> list[int]:
+    mapping = getattr(perception, "object_id_to_sam2_part_ids", None) or {}
+    return list(mapping.get(mid, ()))

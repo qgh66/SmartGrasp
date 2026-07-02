@@ -8,7 +8,23 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
-from .helper import _build_user_text_partial, _build_user_text_invisible, _encode_image_b64, _parse_scores_independent
+from . import config as vlm_config
+from .helper import (
+    _build_user_text_partial,
+    _build_user_text_invisible,
+    _encode_image_b64,
+    _parse_score_payload_independent,
+    _parse_score_payload_normalized,
+    _parse_scores_independent,
+)
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
 
 
 _SYSTEM_PROMPT_PARTIAL = """You are a vision/spatial reasoning expert helping a robot
@@ -48,8 +64,20 @@ IMPORTANT RULES:
 5. Consider BOTH the image (spatial layout) and the relations (graph chain).
 
 Output strictly as JSON, no prose, no markdown:
-{"scores": {"<mid>": <0..1>, ...}}
+{"scores": {"<mid>": <0..1>, ...}, "reason": "<brief reason for the scores>"}
 Include exactly the requested mids."""
+
+
+_SYSTEM_PROMPT_PARTIAL_GRASPABILITY = _SYSTEM_PROMPT_PARTIAL + """
+
+In addition to occlusion-chain importance, estimate how easy it is to grasp each
+candidate object by its visible exposed parts. This is a graspability coefficient
+in [0, 1], not a second semantic relevance score. Use object shape, visible
+exposure, likely stable contact area, and SAM2 part cutouts if provided.
+
+Output strictly as JSON, no prose, no markdown:
+{"scores": {"<mid>": <0..1>, ...}, "graspability_parts": {"<mid>": {"<part_id>": <0..1>, ...}, ...}, "reason": "<brief reason for the scores and graspability>"}
+Include exactly the requested mids in scores and graspability_parts."""
 
 
 _SYSTEM_PROMPT_INVISIBLE = """You are a vision/spatial reasoning expert helping a robot
@@ -82,8 +110,20 @@ IMPORTANT RULES:
    sum to 1.0 (downstream code will normalize if needed).
 
 Output strictly as JSON, no prose, no markdown, no code fences:
-{"scores": {"<mid>": <0..1>, ...}}
+{"scores": {"<mid>": <0..1>, ...}, "reason": "<brief reason for the scores>"}
 Include exactly the requested mids."""
+
+
+_SYSTEM_PROMPT_INVISIBLE_GRASPABILITY = _SYSTEM_PROMPT_INVISIBLE + """
+
+In addition to hidden-target probability, estimate how easy it is to grasp each
+visible top-layer candidate by its exposed parts. This is a graspability
+coefficient in [0, 1]. Use object shape, visible exposure, likely stable contact
+area, and SAM2 part cutouts if provided.
+
+Output strictly as JSON, no prose, no markdown, no code fences:
+{"scores": {"<mid>": <0..1>, ...}, "graspability_parts": {"<mid>": {"<part_id>": <0..1>, ...}, ...}, "reason": "<brief reason for the scores and graspability>"}
+Include exactly the requested mids in scores and graspability_parts."""
 
 
 
@@ -130,8 +170,10 @@ class VLMClient(ABC):
         occluders: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
         occlusion_relations: list[tuple[int, int]],
-    ) -> dict[int, float]:
-        """Return independent [0,1] scores per occluder (partially-visible target)."""
+        parts_sheet_rgb: np.ndarray | None = None,
+        prompt_mode: str = "original",
+    ) -> dict[str, Any]:
+        """Return semantic scores and optional graspability per occluder."""
         ...
 
     @abstractmethod
@@ -140,8 +182,10 @@ class VLMClient(ABC):
         target_label: str,
         occluders: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
-    ) -> dict[int, float]:
-        """Return mutually-exclusive probabilities (fully-invisible target)."""
+        parts_sheet_rgb: np.ndarray | None = None,
+        prompt_mode: str = "original",
+    ) -> dict[str, Any]:
+        """Return hidden-target probabilities and optional graspability."""
         ...
 
 
@@ -160,17 +204,18 @@ class OpenAIVisionClient(VLMClient):
                 "openai package not installed. Run: pip install openai"
             ) from e
 
-        # Priority: explicit args > environment > defaults.
-        self.model = model or os.environ.get("VLM_MODEL", "gpt-4o-mini")
+        # Priority: explicit args > reason.vlm.config defaults.
+        self.model = model or vlm_config.VLM_MODEL
         self.temperature = (
             temperature if temperature is not None
-            else float(os.environ.get("VLM_TEMPERATURE", "0.0"))
+            else float(vlm_config.VLM_TEMPERATURE)
         )
 
         client_kwargs: dict = {
-            "api_key": api_key or os.environ.get("OPENAI_API_KEY"),
+            "api_key": api_key or os.environ.get(vlm_config.VLM_API_KEY_ENV),
+            "timeout": float(vlm_config.VLM_TIMEOUT),
         }
-        base = base_url or os.environ.get("OPENAI_BASE_URL")
+        base = base_url or vlm_config.VLM_BASE_URL
         if base:
             client_kwargs["base_url"] = base
         self.client = OpenAI(**client_kwargs)
@@ -183,12 +228,21 @@ class OpenAIVisionClient(VLMClient):
         occluders: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
         occlusion_relations: list[tuple[int, int]],
-    ) -> dict[int, float]:
+        parts_sheet_rgb: np.ndarray | None = None,
+        prompt_mode: str = "original",
+    ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
-        print(f"[VLM] calling {self.model}, target={target_mid}, occluders={mids}")
+        print(
+            f"[VLM] calling {self.model}, target={target_mid}, "
+            f"occluders={mids}, prompt_mode={prompt_mode}"
+        )
 
         user_text = _build_user_text_partial(
-            target_mid, target_label, occluders, occlusion_relations
+            target_mid,
+            target_label,
+            occluders,
+            occlusion_relations,
+            prompt_mode=prompt_mode,
         )
 
         b64 = _encode_image_b64(labeled_rgb)
@@ -202,6 +256,17 @@ class OpenAIVisionClient(VLMClient):
                 },
             },
         ]
+        if prompt_mode == "graspability" and parts_sheet_rgb is not None:
+            parts_b64 = _encode_image_b64(parts_sheet_rgb)
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{parts_b64}",
+                        "detail": "high",
+                    },
+                }
+            )
         max_retries = 5
         backoff = 2.0
 
@@ -210,16 +275,36 @@ class OpenAIVisionClient(VLMClient):
                 resp = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": _SYSTEM_PROMPT_PARTIAL},
+                        {
+                            "role": "system",
+                            "content": (
+                                _SYSTEM_PROMPT_PARTIAL_GRASPABILITY
+                                if prompt_mode == "graspability"
+                                else _SYSTEM_PROMPT_PARTIAL
+                            ),
+                        },
                         {"role": "user", "content": content},
                     ],
                     temperature=self.temperature,
                     response_format={"type": "json_object"},
                 )
                 text = resp.choices[0].message.content or ""
-                scores = _parse_scores_independent(text, mids)
-                print(f"[VLM] got scores: {scores}")
-                return scores
+                if prompt_mode == "graspability":
+                    payload = _parse_score_payload_independent(text, mids)
+                else:
+                    payload = {
+                        "scores": _parse_scores_independent(text, mids),
+                        "graspability": {mid: 1.0 for mid in mids},
+                        "graspability_part_id": {mid: None for mid in mids},
+                        "graspability_parts": {mid: {} for mid in mids},
+                        "reason": _parse_score_payload_independent(text, mids).get("reason", ""),
+                    }
+                print(
+                    f"[VLM] got scores: {payload['scores']}; "
+                    f"graspability: {payload['graspability']}; "
+                    f"reason: {payload.get('reason', '')}"
+                )
+                return payload
             except Exception as e:
                 err_str = str(e)
                 is_rate_limit = (
@@ -236,8 +321,14 @@ class OpenAIVisionClient(VLMClient):
                 import traceback
                 print(f"[VLM] failed with {type(e).__name__}: {e}")
                 traceback.print_exc()
-                print(f"[VLM] fallback to 0.5")
-                return {mid: 0.5 for mid in mids}
+                print(f"[VLM] fallback to scores=0.5, graspability=1.0")
+                return {
+                    "scores": {mid: 0.5 for mid in mids},
+                    "graspability": {mid: 1.0 for mid in mids},
+                    "graspability_part_id": {mid: None for mid in mids},
+                    "graspability_parts": {mid: {} for mid in mids},
+                    "reason": f"VLM request failed with {type(e).__name__}; used fallback scores.",
+                }
 
 
     def score_occluders_invisible(
@@ -245,12 +336,17 @@ class OpenAIVisionClient(VLMClient):
         target_label: str,
         occluders: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
-    ) -> dict[int, float]:
+        parts_sheet_rgb: np.ndarray | None = None,
+        prompt_mode: str = "original",
+    ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
         print(f"[VLM-INV] calling {self.model}, "
-              f"target_label={target_label!r}, occluders={mids}")
+              f"target_label={target_label!r}, occluders={mids}, "
+              f"prompt_mode={prompt_mode}")
 
-        user_text = _build_user_text_invisible(target_label, occluders)
+        user_text = _build_user_text_invisible(
+            target_label, occluders, prompt_mode=prompt_mode
+        )
 
         b64 = _encode_image_b64(labeled_rgb)
         content: list[dict[str, Any]] = [
@@ -263,21 +359,53 @@ class OpenAIVisionClient(VLMClient):
                 },
             },
         ]
+        if prompt_mode == "graspability" and parts_sheet_rgb is not None:
+            parts_b64 = _encode_image_b64(parts_sheet_rgb)
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{parts_b64}",
+                        "detail": "high",
+                    },
+                }
+            )
 
         try:
             resp = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT_INVISIBLE},
+                    {
+                        "role": "system",
+                        "content": (
+                            _SYSTEM_PROMPT_INVISIBLE_GRASPABILITY
+                            if prompt_mode == "graspability"
+                            else _SYSTEM_PROMPT_INVISIBLE
+                        ),
+                    },
                     {"role": "user", "content": content},
                 ],
                 temperature=self.temperature,
                 response_format={"type": "json_object"},
             )
             text = resp.choices[0].message.content or ""
-            scores = _parse_scores_normalized(text, mids)
-            print(f"[VLM-INV] got scores: {scores}")
-            return scores
+            if prompt_mode == "graspability":
+                payload = _parse_score_payload_normalized(text, mids)
+            else:
+                scores = _parse_scores_normalized(text, mids)
+                payload = {
+                    "scores": scores,
+                    "graspability": {mid: 1.0 for mid in mids},
+                    "graspability_part_id": {mid: None for mid in mids},
+                    "graspability_parts": {mid: {} for mid in mids},
+                    "reason": _parse_score_payload_normalized(text, mids).get("reason", ""),
+                }
+            print(
+                f"[VLM-INV] got scores: {payload['scores']}; "
+                f"graspability: {payload['graspability']}; "
+                f"reason: {payload.get('reason', '')}"
+            )
+            return payload
         except Exception as e:
             import traceback
             print(f"[VLM-INV] failed with {type(e).__name__}: {e}")
@@ -285,8 +413,14 @@ class OpenAIVisionClient(VLMClient):
             traceback.print_exc()
             n = len(mids)
             uniform = {mid: 1.0 / n for mid in mids} if n > 0 else {}
-            print(f"[VLM-INV] fallback to uniform: {uniform}")
-            return uniform
+            print(f"[VLM-INV] fallback to uniform: {uniform}, graspability=1.0")
+            return {
+                "scores": uniform,
+                "graspability": {mid: 1.0 for mid in mids},
+                "graspability_part_id": {mid: None for mid in mids},
+                "graspability_parts": {mid: {} for mid in mids},
+                "reason": f"VLM request failed with {type(e).__name__}; used fallback scores.",
+            }
 
 
 def get_default_client() -> VLMClient:

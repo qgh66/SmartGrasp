@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..schemas import PerceptionOutput, GraspDecision, Branch
 from .geometry import compute_geometric_prior, precompute_geometry_cache
-from .prior import compute_semantic_prior
+from .prior import compute_semantic_prior_payload
 from .scoring import expected_information_gain, tbm_fusion
 
 
@@ -34,7 +34,12 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
     geom_cache = precompute_geometry_cache(perception)
 
     # Combine VLM prior and geometry prior into one belief.
-    P_s = compute_semantic_prior(candidate_mids, target_mid, perception)
+    prior_payload = compute_semantic_prior_payload(candidate_mids, target_mid, perception)
+    P_s = prior_payload["scores"]
+    graspability = prior_payload["graspability"]
+    graspability_part_id = prior_payload.get("graspability_part_id", {})
+    graspability_parts = prior_payload.get("graspability_parts", {})
+    vlm_reason = str(prior_payload.get("reason") or "")
     P_g = compute_geometric_prior(
         candidate_mids,
         target_mid,
@@ -45,30 +50,51 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
 
     # Expected IG measures how much a miss would simplify the next step.
     details: dict[int, dict] = {}
+    ranking_score = getattr(perception, "ranking_score", "legacy")
     for mid in candidate_mids:
         ig_value = expected_information_gain(mid, P, perception, geom_cache)
+        score_ig = ig_value
+        score_ig_graspability = ig_value * graspability.get(mid, 1.0)
+        score = _select_score(
+            ranking_score,
+            ig=score_ig,
+            ig_graspability=score_ig_graspability,
+        )
         details[mid] = {
             "P_s": P_s[mid],
             "P_g": P_g[mid],
             "P": P[mid],
             "IG": ig_value,
+            "graspability": graspability.get(mid, 1.0),
+            "graspability_part_id": graspability_part_id.get(mid),
+            "graspability_parts": graspability_parts.get(mid, {}),
+            "score_ig": score_ig,
+            "score_ig_graspability": score_ig_graspability,
+            "score": score,
+            "vlm_reason": vlm_reason,
         }
 
     # Pick the candidate with the strongest expected gain.
     best_mid = max(
         details,
-        key=lambda m: (details[m]["IG"], details[m]["P"], -m),
+        key=lambda m: (details[m]["score"], details[m]["IG"], details[m]["P"], -m),
     )
     best_node = perception.molmo_to_node[best_mid]
     best_label = perception.node_info[best_node]["label"]
 
-    lines = [f"selected mid={best_mid} ({best_label})", "candidates:"]
+    lines = [
+        f"selected mid={best_mid} ({best_label})",
+        f"vlm_reason={vlm_reason}" if vlm_reason else "vlm_reason=",
+        "candidates:",
+    ]
     for mid in candidate_mids:
         d = details[mid]
         mark = " <-- selected" if mid == best_mid else ""
         lines.append(
             f"  mid={mid}: P_s={d['P_s']:.3f} P_g={d['P_g']:.4f} "
-            f"P={d['P']:.4f} IG={d['IG']:.4f}{mark}"
+            f"P={d['P']:.4f} IG={d['IG']:.4f} "
+            f"G={d['graspability']:.3f} best_part={d['graspability_part_id']} "
+            f"score={d['score']:.4f}{mark}"
         )
     message = "  ".join(lines)
 
@@ -82,3 +108,14 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         message=message,
         details=details,
     )
+
+
+def _select_score(
+    ranking_score: str,
+    *,
+    ig: float,
+    ig_graspability: float,
+) -> float:
+    if ranking_score == "ig_graspability":
+        return ig_graspability
+    return ig

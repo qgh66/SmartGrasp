@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -15,6 +16,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from reason.intent_handle import resolve_intent
+
+load_dotenv()
+
+RUN_INTENT_MODEL = "gpt-5.5"
+RUN_INTENT_BASE_URL = "https://www.highland-api.top/v1"
+RUN_INTENT_API_KEY_ENV = "OPENAI_API_KEY"
+RUN_INTENT_TIMEOUT = 300.0
 
 
 def _default_summary(scene_id: int, root: Path) -> Path:
@@ -43,6 +51,7 @@ def _resolve_from_summary(
     api_key_env: str,
     base_url: str | None,
     model: str | None,
+    timeout: float,
 ) -> tuple[dict[str, Any], Any]:
     perception_dir = summary_path.parent
     result = resolve_intent(
@@ -51,6 +60,7 @@ def _resolve_from_summary(
         api_key_env=api_key_env,
         base_url=base_url,
         model=model,
+        timeout=timeout,
     )
 
     perception_summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -116,6 +126,7 @@ def _run_sample_mode(args: argparse.Namespace) -> int:
             api_key_env=args.api_key_env,
             base_url=args.base_url,
             model=args.model,
+            timeout=args.timeout,
         )
         selected_id = result.target_object.object_id if result.target_object else None
         id_path = _write_sample_intent_id(summary_path, selected_id)
@@ -160,6 +171,7 @@ def _run_data_mode(args: argparse.Namespace) -> int:
             api_key_env=args.api_key_env,
             base_url=args.base_url,
             model=args.model,
+            timeout=args.timeout,
         )
         selected_id = result.target_object.object_id if result.target_object else None
         id_path = _write_sample_intent_id(summary_path, selected_id)
@@ -190,9 +202,10 @@ def main() -> int:
     parser.add_argument("--instruction", default=None, help="Override FreeGrasp annotation.")
     parser.add_argument("--use-sample", action="store_true", help="Run all sample_data/scene_*/perception summaries and write scene_<id>/intent_id/id.txt.")
     parser.add_argument("--use", choices=["sample"], default=None, help="Alias for --use-sample when set to sample.")
-    parser.add_argument("--api-key-env", default="OPENAI_API_KEY")
-    parser.add_argument("--base-url", default=None)
-    parser.add_argument("--model", default=None)
+    parser.add_argument("--api-key-env", default=RUN_INTENT_API_KEY_ENV)
+    parser.add_argument("--base-url", default=RUN_INTENT_BASE_URL)
+    parser.add_argument("--model", default=RUN_INTENT_MODEL)
+    parser.add_argument("--timeout", type=float, default=RUN_INTENT_TIMEOUT)
     parser.add_argument(
         "--mode",
         choices=["data", "sample"],

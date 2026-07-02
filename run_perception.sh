@@ -25,7 +25,7 @@ export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/smartgrasp-matplotlib-${USER:-user}}"
 export MPLBACKEND=Agg
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
-export OPENAI_API_KEY='sk-0icgaaSMWa6ZBEmzKE960dC35DPmPuzUzN7hTGuFofOUCcHm'
+export OPENAI_API_KEY='sk-UlBtohYfedA4gqW9Ws7ZwhbAmcoynCzL0fRhbI0v1VjKdM1P'
 export OPENAI_BASE_URL=https://www.highland-api.top/v1
 
 PYTHON="${PYTHON:-/home/qiuguanhe/miniconda3/envs/smartgrasp/bin/python}"

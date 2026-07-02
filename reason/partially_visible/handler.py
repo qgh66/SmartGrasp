@@ -44,9 +44,21 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         perception.node_info[n]["molmo_id"] for n in candidate_nodes
     )
 
-    # One VLM call: score every ancestor (top + non-top) for later reuse.
-    P_s_all = compute_semantic_prior_all_ancestors(target_mid, perception)
+    # One VLM call: score every ancestor and, optionally, graspability.
+    prior_payload = compute_semantic_prior_all_ancestors(target_mid, perception)
+    P_s_all = prior_payload["scores"]
+    graspability_all = prior_payload["graspability"]
+    graspability_part_id_all = prior_payload.get("graspability_part_id", {})
+    graspability_parts_all = prior_payload.get("graspability_parts", {})
+    vlm_reason = str(prior_payload.get("reason") or "")
     P_s_top = {mid: P_s_all.get(mid, 0.5) for mid in candidate_mids}
+    graspability_top = {mid: graspability_all.get(mid, 1.0) for mid in candidate_mids}
+    graspability_part_id_top = {
+        mid: graspability_part_id_all.get(mid) for mid in candidate_mids
+    }
+    graspability_parts_top = {
+        mid: graspability_parts_all.get(mid, {}) for mid in candidate_mids
+    }
 
     # Initial belief on top-level candidates only.
     P_g_top = compute_geometric_prior(candidate_mids, target_mid, perception)
@@ -54,17 +66,33 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
 
     # Shannon IG per candidate; reuses P_s_all to avoid extra VLM calls.
     details: dict[int, dict] = {}
+    ranking_score = getattr(perception, "ranking_score", "legacy")
     for mid in candidate_mids:
         ig_value = information_gain(mid, perception, P_prior, P_s_all)
         cost = compute_cost(mid, perception)
-        score = compute_score(ig_value, cost, belief=P_prior[mid])
+        score_legacy = compute_score(ig_value, cost, belief=P_prior[mid])
+        score_ig = ig_value
+        score_ig_graspability = ig_value * graspability_top[mid]
+        score = _select_score(
+            ranking_score,
+            legacy=score_legacy,
+            ig=score_ig,
+            ig_graspability=score_ig_graspability,
+        )
         details[mid] = {
             "P_s": P_s_top[mid],
             "P_g": P_g_top[mid],
             "P": P_prior[mid],
             "IG": ig_value,
+            "graspability": graspability_top[mid],
+            "graspability_part_id": graspability_part_id_top[mid],
+            "graspability_parts": graspability_parts_top[mid],
             "cost": cost,
+            "score_legacy": score_legacy,
+            "score_ig": score_ig,
+            "score_ig_graspability": score_ig_graspability,
             "score": score,
+            "vlm_reason": vlm_reason,
         }
 
     best_mid = max(
@@ -77,6 +105,7 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
     # Compact debug string.
     lines = [
         f"selected mid={best_mid} ({best_label})",
+        f"vlm_reason={vlm_reason}" if vlm_reason else "vlm_reason=",
         "candidates:",
     ]
     for mid in candidate_mids:
@@ -85,7 +114,9 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         lines.append(
             f"  mid={mid}: P_s={d['P_s']:.3f} P_g={d['P_g']:.4f} "
             f"P={d['P']:.4f} IG={d['IG']:.4f} "
-            f"cost={d['cost']} score={d['score']:.4f}{mark}"
+            f"G={d['graspability']:.3f} best_part={d['graspability_part_id']} "
+            f"cost={d['cost']} "
+            f"score={d['score']:.4f}{mark}"
         )
     message = "  ".join(lines)
 
@@ -99,3 +130,17 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         message=message,
         details=details,
     )
+
+
+def _select_score(
+    ranking_score: str,
+    *,
+    legacy: float,
+    ig: float,
+    ig_graspability: float,
+) -> float:
+    if ranking_score == "ig":
+        return ig
+    if ranking_score == "ig_graspability":
+        return ig_graspability
+    return legacy

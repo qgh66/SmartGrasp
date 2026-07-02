@@ -16,16 +16,12 @@ Usage:
 from dotenv import load_dotenv
 load_dotenv()
 
-# Parse --model early so we can set VLM_MODEL before importing reason.*
-# (the VLM client is a module-level singleton; env vars must be set first)
+# Parse --model early for backward-compatible CLI shape. The actual default
+# model now lives in reason/vlm/config.py.
 import argparse
-import os
-
 _pre = argparse.ArgumentParser(add_help=False)
 _pre.add_argument("--model", default=None)
 _pre_args, _ = _pre.parse_known_args()
-if _pre_args.model:
-    os.environ["VLM_MODEL"] = _pre_args.model
 
 import json
 from dataclasses import replace
@@ -38,7 +34,16 @@ from reason.branch_judge.classifier import classify_branch
 from reason.schemas import Branch
 from reason.fully_visible import handle as handle_fully_visible
 from reason.partially_visible import handle as handle_partially_visible
+from reason.invisible import handle as handle_fully_occluded
 from reason.closed_loop import run_closed_loop
+from reason.vlm import config as vlm_config
+from reason.intent_handle import resolve_intent
+from run_intent import (
+    RUN_INTENT_API_KEY_ENV,
+    RUN_INTENT_BASE_URL,
+    RUN_INTENT_MODEL,
+    RUN_INTENT_TIMEOUT,
+)
 
 
 def find_perception_summaries(root: Path):
@@ -53,6 +58,96 @@ def find_perception_summaries(root: Path):
 def _sanitize_model_name(name: str) -> str:
     """Make a model name safe for file paths."""
     return name.replace("/", "_").replace(":", "_").replace(" ", "_")
+
+
+def _target_entries(args: argparse.Namespace, summary_path: Path, perception) -> list[dict]:
+    """Resolve the target ids to evaluate for one scene."""
+    source = args.target_source
+    if source == "auto":
+        source = "id" if args.target_id is not None else "all"
+
+    if source == "all":
+        return [
+            {
+                "target_id": mid,
+                "target_source": "all",
+                "intent_instruction": None,
+                "intent_reason": None,
+                "intent_candidate_ids": None,
+                "intent_vlm_decision": None,
+            }
+            for mid in sorted(perception.molmo_to_node.keys())
+        ]
+
+    if source == "id":
+        if args.target_id is None:
+            raise ValueError("--target-source id requires --target-id")
+        return [
+            {
+                "target_id": args.target_id,
+                "target_source": "id",
+                "intent_instruction": None,
+                "intent_reason": None,
+                "intent_candidate_ids": None,
+                "intent_vlm_decision": None,
+            }
+        ]
+
+    instruction = args.instruction or str(perception.annotation or "").strip()
+    if not instruction:
+        raise ValueError(f"--target-source intent requires --instruction or annotation in {summary_path}")
+
+    result = resolve_intent(
+        instruction,
+        summary_path,
+        api_key_env=args.intent_api_key_env,
+        base_url=args.intent_base_url,
+        model=args.intent_model,
+        timeout=args.intent_timeout,
+    )
+    selected_id = result.target_object.object_id if result.target_object else None
+    return [
+        {
+            "target_id": selected_id,
+            "target_source": "intent",
+            "intent_instruction": instruction,
+            "intent_reason": result.reason,
+            "intent_candidate_ids": [obj.object_id for obj in result.candidates],
+            "intent_vlm_decision": result.vlm_decision,
+        }
+    ]
+
+
+def _reason_block(row: dict, decision, actions_seq=None) -> str:
+    """Build one human-readable reason section for reason.txt."""
+    lines = [
+        f"scene_key: {row.get('scene_key')}",
+        f"scene_id: {row.get('scene_id')}",
+        f"target_source: {row.get('target_source')}",
+        f"target_id: {row.get('target_id')}",
+        f"target_label: {row.get('target_label')}",
+        f"branch: {row.get('branch')}",
+        f"grasp_id: {row.get('grasp_id')}",
+        f"status: {row.get('status')}",
+    ]
+
+    if row.get("target_source") == "intent":
+        lines.append(f"intent_instruction: {row.get('intent_instruction')}")
+        lines.append(f"intent_reason: {row.get('intent_reason')}")
+
+    if actions_seq:
+        lines.append("downstream_reason_seq:")
+        for step_idx, action in enumerate(actions_seq, start=1):
+            step_reason = str(getattr(action, "message", "") or "")
+            lines.append(f"  step {step_idx}: {step_reason}")
+    else:
+        downstream_reason = ""
+        if decision is not None and getattr(decision, "message", None):
+            downstream_reason = str(decision.message)
+        elif row.get("reason"):
+            downstream_reason = str(row.get("reason"))
+        lines.append(f"downstream_reason: {downstream_reason}")
+    return "\n".join(lines)
 
 
 def main():
@@ -70,8 +165,23 @@ def main():
         default=None,
         help="Only run a specific target_id, including ids not present in the graph",
     )
+    parser.add_argument(
+        "--target-source",
+        choices=["auto", "all", "id", "intent"],
+        default="auto",
+        help="Target source: all graph ids, direct --target-id, or run_intent-style VLM intent resolution.",
+    )
+    parser.add_argument(
+        "--instruction",
+        default=None,
+        help="Instruction for --target-source intent. Defaults to summary annotation.",
+    )
+    parser.add_argument("--intent-api-key-env", default=RUN_INTENT_API_KEY_ENV)
+    parser.add_argument("--intent-base-url", default=RUN_INTENT_BASE_URL)
+    parser.add_argument("--intent-model", default=RUN_INTENT_MODEL)
+    parser.add_argument("--intent-timeout", type=float, default=RUN_INTENT_TIMEOUT)
     parser.add_argument("--model", default=None,
-                        help="VLM model name (overrides VLM_MODEL from .env)")
+                        help="VLM model name (overrides reason/vlm/config.py for this run)")
     parser.add_argument("--out-root", default="runs_detail",
                         help="Root for outputs; each model gets its own subdir")
     parser.add_argument("--csv", default=None,
@@ -82,6 +192,18 @@ def main():
                         help="Override scene_details dir")
     parser.add_argument("--threshold", type=float, default=0.0,
                         help="Occlusion edge threshold")
+    parser.add_argument(
+        "--prior-prompt",
+        choices=["original", "graspability"],
+        default="original",
+        help="VLM prior prompt variant. original is the old prompt; graspability also asks for part graspability.",
+    )
+    parser.add_argument(
+        "--ranking-score",
+        choices=["legacy", "ig", "ig_graspability"],
+        default="legacy",
+        help="Candidate ranking score. Use ig vs ig_graspability for the requested comparison.",
+    )
     parser.add_argument("--closed-loop", action="store_true",
                         help="Closed-loop mode: full action sequence per target")
     parser.add_argument("--max-steps", type=int, default=20,
@@ -90,18 +212,22 @@ def main():
                         help="Only run the first N scenes (debug)")
     args = parser.parse_args()
 
-    # Resolve current model from env (may come from .env or --model).
-    model_name = os.environ.get("VLM_MODEL", "unknown_model")
+    if args.model:
+        vlm_config.VLM_MODEL = args.model
+
+    model_name = vlm_config.VLM_MODEL
     model_safe = _sanitize_model_name(model_name)
     print(f"[CONFIG] using VLM_MODEL = {model_name}")
+    print(f"[CONFIG] prior_prompt = {args.prior_prompt}, ranking_score = {args.ranking_score}")
 
     # Per-model output dirs.
-    out_dir = Path(args.out_root) / model_safe
+    out_dir = Path(args.out_root) / model_safe / args.prior_prompt / args.ranking_score
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = Path(args.csv) if args.csv else out_dir / "results.csv"
     json_path = Path(args.json) if args.json else out_dir / "branch_results.json"
     details_dir = Path(args.details_dir) if args.details_dir else out_dir / "scene_details"
     details_dir.mkdir(parents=True, exist_ok=True)
+    reason_path = csv_path.parent / "reason.txt"
 
     print(f"[CONFIG] outputs -> {out_dir}")
 
@@ -123,6 +249,7 @@ def main():
             return
 
     csv_rows = []
+    reason_blocks = []
     detail_json = {}
     branch_counter = {}
     scene_count = 0
@@ -135,6 +262,11 @@ def main():
 
         try:
             perception = load_sample(path, occlusion_threshold=args.threshold)
+            perception = replace(
+                perception,
+                prior_prompt_mode=args.prior_prompt,
+                ranking_score=args.ranking_score,
+            )
         except Exception as e:
             print(f"  [ERROR] {scene_key}: load failed: {e}")
             continue
@@ -145,12 +277,43 @@ def main():
         # Candidate-level rows for this scene's partially_occluded targets.
         scene_candidate_rows = []
 
-        if args.target_id is not None:
-            all_mids = [args.target_id]
-        else:
-            all_mids = sorted(perception.molmo_to_node.keys())
+        try:
+            targets = _target_entries(args, path, perception)
+        except Exception as e:
+            print(f"  [ERROR] {scene_key}: target resolution failed: {e}")
+            continue
 
-        for mid in all_mids:
+        for target_entry in targets:
+            mid = target_entry["target_id"]
+            if mid is None:
+                row = {
+                    "model": model_name,
+                    "prior_prompt": args.prior_prompt,
+                    "ranking_score": args.ranking_score,
+                    "target_source": target_entry["target_source"],
+                    "intent_instruction": target_entry["intent_instruction"],
+                    "intent_reason": target_entry["intent_reason"],
+                    "intent_candidate_ids": target_entry["intent_candidate_ids"],
+                    "intent_vlm_decision": target_entry.get("intent_vlm_decision"),
+                    "scene_key": scene_key,
+                    "scene_id": perception.scene_id,
+                    "target_id": None,
+                    "target_label": "none",
+                    "is_query_target": False,
+                    "annotation": perception.annotation,
+                    "branch": None,
+                    "grasp_id": None,
+                    "grasp_label": None,
+                    "is_terminal": None,
+                    "reason": "run_intent returned no target object",
+                    "status": "intent_no_target",
+                }
+                csv_rows.append(row)
+                scene_detail_rows.append(row)
+                reason_blocks.append(_reason_block(row, None))
+                object_count += 1
+                continue
+
             p = replace(perception, target_molmo_id=mid)
 
             # 1) Branch classification.
@@ -174,7 +337,12 @@ def main():
             if args.closed_loop and branch is not None:
                 # Closed-loop mode.
                 try:
-                    cl_result = run_closed_loop(p, max_steps=args.max_steps)
+                    cl_result = run_closed_loop(
+                        p,
+                        max_steps=args.max_steps,
+                        prior_prompt_mode=args.prior_prompt,
+                        ranking_score=args.ranking_score,
+                    )
                     actions_seq = cl_result.actions
                     cl_num_steps = cl_result.num_steps
                     cl_success = cl_result.success
@@ -195,6 +363,11 @@ def main():
                         decision = handle_partially_visible(p)
                     except Exception as e:
                         status = f"handler_error: {e}"
+                elif branch == Branch.FULLY_OCCLUDED:
+                    try:
+                        decision = handle_fully_occluded(p)
+                    except Exception as e:
+                        status = f"handler_error: {e}"
 
             if mid in perception.molmo_to_node:
                 label = perception.node_info[perception.molmo_to_node[mid]]["label"]
@@ -202,6 +375,13 @@ def main():
                 label = f"object_{mid}_not_in_graph"
             row = {
                 "model": model_name,
+                "prior_prompt": args.prior_prompt,
+                "ranking_score": args.ranking_score,
+                "target_source": target_entry["target_source"],
+                "intent_instruction": target_entry["intent_instruction"],
+                "intent_reason": target_entry["intent_reason"],
+                "intent_candidate_ids": target_entry["intent_candidate_ids"],
+                "intent_vlm_decision": target_entry.get("intent_vlm_decision"),
                 "scene_key": scene_key,
                 "scene_id": perception.scene_id,
                 "target_id": mid,
@@ -223,8 +403,12 @@ def main():
                 row["cl_action_seq"]   = " -> ".join(
                     f"{a.grasp_id}" for a in actions_seq
                 ) if actions_seq else ""
+                row["cl_reason_seq"]   = " || ".join(
+                    str(getattr(a, "message", "") or "") for a in actions_seq
+                ) if actions_seq else ""
             csv_rows.append(row)
             scene_detail_rows.append(row)
+            reason_blocks.append(_reason_block(row, decision, actions_seq if args.closed_loop else None))
             object_count += 1
             if branch_value:
                 branch_counter[branch_value] = branch_counter.get(branch_value, 0) + 1
@@ -242,6 +426,9 @@ def main():
                         cand_label = perception.node_info[cand_node]["label"]
                         scene_candidate_rows.append({
                             "model": model_name,
+                            "prior_prompt": args.prior_prompt,
+                            "ranking_score": args.ranking_score,
+                            "target_source": target_entry["target_source"],
                             "target_id": mid,
                             "target_label": label,
                             "step": step_idx,
@@ -251,12 +438,19 @@ def main():
                             "P_g": info["P_g"],
                             "P":   info["P"],
                             "IG":  info["IG"],
+                            "graspability": info.get("graspability"),
+                            "graspability_part_id": info.get("graspability_part_id"),
+                            "graspability_parts": info.get("graspability_parts"),
                             "cost": info.get("cost"),
+                            "score_legacy": info.get("score_legacy"),
+                            "score_ig": info.get("score_ig"),
+                            "score_ig_graspability": info.get("score_ig_graspability"),
                             "score": info.get("score"),
+                            "vlm_reason": info.get("vlm_reason"),
                             "selected": (cand_mid == action.grasp_id),
                         })
             elif (decision is not None
-                    and branch == Branch.PARTIALLY_OCCLUDED
+                    and branch in {Branch.PARTIALLY_OCCLUDED, Branch.FULLY_OCCLUDED}
                     and decision.details):
                 # Single-step mode (no step column).
                 for cand_mid, info in decision.details.items():
@@ -264,6 +458,9 @@ def main():
                     cand_label = perception.node_info[cand_node]["label"]
                     scene_candidate_rows.append({
                         "model": model_name,
+                        "prior_prompt": args.prior_prompt,
+                        "ranking_score": args.ranking_score,
+                        "target_source": target_entry["target_source"],
                         "target_id": mid,
                         "target_label": label,
                         "candidate_id": cand_mid,
@@ -272,8 +469,15 @@ def main():
                         "P_g": info["P_g"],
                         "P":   info["P"],
                         "IG":  info["IG"],
+                        "graspability": info.get("graspability"),
+                        "graspability_part_id": info.get("graspability_part_id"),
+                        "graspability_parts": info.get("graspability_parts"),
                         "cost": info.get("cost"),
+                        "score_legacy": info.get("score_legacy"),
+                        "score_ig": info.get("score_ig"),
+                        "score_ig_graspability": info.get("score_ig_graspability"),
                         "score": info.get("score"),
+                        "vlm_reason": info.get("vlm_reason"),
                         "selected": (cand_mid == decision.grasp_id),
                     })
 
@@ -281,7 +485,7 @@ def main():
             "scene_id": perception.scene_id,
             "annotation": perception.annotation,
             "query_obj_id": query_target_id,
-            "num_objects_tested": len(all_mids),
+            "num_objects_tested": len(targets),
             "per_object": scene_detail_rows,
         }
 
@@ -307,12 +511,19 @@ def main():
             else:
                 info = (f" => grasp_id={row['grasp_id']}"
                         if row['grasp_id'] is not None else "")
-            print(f" {mark} target_id={row['target_id']:>3} "
+            target_disp = str(row["target_id"]) if row["target_id"] is not None else "None"
+            print(f" {mark} target_id={target_disp:>4} "
                   f"({label_disp:<30}) -> {row['branch']}{info}")
 
     pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
+    with open(reason_path, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(reason_blocks))
+        if reason_blocks:
+            f.write("\n")
     output = {
         "model": model_name,
+        "prior_prompt": args.prior_prompt,
+        "ranking_score": args.ranking_score,
         "root": str(root),
         "num_scenes": scene_count,
         "num_objects_total": object_count,
@@ -327,6 +538,7 @@ def main():
     print(f"  branch summary: {branch_counter}")
     print(f"  summary CSV  -> {csv_path}")
     print(f"  summary JSON -> {json_path}")
+    print(f"  reasons      -> {reason_path}")
     print(f"  details dir  -> {details_dir}/")
 
 
