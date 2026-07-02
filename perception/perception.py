@@ -246,10 +246,45 @@ def build_graph_from_gt_masks(
     return payload
 
 
-def maybe_run_molmo(image_path: Path, prompt: str, out_dir: Path, model_id: str) -> Path:
+def write_result_json(out_dir: Path, summary: dict[str, Any], graph_payload: dict[str, Any]) -> Path:
+    graph = graph_payload["graph"]
+    objects = []
+    for node in graph["nodes"]:
+        point = node.get("point", {})
+        objects.append(
+            {
+                "id": int(node.get("molmo_id", node["node_id"])),
+                "category": str(node.get("label", "")),
+                "center_pixel": {"x": int(point.get("x", 0)), "y": int(point.get("y", 0))},
+            }
+        )
+
+    payload = {
+        "scene_id": int(summary["scene_id"]),
+        "query_obj_id": int(summary["query_obj_id"]),
+        "annotation": str(summary["annotation"]),
+        "point_source": str(summary["point_source"]),
+        "molmo_labeled_rgb": str((out_dir / "molmo_label.png").resolve()) if (out_dir / "molmo_label.png").exists() else None,
+        "objects": objects,
+        "occlusion_adjacency_matrix": graph["adjacency_matrix"],
+        "edges": graph["edges"],
+    }
+    path = out_dir / "perception_result.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def maybe_run_molmo(
+    image_path: Path,
+    prompt: str,
+    out_dir: Path,
+    model_id: str,
+    device: str | None,
+    torch_dtype: str,
+) -> Path:
     from SmartGrasp.perception.molmo.molmo_annotator import MolmoAnnotator
 
-    annotator = MolmoAnnotator(model_id=model_id)
+    annotator = MolmoAnnotator(model_id=model_id, device=device, torch_dtype=torch_dtype)
     result = annotator.annotate_to_folder(str(image_path), prompt, str(out_dir), return_base64=False)
     return Path(result["json_path"])
 
@@ -261,7 +296,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     scene_id = int(row["sceneId"])
     query_obj_id = int(row["queryObjId"])
 
-    out_dir = OUT_ROOT / f"scene_{scene_id}_query_{query_obj_id}_{args.point_source}"
+    output_root = Path(args.output_root) if args.output_root else OUT_ROOT
+    out_dir = output_root / f"scene_{scene_id}_query_{query_obj_id}_{args.point_source}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     image_path = save_sample_image(row, out_dir)
@@ -279,7 +315,14 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     if args.point_source == "molmo":
         from SmartGrasp.perception.occul_map.molmo_sam_org import build_org_json
 
-        points_path = maybe_run_molmo(image_path, prompt, out_dir, args.molmo_model_id)
+        points_path = maybe_run_molmo(
+            image_path,
+            prompt,
+            out_dir,
+            args.molmo_model_id,
+            args.molmo_device,
+            args.molmo_torch_dtype,
+        )
         graph_payload = build_org_json(
             points_json_path=points_path.resolve(),
             depth_path=depth_path.resolve(),
@@ -324,6 +367,9 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     }
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    result_json = write_result_json(out_dir, summary, graph_payload)
+    summary["result_json"] = str(result_json.resolve())
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
 
@@ -335,8 +381,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
     parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
+    parser.add_argument("--output-root", default=None, help="Root directory for run outputs.")
     parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
     parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
+    parser.add_argument("--molmo-device", default=None, help="Device for Molmo, e.g. cuda or cpu.")
+    parser.add_argument("--molmo-torch-dtype", default="auto", choices=["auto", "float16", "fp16", "bfloat16", "bf16", "float32", "fp32"])
     parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
     parser.add_argument("--epsilon", type=float, default=0.01)
     parser.add_argument("--kernel-size", type=int, default=3)

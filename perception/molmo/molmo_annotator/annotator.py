@@ -42,11 +42,13 @@ class MolmoAnnotator:
         model_id: str = "allenai/Molmo-7B-D-0924",
         device_map: str | None = None,   # keep for API compatibility, but we do NOT use device_map="auto"
         torch_dtype: str = "auto",
+        device: str | None = None,
         trust_remote_code: bool = True,
     ) -> None:
         self.model_id = model_id
         self.device_map = device_map
         self.torch_dtype = torch_dtype
+        self.device = device
         self.trust_remote_code = trust_remote_code
         self.last_generated_text = ""
         self.last_parse_mode = ""
@@ -55,8 +57,17 @@ class MolmoAnnotator:
         if _GLOBAL["model"] is not None and _GLOBAL["processor"] is not None and _GLOBAL["model_id"] == self.model_id:
             return
 
-        device = "cuda" if _has_cuda() else "cpu"
-        dtype = torch.float16 if device == "cuda" else torch.float32
+        device = self.device or ("cuda" if _has_cuda() else "cpu")
+        if self.torch_dtype == "auto":
+            dtype = torch.float16 if device.startswith("cuda") else torch.float32
+        elif self.torch_dtype in {"float16", "fp16"}:
+            dtype = torch.float16
+        elif self.torch_dtype in {"bfloat16", "bf16"}:
+            dtype = torch.bfloat16
+        elif self.torch_dtype in {"float32", "fp32"}:
+            dtype = torch.float32
+        else:
+            raise ValueError(f"Unsupported torch_dtype={self.torch_dtype!r}")
         _log(f"loading processor for {self.model_id}")
 
         processor = AutoProcessor.from_pretrained(

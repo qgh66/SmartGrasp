@@ -360,6 +360,146 @@ python gui/app.py \
 
 常见原因是物体尺度不对（图形学单位 mesh 没缩放，用 `--scale` 调到约 5~8 cm），或物体随机朝向下平躺导致 GraspNet 抓取质量差。可多跑几次，或换更立体、规则的物体。
 
+## Eye-in-hand 棋盘格手眼标定
+
+当前真实机械臂场景中，RealSense 固定在夹爪/末端上。此时需要标定相机坐标系和 JAKA TCP/夹爪坐标系之间的固定变换 `T_tcp_camera`。根据当前实测候选坐标，真实抓取运行时使用该矩阵的逆矩阵：
+
+```text
+T_base_grasp = T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp
+```
+
+你当前棋盘参数按“12 x 9 个方格、单格 1 cm”处理，因此 OpenCV 检测参数是 **11 x 8 个内角点**，方格边长 `10.0 mm`。如果 12 x 9 实际指内角点数量，求解命令中把 `--pattern-cols 11 --pattern-rows 8` 改成 `--pattern-cols 12 --pattern-rows 9`。
+
+物理采集要求：
+
+1. 棋盘格固定在桌面或硬质板上，采集过程中不能移动。
+2. RealSense 固定在夹爪/末端上，采集过程中不能松动。
+3. 手动移动机械臂，让相机从不同方向看到完整棋盘；推荐采集 15-25 组。
+4. 姿态要同时包含平移和明显的 roll/pitch/yaw 旋转变化，不能只平移。
+
+采集前可以用手操脚本调整机械臂姿态：
+
+```bash
+/home/admin128/anaconda3/envs/smartgrasp310/bin/python plush5.py
+```
+
+如果只想在终端打印当前夹爪/TCP 在 JAKA base 坐标系下的位姿，可以运行：
+
+```bash
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+
+python scripts/print_jaka_tcp_pose.py \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
+```
+
+输出中的 `x/y/z` 单位是 mm，`rx/ry/rz` 单位是 rad，坐标系是 `jaka_base`。
+
+采集脚本会打开 RealSense 预览，并实时检测棋盘角点：检测成功时会在画面上画出角点，状态显示 `chessboard=FOUND`；检测失败时显示 `NOT FOUND`。每移动到一个合适姿态后按 `c` 保存一组 `RGB + depth + 当前 TCP pose + 相机内参 + 棋盘角点`；按 `q` 退出。若当前帧没有识别到棋盘角点，按 `c` 不会保存样本：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+
+python scripts/collect_handeye_chessboard.py \
+  --output-dir calibration/handeye_chessboard_raw \
+  --camera-serial 72508 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
+```
+
+采集结果写入：
+
+```text
+graspnet-workspace/calibration/handeye_chessboard_raw/samples.jsonl
+graspnet-workspace/calibration/handeye_chessboard_raw/sample_0/rgb.png
+graspnet-workspace/calibration/handeye_chessboard_raw/sample_0/depth.png
+graspnet-workspace/calibration/handeye_chessboard_raw/sample_0/corners.json
+graspnet-workspace/calibration/handeye_chessboard_raw/sample_0/corners_visualization.png
+graspnet-workspace/calibration/handeye_chessboard_raw/sample_0/metadata.json
+...
+```
+
+其中 `corners_visualization.png` 是带角点标注的可视化结果，`corners.json` 保存该帧识别到的 11 x 8 个棋盘角点像素坐标。`samples.jsonl` 会记录每组 `sample_x` 的路径、TCP 位姿、相机内参和角点数量。
+
+求解手眼标定：
+
+```bash
+python scripts/solve_handeye_chessboard.py \
+  --input-dir calibration/handeye_chessboard_raw \
+  --pattern-cols 11 \
+  --pattern-rows 8 \
+  --square-mm 10.0 \
+  --output calibration/hand_eye_tcp_camera.json
+```
+
+输出文件中最重要的是：
+
+```text
+T_tcp_camera
+```
+
+同时脚本会输出棋盘在机器人 base 下的一致性验证指标。`base_board_translation_error_mean_mm` 建议尽量小于 5-10 mm；如果超过 20 mm，优先检查棋盘内角点参数、方格边长、TCP 定义、采集时相机是否松动，以及是否采集了足够多旋转姿态。
+
+### 启动真实抓取
+
+第一次试抓不要直接执行机械臂，先只拍照、生成候选抓取，并确认候选落在目标物体上：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 8 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 10 \
+  --acceleration 10
+```
+
+生成后先检查：
+
+```text
+/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.png
+/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates_3d.html
+/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.json
+```
+
+确认 `grasp_candidates.json` 中：
+
+```text
+camera_to_robot_chain = T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp
+```
+
+如果候选姿态合理，再复用同一帧 RGB-D 和同一份 `capture_tcp_pose.json` 低速执行：
+
+```bash
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --reuse-capture \
+  --camera-serial 243122072659 \
+  --execute \
+  --candidate-index 0 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 10 \
+  --acceleration 10 \
+  --approach-offset-mm 100 \
+  --lift-mm 80
+```
+
+如果第 0 个候选不合理，先在 `grasp_candidates.json` 里选更合适的编号，再修改：
+
+```text
+  --candidate-index 0
+```
+
+hand-eye 模式会在拍照后记录当前 TCP 到 `result/capture_tcp_pose.json`，并用 `T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp` 生成每个候选的 `target_jaka_tcp_pose`。如果使用 `--reuse-capture`，必须保证 `result/capture_tcp_pose.json` 与这张 RGB-D 的拍照时刻一致，或显式传入 `--capture-tcp-pose X Y Z RX RY RZ`。
+
 ## Git 备注
 
 这台共享服务器上 GitHub SSH 可能会被 `LD_LIBRARY_PATH` 里的 conda OpenSSL 影响。如果出现 OpenSSL mismatch，可以临时清掉这个环境变量：
@@ -375,3 +515,22 @@ env -u LD_LIBRARY_PATH \
   GIT_SSH_COMMAND='ssh -i /home/admin128/.ssh/beilei_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o KexAlgorithms=ecdh-sha2-nistp256' \
   git push origin feat/GraspExecutionModule
 ```
+##手操机械臂
+```bash
+/home/admin128/anaconda3/envs/smartgrasp310/bin/python plush5.py
+```
+
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --execute \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 20 \
+  --acceleration 20 \
+  --candidate-index 0
+
+
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+
+python scripts/print_jaka_tcp_pose.py \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc

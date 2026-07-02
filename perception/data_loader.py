@@ -13,7 +13,7 @@ from PIL import Image
 
 PERCEPTION_DIR = Path(__file__).resolve().parent
 SMARTGRASP_ROOT = PERCEPTION_DIR.parent
-DATA_DIR = SMARTGRASP_ROOT / 'data'
+DATA_DIR = Path(os.environ.get('SMARTGRASP_DATA_DIR', SMARTGRASP_ROOT / 'data')).expanduser().resolve()
 PARQUET_GLOB = str(DATA_DIR / '*.parquet')
 NPZ_DIR = DATA_DIR / 'npz_file'
 IMAGE_SAMPLE_DIR = DATA_DIR / 'image_samples'

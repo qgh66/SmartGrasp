@@ -8,31 +8,22 @@
 conda activate smartgrasp
 ```
 
-## 代理检查
 
-跑程序之前务必检查代理状态。如果不是代理模式，需要先开启代理：
-
-```bash
-# 检查当前代理状态
-proxy_status
-
-# 如果不是代理模式，开启代理
-proxy_on
-```
 ## 分支管理
 
-修改代码时务必在当前分支上面修改，不可更改其他分支
+后续所有代码修改都在 `feat/grasp_realworld` 分支中进行。修改前先确认当前分支：
+
+```bash
+git branch --show-current
+```
+
+如果不在 `feat/grasp_realworld`，先切回该分支；不可在其他分支上修改代码。
 
 ## 运行程序
 
-使用 Shell 脚本 + SLURM 提交任务，不要直接裸跑 Python 脚本。
-
-- Shell 脚本 `run_perception.sh`
-- SLURM 作业通过 `sbatch` 提交：
-
-```bash
-sbatch run_perception.sh
-```
+当前服务器不强制遵循 SLURM 提交流程。需要运行程序时，先激活 `smartgrasp`
+环境并确认代理状态，然后按当前任务选择本地 Shell 脚本或直接入口命令运行。
+除非用户明确要求通过 SLURM 提交，否则不要默认使用 `sbatch`。
 
 ## 代码规范
 
@@ -49,30 +40,17 @@ sbatch run_perception.sh
 - 自己做完代码的修改，也不要自行测试，除非用户明确要求你进行测试。
 - 每次测试后主动查看 `.err` 和 `.out` 日志，如果发现报错要主动修改并重新测试，直到没有报错。
 
-### 提交批量任务
-
-```bash
-# 单个场景
-sbatch run_perception.sh --scene-id 184
-
-# 多个场景（逗号分隔或空格分隔）
-sbatch run_perception.sh --scene-ids 184 59 125
-```
-
-### 任务监控
+### 长任务监控
 
 - 每个场景处理约 80~100 秒（含 VLM API 调用），批量任务按场景数估算总耗时。
-- 使用 `sleep` 间隔检查任务状态，避免频繁轮询：
+- 如果用户明确要求运行长任务，使用合理的 `sleep` 间隔检查进度，避免频繁轮询。
+- 如果通过脚本产生 `.err` 和 `.out` 日志，测试后主动查看日志；如果发现报错，主动修改并按用户要求重新测试。
+
+- 优先通过输出目录是否有 `occlusion_graph.json` 判断单场景是否完成；当前感知输出目录格式为
+  `data/integrated_runs/scene_<scene_id>_query_<query_obj_id>_<point_source>/`：
 
 ```bash
-# 等待 N 秒后检查进度，任务完成后输出日志
-sleep N && tail -10 logs/perception-<jobid>.err && squeue -u $USER | grep <jobid> || echo "JOB DONE"
-```
-
-- 优先通过输出目录是否有 `occlusion_graph.json` 判断单场景是否完成：
-
-```bash
-ls data/scene_<id>/perception/occlusion_graph.json
+ls data/integrated_runs/scene_<scene_id>_query_<query_obj_id>_<point_source>/occlusion_graph.json
 ```
 
 ### 结果验证
@@ -81,11 +59,12 @@ ls data/scene_<id>/perception/occlusion_graph.json
 # 查看所有 mask 的面积和来源
 python3 -c "
 import json
-for scene in [184, 59, 125]:
-    with open(f'data/scene_{scene}/perception/occlusion_graph.json') as f:
+from pathlib import Path
+for path in sorted(Path('data/integrated_runs').glob('scene_*/occlusion_graph.json')):
+    with path.open() as f:
         d = json.load(f)
     for n in d['graph']['nodes']:
-        print(f'scene_{scene} mask_{n[\"object_id\"]}: area={n.get(\"mask_area\",0)} backend={n.get(\"segmentation_backend\",\"?\")}')
+        print(f'{path.parent.name} node_{n[\"node_id\"]}: area={n.get(\"mask_area\", 0)} label={n.get(\"label\", \"?\")}')
 "
 ```
 
