@@ -15,6 +15,8 @@ from PIL import Image
 
 from SmartGrasp.perception._shared import _log_step
 
+VLM_MAX_IMAGE_DIM = 768
+
 
 # ── utilities ────────────────────────────────────────────────────────────────
 
@@ -37,9 +39,8 @@ def _extract_json_from_text(text: str) -> dict[str, Any]:
 def _image_data_url(image_path: Path) -> str:
     """Encode image as JPEG base64 data URL, resizing if too large."""
     img = Image.open(image_path).convert("RGB")
-    max_dim = 768
-    if max(img.size) > max_dim:
-        ratio = max_dim / max(img.size)
+    if max(img.size) > VLM_MAX_IMAGE_DIM:
+        ratio = VLM_MAX_IMAGE_DIM / max(img.size)
         img = img.resize((int(img.size[0] * ratio), int(img.size[1] * ratio)), Image.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
@@ -94,63 +95,42 @@ def review_and_assign_sam2(
       - visible_parts: list of {description, sam2_ids}
     """
     t0 = time.time()
-    candidate_lines = [
-        f"{idx}: bbox={c.get('bbox', [])}, area_ratio={float(c.get('area_ratio', 0)):.5f}"
-        for idx, c in enumerate(candidates[:max_labels], start=1)
-    ]
 
-    prompt = (
-        "You are looking at a top-down scene photo. "
-        "Three images are provided: (1) the original RGB photo, "
-        "(2) a numbered overlay where each colored region is a SAM2 mask candidate, "
-        "(3) a contact sheet of numbered RGB cutouts, one per SAM2 candidate.\n\n"
-
-        "==== STEP 1: LIST OBJECT INSTANCES ====\n"
-        "Examine the original scene image. Ignore the tray, table, background surface, and shadows. "
-        "List every real physical object instance that is visible or partially visible. "
-        "Important: Use the general geometries and usages of the objects to identify their boundaries. "
-        "Apart from the original RGB photo, you can use the numbered overlay and the cutout sheet to help understand the scene."
-        "Include small objects (e.g. bolts, screws). Separate different object instances, especially when they are similar.\n"
-
-        "An OBJECT INSTANCE is one complete physical entity. It may have multiple parts with different colors, shapes or materials "
-        "The parts may be disconnected visually if partially occluded."
-        "(e.g. pliers with red/yellow handles and black jaws is ONE object. "
-        "A package with labels, flaps, or printed patterns is ONE object. "
-        "Printed graphics on a surface are NOT separate objects.)\n"
-
-        "Strictly separate two object instances that touch if they are physically different instances. "
-        "Strictly separate two object instances that are same but are different instances. "
-        "Never merge object instances especially when they are of the same category. "
-        "Use relative position words (e.g. upper left, lower right, top center) to describe where each object is.\n\n"
-
-        "==== STEP 2: ASSIGN SAM2 MASKS ====\n"
-        "For each object, look at the numbered overlay and the cutout sheet. "
-        "Assign the SAM2 mask ids that belong to that object. "
-        "A single object may have multiple SAM2 masks if it is fragmented. "
-        "Each SAM2 mask may be assigned to AT MOST ONE object.\n\n"
-
-        "==== STEP 3: MAP VISIBLE PARTS ====\n"
-        "For each object, list its visible parts and which SAM2 mask ids "
-        "correspond to each part. If an object has only one visible part, "
-        "include it as a single entry in visible_parts. "
-        "If an object has no usable SAM2 masks, give it empty sam2_ids.\n\n"
-
-        "==== OUTPUT ====\n"
-        "Include relative position for every object, especially for multiple instances of the same category.\n"
-        "Return only valid JSON with this schema:\n"
-        '{"objects":[\n'
-        '  {"id":1, "description":"red and yellow handled pliers",\n'
-        '   "relative_position":"lower right",\n'
-        '   "sam2_ids":[3,7,12],\n'
-        '   "visible_parts":[\n'
-        '     {"description":"red handle","sam2_ids":[3]},\n'
-        '     {"description":"yellow handle","sam2_ids":[7]},\n'
-        '     {"description":"black jaws","sam2_ids":[12]}\n'
-        '   ]}\n'
-        ']}\n\n'
-
-        #"Available SAM2 mask ids:\n" + "\n".join(candidate_lines)
-    )
+    prompt = "\n".join([
+        "Top-down scene understanding task.",
+        "Images: original RGB, numbered SAM2 mask overlay, and numbered RGB cutout sheet.",
+        "",
+        "Task:",
+        "1. Interpret each numbered SAM2 mask as visible evidence: whole object, object part, fragment, or non-object.",
+        "2. Group mask ids into physical object instances.",
+        "3. From the groups, output the final object list and visible parts.",
+        "Ignore tray/table/background/shadows.",
+        "",
+        "Grouping rules:",
+        "- Group masks only when they form one physical instance.",
+        "- Same category/color/material/texture is not enough to group masks.",
+        "- Disconnected masks need positive physical evidence to group: continuous path, shared endpoint, matching geometry across short occlusion, or plausible hidden path behind the same occluder.",
+        "- Do not group distant disconnected masks just because they look similar or are both occluded.",
+        "- Split repeated instances even when identical, touching, overlapping, or partially occluded.",
+        "- Do not split true parts of one object; parts may differ in color/material and may be fragmented by occlusion.",
+        "- Small rigid masks are often separate objects if visible and separated by background/gaps; group them into a larger object only when clearly mounted, embedded, or mechanically continuous.",
+        "- Ignore printed graphics, texture, shadows, highlights, and segmentation noise.",
+        "",
+        "- Each SAM2 id can be assigned to at most one object.",
+        "- Name each object by the complete physical instance in the RGB image. Use neutral descriptions when uncertain.",
+        "",
+        "Output only valid JSON with this schema:",
+        '{"objects":[',
+        '  {"id":1, "description":"red and yellow handled pliers",',
+        '   "relative_position":"lower right",',
+        '   "sam2_ids":[3,7,12],',
+        '   "visible_parts":[',
+        '     {"description":"red handle","sam2_ids":[3]},',
+        '     {"description":"yellow handle","sam2_ids":[7]},',
+        '     {"description":"black jaws","sam2_ids":[12]}',
+        '   ]}',
+        ']}',
+    ])
 
     client = _openai_client(api_key_env, base_url, timeout)
     response = client.responses.create(

@@ -8,12 +8,12 @@ from typing import Any
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from SmartGrasp.perception._shared import (
     _as_numpy_mask, _box_xywh_to_xyxy,
     _clean_mask, _draw_labeled_image_matplotlib, _log_step,
-    _mask_bbox, _mask_centroid_xy,
+    _mask_bbox, _mask_centroid_xy, _nearest_mask_point_xy,
     _safe_label, _save_mask_png,
 )
 from SmartGrasp.perception.background import (
@@ -760,20 +760,23 @@ def _draw_sam2_auto_label_image(
     points_with_ids: list[tuple[int, int, int]] = []
     masks: list[np.ndarray] = []
     for index, candidate in enumerate(candidates[:max_labels], start=1):
-        centroid = candidate.get("centroid", {})
-        x = int(centroid.get("x", 0))
-        y = int(centroid.get("y", 0))
+        mask = np.asarray(candidate["mask"], dtype=bool)
+        centroid_xy = _mask_centroid_xy(mask)
+        x, y = _nearest_mask_point_xy(mask, centroid_xy)
         points_with_ids.append((index, x, y))
-        masks.append(np.asarray(candidate["mask"], dtype=bool))
+        masks.append(mask)
 
     with Image.open(image_path).convert("RGB") as image:
-        _draw_labeled_image_matplotlib(image=image, points_with_ids=points_with_ids, out_png_path=out_path)
-
         try:
             import matplotlib.pyplot as plt
 
             fig, ax = plt.subplots(figsize=(10, 8))
             ax.imshow(image)
+            for mask_index, mask in enumerate(masks):
+                color = plt.cm.tab20(mask_index % 20)
+                overlay = np.zeros((*mask.shape, 4), dtype=np.float32)
+                overlay[mask] = [color[0], color[1], color[2], 0.28]
+                ax.imshow(overlay)
             _overlay_mask_contours(ax, masks)
             for obj_id, x, y in points_with_ids:
                 ax.text(
@@ -792,6 +795,7 @@ def _draw_sam2_auto_label_image(
             fig.savefig(out_path, bbox_inches="tight", dpi=300)
             plt.close(fig)
         except Exception:
+            _draw_labeled_image_matplotlib(image=image, points_with_ids=points_with_ids, out_png_path=out_path)
             return
 
 
@@ -831,41 +835,38 @@ def _save_sam2_rgb_parts_sheet(
         Image.new("RGB", (256, 256), "white").save(sheet_path)
         return sheet_path
 
-    thumb_size = 160
-    label_height = 26
+    try:
+        label_font = ImageFont.truetype("Arial.ttf", 28)
+    except Exception:
+        label_font = ImageFont.load_default()
+
+    label_height = 42
     columns = 5
     rows = int(np.ceil(len(part_images) / columns))
-    sheet = Image.new("RGB", (columns * thumb_size, rows * (thumb_size + label_height)), "white")
-    try:
-        import matplotlib.pyplot as plt
+    cell_width = max(part_image.width for _part_id, part_image in part_images)
+    cell_height = max(part_image.height for _part_id, part_image in part_images)
+    sheet = Image.new("RGB", (columns * cell_width, rows * (cell_height + label_height)), "white")
+    draw = ImageDraw.Draw(sheet)
 
-        fig, axes = plt.subplots(rows, columns, figsize=(columns * 2.0, rows * 2.3))
-        axes_arr = np.asarray(axes).reshape(rows, columns)
-        for ax in axes_arr.flat:
-            ax.axis("off")
-        for item_index, (part_id, part_image) in enumerate(part_images):
-            row = item_index // columns
-            col = item_index % columns
-            ax = axes_arr[row, col]
-            ax.imshow(part_image)
-            ax.set_title(str(part_id), fontsize=10, fontweight="bold")
-            ax.axis("off")
-        sheet_path = out_dir / "sam2_rgb_parts_sheet.png"
-        fig.savefig(sheet_path, bbox_inches="tight", dpi=100)
-        plt.close(fig)
-        return sheet_path
-    except Exception:
-        for item_index, (part_id, part_image) in enumerate(part_images):
-            row = item_index // columns
-            col = item_index % columns
-            thumb = part_image.copy()
-            thumb.thumbnail((thumb_size, thumb_size))
-            x = col * thumb_size + (thumb_size - thumb.width) // 2
-            y = row * (thumb_size + label_height) + label_height
-            sheet.paste(thumb, (x, y))
-        sheet_path = out_dir / "sam2_rgb_parts_sheet.png"
-        sheet.save(sheet_path)
-        return sheet_path
+    for item_index, (part_id, part_image) in enumerate(part_images):
+        row = item_index // columns
+        col = item_index % columns
+        cell_x = col * cell_width
+        cell_y = row * (cell_height + label_height)
+        x = cell_x + (cell_width - part_image.width) // 2
+        y = cell_y + label_height + (cell_height - part_image.height) // 2
+        label = str(part_id)
+        text_box = draw.textbbox((0, 0), label, font=label_font)
+        text_width = text_box[2] - text_box[0]
+        text_height = text_box[3] - text_box[1]
+        text_x = x + (part_image.width - text_width) // 2
+        text_y = cell_y + (label_height - text_height) // 2
+        draw.text((text_x, text_y), label, fill="black", font=label_font)
+        sheet.paste(part_image, (x, y))
+
+    sheet_path = out_dir / "sam2_rgb_parts_sheet.png"
+    sheet.save(sheet_path)
+    return sheet_path
 
 
 def generate_masks_with_sam2_langsam_pipeline(

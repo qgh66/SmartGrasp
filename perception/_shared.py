@@ -148,6 +148,24 @@ def _mask_centroid_xy(mask: np.ndarray) -> tuple[int, int]:
     return int(np.round(xs.mean())), int(np.round(ys.mean()))
 
 
+def _nearest_mask_point_xy(mask: np.ndarray, point_xy: tuple[int, int]) -> tuple[int, int]:
+    """Return point_xy if it is inside mask; otherwise the nearest mask pixel."""
+    mask_bool = np.asarray(mask, dtype=bool)
+    if mask_bool.size == 0 or not np.any(mask_bool):
+        return int(point_xy[0]), int(point_xy[1])
+
+    height, width = mask_bool.shape[:2]
+    x = int(np.clip(point_xy[0], 0, max(0, width - 1)))
+    y = int(np.clip(point_xy[1], 0, max(0, height - 1)))
+    if mask_bool[y, x]:
+        return x, y
+
+    ys, xs = np.nonzero(mask_bool)
+    distances = (xs - x) ** 2 + (ys - y) ** 2
+    nearest = int(np.argmin(distances))
+    return int(xs[nearest]), int(ys[nearest])
+
+
 def _mask_iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
     intersection = int(np.count_nonzero(mask_a & mask_b))
     if intersection == 0:
