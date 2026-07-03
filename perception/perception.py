@@ -210,45 +210,6 @@ def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Pat
     plt.close(fig)
 
 
-def visualize_graph_payload(graph_payload: dict[str, Any], out_path: Path, title: str) -> None:
-    graph = nx.DiGraph()
-    for node in graph_payload["nodes"]:
-        graph.add_node(int(node["node_id"]))
-    for edge in graph_payload["edges"]:
-        graph.add_edge(int(edge["source"]), int(edge["target"]), payload=edge)
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    if graph.number_of_nodes() > 0:
-        pos = directed_graph_layout(graph)
-        labels = {int(node["node_id"]): str(node.get("object_id", node["node_id"])) for node in graph_payload["nodes"]}
-        nx.draw_networkx_nodes(graph, pos, node_color="#e7f0ff", edgecolors="#194b7a", linewidths=1.2, node_size=1500, ax=ax)
-        nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, font_weight="bold", ax=ax)
-        nx.draw_networkx_edges(
-            graph,
-            pos,
-            arrows=True,
-            arrowstyle="-|>",
-            arrowsize=24,
-            width=2.4,
-            edge_color="#194b7a",
-            connectionstyle="arc3,rad=0.08",
-            min_source_margin=18,
-            min_target_margin=22,
-            ax=ax,
-        )
-        edge_labels = {}
-        for source, target, data in graph.edges(data=True):
-            edge = data["payload"]
-            if "depth_gap" in edge:
-                edge_labels[(source, target)] = f"gap={edge['depth_gap']:.3f}"
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8, ax=ax)
-    ax.set_title(f"{title}\narrow direction: occluder -> occluded")
-    ax.axis("off")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-
-
 def directed_graph_layout(graph: nx.DiGraph) -> dict[int, tuple[float, float]]:
     if graph.number_of_nodes() == 0:
         return {}
@@ -280,7 +241,6 @@ def build_graph_from_gt_masks(
     instances_objects: np.ndarray,
     depth: np.ndarray,
     out_dir: Path,
-    epsilon: float,
     kernel_size: int,
     min_contact_pixels: int,
     min_contact_ratio: float,
@@ -291,7 +251,6 @@ def build_graph_from_gt_masks(
     graph, adjacency = build_occlusion_graph(
         masks=masks,
         depth_map=depth,
-        epsilon=epsilon,
         kernel_size=kernel_size,
         min_contact_pixels=min_contact_pixels,
         min_contact_ratio=min_contact_ratio,
@@ -332,56 +291,92 @@ def display_label(label: Any) -> str:
     return str(label).replace("_", " ")
 
 
-def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) -> dict[str, Any]:
-    points_payload = load_json_file(points_path)
+def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], scene_dir: Path) -> dict[str, Any]:
+    """Build the new-format summary: objects with parts + occlusion graph with edges."""
     graph = graph_payload["graph"]
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
     edges = graph.get("edges", [])
-    object_points = points_payload.get("points", [])
+    out_dir = scene_dir / "perception"
+    vlm_path = out_dir / "vlm.json"
 
-    object_order: list[dict[str, Any]] = []
-    for matrix_index, node in enumerate(nodes):
-        object_id = int(node.get("object_id", node["node_id"]))
-        object_order.append(
-            {
-                "matrix_index": matrix_index,
-                "node_id": int(node["node_id"]),
-                "object_id": object_id,
-                "label": display_label(node.get("label", f"object_{object_id}")),
-            }
-        )
+    # Build sam2_id → mask_path mapping
+    sam2_to_mask: dict[int, str] = {}
+    for node in nodes:
+        for sid in node.get("sam2_ids", []):
+            sam2_to_mask[int(sid)] = node.get("mask_path", "")
 
-    if not object_points:
-        object_points = [
-            {
-                "object_id": int(node.get("object_id", node["node_id"])),
-                "x": int(node.get("point", {}).get("x", 0)),
-                "y": int(node.get("point", {}).get("y", 0)),
-                "label": display_label(node.get("label", f"object_{node.get('object_id', node['node_id'])}")),
-            }
-            for node in nodes
-            if isinstance(node.get("point"), dict)
-        ]
+    # Build object info from VLM
+    objects = []
+    if vlm_path.exists():
+        with open(vlm_path) as f:
+            vlm = json.load(f)
+        for obj in vlm.get("objects", []):
+            oid = obj["id"]
+            parts = []
+            for part in obj.get("visible_parts", []):
+                mask_paths = []
+                for sid in part.get("sam2_ids", []):
+                    mp = sam2_to_mask.get(int(sid))
+                    if mp:
+                        try:
+                            mask_paths.append(str(Path(mp).relative_to(out_dir)))
+                        except ValueError:
+                            mask_paths.append(mp)
+                parts.append({
+                    "description": part.get("description", ""),
+                    "sam2_ids": part.get("sam2_ids", []),
+                    "mask_paths": mask_paths,
+                })
+            centroid = {"x": 0, "y": 0}
+            for node in nodes:
+                if node.get("object_id") == oid:
+                    centroid = {"x": node["point"]["x"], "y": node["point"]["y"]}
+                    break
+            mask_rel = ""
+            for sid in obj.get("sam2_ids", []):
+                mp = sam2_to_mask.get(int(sid))
+                if mp:
+                    try:
+                        mask_rel = str(Path(mp).relative_to(out_dir))
+                    except ValueError:
+                        mask_rel = mp
+                    break
+            objects.append({
+                "object_id": oid,
+                "label": obj.get("description", ""),
+                "relative_position": obj.get("relative_position", ""),
+                "centroid": centroid,
+                "mask_path": mask_rel,
+                "sam2_ids": obj.get("sam2_ids", []),
+                "parts": parts,
+            })
 
-    node_id_to_index = {item["node_id"]: item["matrix_index"] for item in object_order}
-    size = len(object_order)
-    occlusion_matrix = [[0.0 for _ in range(size)] for _ in range(size)]
-
+    # Build occlusion graph summary
+    graph_edges = []
     for edge in edges:
-        source_index = node_id_to_index.get(int(edge["source"]))
-        target_index = node_id_to_index.get(int(edge["target"]))
-        if source_index is None or target_index is None:
-            continue
-        contact_ratio = float(edge.get("contact_ratio", 0.0))
-        occlusion_matrix[source_index][target_index] = safe_float(contact_ratio) or 0.0
+        src_node = nodes[int(edge["source"])]
+        tgt_node = nodes[int(edge["target"])]
+        graph_edges.append({
+            "source_object_id": int(edge.get("source_object_id", src_node.get("object_id", 0))),
+            "target_object_id": int(edge.get("target_object_id", tgt_node.get("object_id", 0))),
+            "source_label": str(edge.get("source_label", src_node.get("label", ""))),
+            "target_label": str(edge.get("target_label", tgt_node.get("label", ""))),
+            "depth_gap": round(float(edge.get("depth_gap", 0)), 3),
+            "contact_pixels": int(edge.get("contact_pixels", 0)),
+            "contact_ratio": round(float(edge.get("contact_ratio", 0)), 5),
+        })
+    adj = [[0 for _ in range(len(nodes))] for _ in range(len(nodes))]
+    for edge in edges:
+        adj[int(edge["source"])][int(edge["target"])] = 1
 
-    matrix_labels = [f"{item['object_id']}: {item['label']}" for item in object_order]
     return {
-        "object_points": object_points,
-        "matrix_labels": matrix_labels,
-        "occlusion_matrix_direction": "row object occludes column object",
-        "occlusion_matrix_metric": "contact_ratio",
-        "occlusion_matrix": occlusion_matrix,
+        "objects": objects,
+        "occlusion_graph": {
+            "num_nodes": len(nodes),
+            "num_edges": len(edges),
+            "edges": graph_edges,
+            "adjacency_matrix": adj,
+        },
     }
 
 
@@ -396,7 +391,8 @@ def build_gt_reference_outputs(
     args: argparse.Namespace,
     source_image_path: Path | None = None,
 ) -> dict[str, Any]:
-    gt_dir = OUT_ROOT / f"scene_{scene_id}" / "gt"
+    scene_dir = OUT_ROOT / f"scene_{scene_id}"
+    gt_dir = scene_dir / "gt"
     reset_output_dir(gt_dir)
     image_path = copy_or_save_sample_image(row, source_image_path, gt_dir)
     with Image.open(image_path) as image:
@@ -409,12 +405,11 @@ def build_gt_reference_outputs(
         instances_objects=instances_objects,
         depth=depth,
         out_dir=gt_dir,
-        epsilon=args.epsilon,
         kernel_size=args.kernel_size,
         min_contact_pixels=args.min_contact_pixels,
         min_contact_ratio=args.min_contact_ratio,
     )
-    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
+    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
     summary = {
         "scene_id": scene_id,
         "query_obj_id": query_obj_id,
@@ -553,7 +548,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             review_api_key_env=args.review_api_key_env,
             review_base_url=args.review_base_url,
             review_timeout=args.review_timeout,
-            epsilon=args.epsilon,
             kernel_size=args.kernel_size,
             min_contact_pixels=args.min_contact_pixels,
             min_contact_ratio=args.min_contact_ratio,
@@ -574,8 +568,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             background_mask_source=args.mask,
             gt_instances_objects=instances_objects if args.mask == "gt" else None,
         )
-        visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "SAM2/LangSAM Occlusion Graph")
-
+        # Graph PNG already saved by build_org_json with scene-image background
         # Write a minimal points.json for summary generation
         points_payload = {
             "points": [
@@ -591,7 +584,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         points_path = out_dir / "points.json"
         points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
+        scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
         summary = {
             "scene_id": scene_id,
             "query_obj_id": query_obj_id,
@@ -644,7 +637,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--review-base-url", default=None)
     parser.add_argument("--review-timeout", type=float, default=120.0)
-    parser.add_argument("--epsilon", type=float, default=0.05)
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)

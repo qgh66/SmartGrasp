@@ -142,16 +142,32 @@ def find_contact_area(
     return dilated_i & dilated_j
 
 
-def _finite_mask(depth_values: np.ndarray) -> np.ndarray:
-    return np.isfinite(depth_values) & (depth_values > 0)
+def _band_depth_stats(
+    mask: np.ndarray,
+    other_mask: np.ndarray,
+    depth_map: np.ndarray,
+    band_lo: int = 2,
+    band_hi: int = 9,
+) -> Optional[tuple[float, float, float]]:
+    """Return (p25, p50, p75) of depth in *mask* pixels within [band_lo, band_hi)
+    pixels of *other_mask* (close to the boundary but avoiding the noisiest edge).
+    Falls back to whole-mask stats when the band is too small.
+    """
+    try:
+        from scipy.ndimage import distance_transform_edt
+        dist = distance_transform_edt(~other_mask)
+        band = mask & (dist >= band_lo) & (dist < band_hi)
+        if np.count_nonzero(band) < 10:
+            band = mask
+    except ImportError:
+        band = mask
 
-
-def _contact_depth_median(mask: np.ndarray, contact_area: np.ndarray, depth_map: np.ndarray) -> Optional[float]:
-    depth_values = depth_map[mask & contact_area]
-    valid = _finite_mask(depth_values)
+    vals = depth_map[band]
+    valid = np.isfinite(vals) & (vals > 0)
     if not np.any(valid):
         return None
-    return float(np.median(depth_values[valid]))
+    p25, p50, p75 = np.percentile(vals[valid], [25, 50, 75])
+    return float(p25), float(p50), float(p75)
 
 
 def compute_adjacency_matrix(graph: nx.DiGraph, num_nodes: Optional[int] = None) -> np.ndarray:
@@ -220,20 +236,30 @@ def graph_to_jsonable(
 def build_occlusion_graph(
     masks: np.ndarray,
     depth_map: np.ndarray,
-    epsilon: float = 0.05,
-    kernel_size: int = 5,
-    min_contact_pixels: int = 50,
-    min_contact_ratio: float = 0.002,
+    kernel_size: int = 11,
+    min_contact_pixels: int = 100,
+    min_contact_ratio: float = 0.005,
+    depth_gap_threshold: float = 0.5,
+    band_lo: int = 2,
+    band_hi: int = 9,
 ) -> tuple[nx.DiGraph, np.ndarray]:
     """Build an ORG from instance masks and a depth map.
 
+    Contact detected via dilation; depth measured in a narrow band
+    [band_lo, band_hi) px from the other mask's boundary, close to the
+    occlusion frontier but avoiding sensor-interpolation noise at 0–3 px.
+    An edge i→j is added when the band median of i is at least
+    *depth_gap_threshold* shallower than that of j.
+
     Args:
-        masks: Boolean-like array with shape (N, H, W).
-        depth_map: Depth array with shape (H, W). Smaller values mean closer / higher.
-        epsilon: Minimum depth gap required to consider the occlusion relation reliable.
-        kernel_size: Dilation kernel size used to detect contact areas.
-        min_contact_pixels: Ignore weak contacts smaller than this many pixels.
-        min_contact_ratio: Ignore contacts smaller than this fraction of the smaller object mask.
+        masks: Boolean-like array (N, H, W).
+        depth_map: Depth array (H, W). Smaller = closer.
+        kernel_size: Dilation kernel for contact detection.
+        min_contact_pixels: Minimum contact pixels.
+        min_contact_ratio: Minimum contact ratio.
+        depth_gap_threshold: Minimum band-median gap for occlusion.
+        band_lo: Inner radius of measurement band (px from other mask).
+        band_hi: Outer radius of measurement band.
 
     Returns:
         graph: A directed graph where edge i -> j means i occludes j.
@@ -242,8 +268,6 @@ def build_occlusion_graph(
 
     masks, depth_map = _validate_inputs(masks, depth_map)
 
-    if epsilon < 0:
-        raise ValueError(f"`epsilon` must be >= 0, got {epsilon}.")
     if min_contact_pixels < 1:
         raise ValueError(f"`min_contact_pixels` must be >= 1, got {min_contact_pixels}.")
     if min_contact_ratio < 0:
@@ -265,33 +289,35 @@ def build_occlusion_graph(
             if contact_ratio < min_contact_ratio:
                 continue
 
-            depth_i = _contact_depth_median(masks[i], contact_area, depth_map)
-            depth_j = _contact_depth_median(masks[j], contact_area, depth_map)
-            if depth_i is None or depth_j is None:
+            stats_i = _band_depth_stats(masks[i], masks[j], depth_map, band_lo, band_hi)
+            stats_j = _band_depth_stats(masks[j], masks[i], depth_map, band_lo, band_hi)
+            if stats_i is None or stats_j is None:
                 continue
 
-            if depth_i < depth_j - epsilon:
+            p25_i, p50_i, p75_i = stats_i
+            p25_j, p50_j, p75_j = stats_j
+
+            # Occlusion when far-side median gap is large enough
+            if p50_i + depth_gap_threshold < p50_j:
                 graph.add_edge(
-                    i,
-                    j,
+                    i, j,
                     info=OcclusionEdgeInfo(
                         contact_pixels=contact_pixels,
                         contact_ratio=contact_ratio,
-                        depth_i_median=depth_i,
-                        depth_j_median=depth_j,
-                        depth_gap=depth_j - depth_i,
+                        depth_i_median=p50_i,
+                        depth_j_median=p50_j,
+                        depth_gap=p50_j - p50_i,
                     ),
                 )
-            elif depth_j < depth_i - epsilon:
+            elif p50_j + depth_gap_threshold < p50_i:
                 graph.add_edge(
-                    j,
-                    i,
+                    j, i,
                     info=OcclusionEdgeInfo(
                         contact_pixels=contact_pixels,
                         contact_ratio=contact_ratio,
-                        depth_i_median=depth_j,
-                        depth_j_median=depth_i,
-                        depth_gap=depth_i - depth_j,
+                        depth_i_median=p50_j,
+                        depth_j_median=p50_i,
+                        depth_gap=p50_i - p50_j,
                     ),
                 )
 
@@ -299,17 +325,46 @@ def build_occlusion_graph(
     return graph, adjacency
 
 
+def _compute_occlusion_layers(graph: nx.DiGraph) -> dict[int, int]:
+    """Assign each node a layer = longest path length from any source node.
+
+    Layer 0 = front-most (not occluded by any object).
+    Layer k = occluded by a chain of k objects in front.
+    """
+    layers: dict[int, int] = {n: 0 for n in graph.nodes()}
+    if graph.number_of_nodes() == 0:
+        return layers
+    try:
+        topo_order = list(nx.topological_sort(graph))
+    except (nx.NetworkXError, nx.NetworkXUnfeasible):
+        return layers
+    for u in topo_order:
+        for v in graph.successors(u):
+            layers[v] = max(layers[v], layers[u] + 1)
+    return layers
+
+
 def visualize_occlusion_graph(
     graph: nx.DiGraph,
     ax: Optional[plt.Axes] = None,
     title: str = "Occlusion Relationship Graph",
-    with_edge_labels: bool = True,
+    positions: dict[int, tuple[float, float]] | None = None,
+    node_layers: dict[int, int] | None = None,
+    node_labels: dict[int, str] | None = None,
+    background_image: np.ndarray | None = None,
 ) -> plt.Axes:
-    """Visualize the directed occlusion graph."""
+    """Visualize the directed occlusion graph.
+
+    Args:
+        positions: Optional dict node_id → (x, y) in data coordinates.
+        node_layers: Optional dict node_id → layer_index for per-layer coloring.
+        node_labels: Optional dict node_id → display label string.
+        background_image: Optional RGB image array (H, W, 3) to render as background.
+    """
 
     created_ax = ax is None
     if created_ax:
-        _, ax = plt.subplots(figsize=(6, 5))
+        _, ax = plt.subplots(figsize=(10, 8))
 
     assert ax is not None
 
@@ -318,29 +373,67 @@ def visualize_occlusion_graph(
         ax.axis("off")
         return ax
 
-    pos = nx.spring_layout(graph, seed=42)
-    nx.draw_networkx(
+    # --- background image ---
+    if background_image is not None:
+        ax.imshow(background_image, origin="upper")
+
+    # --- layout ---
+    if positions is not None:
+        pos = {n: positions[n] for n in graph.nodes()}
+        if background_image is not None:
+            # Let the background image define the coordinate system
+            h, w = background_image.shape[:2]
+            ax.set_xlim(0, w)
+            ax.set_ylim(h, 0)
+        else:
+            xs = [p[0] for p in positions.values()]
+            ys = [p[1] for p in positions.values()]
+            x_margin = max(20, (max(xs) - min(xs)) * 0.06) if len(xs) > 1 else 20
+            y_margin = max(20, (max(ys) - min(ys)) * 0.06) if len(ys) > 1 else 20
+            ax.set_xlim(min(xs) - x_margin, max(xs) + x_margin)
+            ax.set_ylim(min(ys) - y_margin, max(ys) + y_margin)
+        ax.set_aspect("equal")
+    else:
+        pos = nx.spring_layout(graph, seed=42)
+
+    # --- node colors by occlusion layer ---
+    if node_layers is not None:
+        max_layer = max(node_layers.values()) if node_layers else 0
+        num_layers = max_layer + 1
+        cmap = plt.cm.tab10
+        colors = [cmap(node_layers.get(n, 0) % 10) for n in graph.nodes()]
+        # Add a tiny legend-like annotation
+        from matplotlib.patches import Patch
+        legend_handles = [
+            Patch(color=cmap(l % 10), label=f"Layer {l} (front)" if l == 0 else f"Layer {l}")
+            for l in range(min(num_layers, 6))
+        ]
+        ax.legend(handles=legend_handles, loc="upper right", fontsize=8, framealpha=0.7)
+    else:
+        colors = "#cfe8ff"
+
+    # --- node labels ---
+    labels = node_labels if node_labels is not None else {n: str(n) for n in graph.nodes()}
+
+    nx.draw_networkx_edges(
         graph,
         pos=pos,
         ax=ax,
-        node_color="#cfe8ff",
-        edge_color="#1f4e79",
-        node_size=1800,
+        edge_color="#FFD700",
         arrows=True,
-        arrowsize=18,
-        linewidths=1.2,
-        font_size=10,
+        arrowsize=22,
+        width=2.5,
     )
-
-    if with_edge_labels and graph.number_of_edges() > 0:
-        edge_labels = {}
-        for u, v, data in graph.edges(data=True):
-            info = data.get("info")
-            if info is None:
-                continue
-            edge_labels[(u, v)] = f"gap={info.depth_gap:.3f}\npx={info.contact_pixels}"
-        if edge_labels:
-            nx.draw_networkx_edge_labels(graph, pos=pos, edge_labels=edge_labels, ax=ax, font_size=8)
+    nx.draw_networkx_labels(
+        graph,
+        pos=pos,
+        ax=ax,
+        labels=labels,
+        font_size=11,
+        font_weight="bold",
+        font_color="white",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="black", edgecolor="none", alpha=0.65),
+    )
 
     ax.set_title(title)
     ax.axis("off")
@@ -379,7 +472,8 @@ if __name__ == "__main__":
     print("Adjacency matrix:")
     print(demo_adjacency.astype(int))
 
-    visualize_occlusion_graph(demo_graph)
+    demo_layers = _compute_occlusion_layers(demo_graph)
+    visualize_occlusion_graph(demo_graph, node_layers=demo_layers)
     plt.tight_layout()
     output_path = SMARTGRASP_ROOT / "perception" / "org_demo_graph.png"
     plt.savefig(output_path, dpi=180, bbox_inches="tight")
@@ -395,10 +489,12 @@ def build_org_json(
     review_api_key_env: str = "OPENAI_API_KEY",
     review_base_url: str | None = None,
     review_timeout: float = 120.0,
-    epsilon: float = 0.05,
-    kernel_size: int = 5,
-    min_contact_pixels: int = 50,
-    min_contact_ratio: float = 0.002,
+    kernel_size: int = 11,
+    min_contact_pixels: int = 100,
+    min_contact_ratio: float = 0.005,
+    depth_gap_threshold: float = 0.5,
+    band_lo: int = 2,
+    band_hi: int = 9,
     mask_clean_kernel: int = 3,
     proposal_min_area_ratio: float = 0.006,
     proposal_max_area_ratio: float = 0.11,
@@ -479,10 +575,12 @@ def build_org_json(
     graph, adjacency = build_occlusion_graph(
         masks=masks,
         depth_map=depth_map,
-        epsilon=epsilon,
         kernel_size=kernel_size,
         min_contact_pixels=min_contact_pixels,
         min_contact_ratio=min_contact_ratio,
+        band_lo=band_lo,
+        band_hi=band_hi,
+        depth_gap_threshold=depth_gap_threshold,
     )
 
     node_records: list[dict[str, Any]] = []
@@ -494,6 +592,38 @@ def build_org_json(
     graph_payload = graph_to_jsonable(graph, adjacency, node_records=node_records)
     with Image.open(image_path) as img:
         width, height = img.size
+
+    # --- visualize occlusion graph with spatial positions + layer colors ---
+    viz_positions: dict[int, tuple[float, float]] = {}
+    viz_labels: dict[int, str] = {}
+    for rec in mask_records:
+        nid = rec["node_id"]
+        px, py = rec["point"]["x"], rec["point"]["y"]
+        # Image coords: (0,0) top-left, imshow(origin='upper') matches this
+        viz_positions[nid] = (float(px), float(py))
+        viz_labels[nid] = str(rec["object_id"])
+    viz_layers = _compute_occlusion_layers(graph)
+
+    fig, viz_ax = plt.subplots(figsize=(12, 9))
+    # Load scene image as background
+    bg_img: np.ndarray | None = None
+    if image_path.exists():
+        bg_img = np.array(Image.open(image_path).convert("RGB"))
+    visualize_occlusion_graph(
+        graph,
+        ax=viz_ax,
+        title=f"Occlusion Graph — {image_path.parent.name}",
+        positions=viz_positions,
+        node_layers=viz_layers,
+        node_labels=viz_labels,
+        background_image=bg_img,
+    )
+    viz_path = output_mask_dir.parent / "occlusion_graph.png"
+    fig.tight_layout()
+    fig.savefig(viz_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    _log_step("③ viz_graph", t2)
+
     payload = {
         "image": {
             "path": str(image_path.resolve()),

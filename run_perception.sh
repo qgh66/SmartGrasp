@@ -114,8 +114,7 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
         --review-api-key-env OPENAI_API_KEY \
         --review-base-url "$OPENAI_BASE_URL" \
         --review-timeout "${REVIEW_TIMEOUT:-300}" \
-        --epsilon "${EPSILON:-0.05}" \
-        --kernel-size "${KERNEL_SIZE:-5}" \
+        --kernel-size "${KERNEL_SIZE:-11}" \
         --min-contact-pixels "${MIN_CONTACT_PIXELS:-50}" \
         --min-contact-ratio "${MIN_CONTACT_RATIO:-0.002}" \
         --mask-clean-kernel "${MASK_CLEAN_KERNEL:-3}" \
