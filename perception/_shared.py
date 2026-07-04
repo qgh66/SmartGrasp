@@ -47,7 +47,7 @@ def _prepare_mask_output_dir(output_mask_dir: Path, save_candidates: bool) -> No
     for old_mask in output_mask_dir.glob("*.png"):
         old_mask.unlink()
     if not save_candidates:
-        for candidate_dir_name in ("mask_candidates", "langsam_candidates", "sam2_auto_candidates"):
+        for candidate_dir_name in ("mask_candidates", "sam2_auto_candidates"):
             candidate_dir = output_mask_dir.parent / candidate_dir_name
             if candidate_dir.exists():
                 shutil.rmtree(candidate_dir)
@@ -113,21 +113,8 @@ def _as_numpy_mask(mask: Any) -> np.ndarray:
     if mask_np.ndim > 2:
         mask_np = np.squeeze(mask_np)
     if mask_np.ndim != 2:
-        raise ValueError(f"LangSAM mask must be 2D after squeezing, got {mask_np.shape}.")
+        raise ValueError(f"Mask must be 2D after squeezing, got {mask_np.shape}.")
     return mask_np > 0
-
-
-def _normalize_box(raw_box: Any) -> list[int] | None:
-    try:
-        values = np.asarray(raw_box, dtype=np.float32).reshape(-1)
-    except Exception:
-        return None
-    if values.size < 4:
-        return None
-    x0, y0, x1, y1 = [int(round(float(value))) for value in values[:4]]
-    if x1 <= x0 or y1 <= y0:
-        return None
-    return [x0, y0, x1, y1]
 
 
 def _mask_bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
@@ -164,22 +151,6 @@ def _nearest_mask_point_xy(mask: np.ndarray, point_xy: tuple[int, int]) -> tuple
     distances = (xs - x) ** 2 + (ys - y) ** 2
     nearest = int(np.argmin(distances))
     return int(xs[nearest]), int(ys[nearest])
-
-
-def _mask_iou(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
-    intersection = int(np.count_nonzero(mask_a & mask_b))
-    if intersection == 0:
-        return 0.0
-    union = int(np.count_nonzero(mask_a | mask_b))
-    return float(intersection / max(1, union))
-
-
-def _mask_overlap_fraction(candidate: np.ndarray, existing: np.ndarray) -> float:
-    candidate_area = int(np.count_nonzero(candidate))
-    if candidate_area == 0:
-        return 0.0
-    intersection = int(np.count_nonzero(candidate & existing))
-    return float(intersection / candidate_area)
 
 
 def _draw_labeled_image_matplotlib(
@@ -223,28 +194,6 @@ def _draw_mask_records_label(
             points_with_ids=points_with_ids,
             out_png_path=str(out_path),
         )
-
-
-def _dilate_mask(mask: np.ndarray, kernel_size: int = 3) -> np.ndarray:
-    mask_bool = np.asarray(mask, dtype=bool)
-    if kernel_size <= 1:
-        return mask_bool
-    if cv2 is not None:
-        kernel = np.ones((kernel_size, kernel_size), dtype=np.uint8)
-        return cv2.dilate(mask_bool.astype(np.uint8), kernel, iterations=1) > 0
-
-    pad = kernel_size // 2
-    padded = np.pad(mask_bool, pad_width=pad, mode="constant", constant_values=False)
-    dilated = np.zeros_like(mask_bool, dtype=bool)
-    for row_offset in range(kernel_size):
-        for col_offset in range(kernel_size):
-            dilated |= padded[row_offset : row_offset + mask_bool.shape[0], col_offset : col_offset + mask_bool.shape[1]]
-    return dilated
-
-
-def _valid_depth_values(depth_map: np.ndarray, sample_mask: np.ndarray) -> np.ndarray:
-    values = np.asarray(depth_map, dtype=np.float32)[np.asarray(sample_mask, dtype=bool)]
-    return values[np.isfinite(values) & (values > 0)]
 
 
 def _box_xywh_to_xyxy(box: list[int]) -> list[int] | None:

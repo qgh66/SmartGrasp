@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from SmartGrasp.perception._shared import (
 )
 from SmartGrasp.perception.background import (
     background_overlap_fraction,
-    LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD,
+    BACKGROUND_OVERLAP_REJECTION_THRESHOLD,
 )
 from SmartGrasp.perception.vlm import review_and_assign_sam2
 
@@ -29,77 +30,58 @@ except ImportError:
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
-_LANGSAM_CACHE: dict[tuple[str, str], Any] = {}
-GROUNDING_DINO_LOCAL_MODEL_PATH = Path(
+_SAM2_WRAPPER_CACHE: dict[tuple[str, str], Any] = {}
+DEFAULT_SAM2_CONFIG = os.environ.get("SAM2_CONFIG", "configs/sam2.1/sam2.1_hiera_s.yaml")
+DEFAULT_SAM2_CHECKPOINT = Path(
     os.environ.get(
-        "GROUNDING_DINO_MODEL_PATH",
-        str(Path.home() / ".cache/huggingface/hub/models--IDEA-Research--grounding-dino-base/"
-        "snapshots/12bdfa3120f3e7ec7b434d90674b3396eccf88eb"),
+        "SAM2_CHECKPOINT",
+        str(Path.home() / ".cache/torch/hub/checkpoints/sam2.1_hiera_small.pt"),
     )
 )
 
-def _load_langsam(device: str) -> Any:
+
+@dataclass
+class Sam2AutoWrapper:
+    model: Any
+    mask_generator: Any
+
+    def generate(self, image_np: np.ndarray) -> list[dict[str, Any]]:
+        return list(self.mask_generator.generate(image_np))
+
+
+def _load_sam2_wrapper(device: str) -> Any:
     cache_key = ("default", device)
-    if cache_key not in _LANGSAM_CACHE:
+    if cache_key not in _SAM2_WRAPPER_CACHE:
         try:
-            from lang_sam import LangSAM  # type: ignore
+            from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+            from sam2.build_sam import build_sam2
         except ImportError as exc:
             raise RuntimeError(
-                "LangSAM is not installed in the active environment. "
-                "Install lang-segment-anything/LangSAM before using --segmentation-backend langsam."
+                "SAM2 is not installed in the active environment. "
+                "Install facebookresearch/sam2 before running perception."
             ) from exc
 
-        if GROUNDING_DINO_LOCAL_MODEL_PATH.exists():
-            try:
-                model = LangSAM(
-                    device=device,
-                    gdino_model_ckpt_path=str(GROUNDING_DINO_LOCAL_MODEL_PATH),
-                    gdino_processor_ckpt_path=str(GROUNDING_DINO_LOCAL_MODEL_PATH),
-                )
-            except TypeError:
-                try:
-                    model = LangSAM(
-                        gdino_model_ckpt_path=str(GROUNDING_DINO_LOCAL_MODEL_PATH),
-                        gdino_processor_ckpt_path=str(GROUNDING_DINO_LOCAL_MODEL_PATH),
-                    )
-                except TypeError:
-                    model = LangSAM(device=device)
-        else:
-            try:
-                model = LangSAM(device=device)
-            except TypeError:
-                model = LangSAM()
-        _LANGSAM_CACHE[cache_key] = model
-    return _LANGSAM_CACHE[cache_key]
+        if not DEFAULT_SAM2_CHECKPOINT.exists():
+            raise FileNotFoundError(
+                f"SAM2 checkpoint not found: {DEFAULT_SAM2_CHECKPOINT}. "
+                "Set SAM2_CHECKPOINT to a valid checkpoint path."
+            )
+
+        model = build_sam2(DEFAULT_SAM2_CONFIG, str(DEFAULT_SAM2_CHECKPOINT), device=device)
+        mask_generator = SAM2AutomaticMaskGenerator(model)
+        _SAM2_WRAPPER_CACHE[cache_key] = Sam2AutoWrapper(model=model, mask_generator=mask_generator)
+    return _SAM2_WRAPPER_CACHE[cache_key]
 
 
-def _clear_langsam_image_state() -> None:
-    """Release SAM predictor image embeddings between consecutive scenes."""
+def clear_sam2_image_state() -> None:
+    """Release cached accelerator memory between consecutive scenes."""
     import gc
-    for model in _LANGSAM_CACHE.values():
-        sam = getattr(model, "sam", None)
-        if sam is not None:
-            predictor = getattr(sam, "predictor", None)
-            if predictor is not None:
-                for attr in ("_features", "_original_image", "_input_image", "_is_image_set"):
-                    try:
-                        setattr(predictor, attr, None)
-                    except Exception:
-                        pass
-                reset = getattr(predictor, "reset_image", None)
-                if callable(reset):
-                    try:
-                        reset()
-                    except Exception:
-                        pass
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
         torch.mps.empty_cache()
-
 
 
 def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
@@ -109,10 +91,9 @@ def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(42)
     image_np = np.asarray(image.convert("RGB"))
-    sam = getattr(model, "sam", None)
-    if sam is None or not hasattr(sam, "generate"):
-        raise RuntimeError("Loaded LangSAM object does not expose SAM2 automatic mask generation.")
-    return list(sam.generate(image_np))
+    if not hasattr(model, "generate"):
+        raise RuntimeError("Loaded SAM2 wrapper does not expose automatic mask generation.")
+    return list(model.generate(image_np))
 
 
 def _configure_sam2_auto_generator(
@@ -122,9 +103,8 @@ def _configure_sam2_auto_generator(
     pred_iou_thresh: float | None = None,
     stability_score_thresh: float | None = None,
 ) -> dict[str, Any]:
-    sam = getattr(model, "sam", None)
-    generator = getattr(sam, "mask_generator", None)
-    sam_model = getattr(sam, "model", None)
+    generator = getattr(model, "mask_generator", None)
+    sam_model = getattr(model, "model", None)
     if generator is None or sam_model is None:
         return {"configured": False, "reason": "sam2_mask_generator_unavailable"}
 
@@ -160,7 +140,7 @@ def _configure_sam2_auto_generator(
     try:
         from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
-        sam.mask_generator = SAM2AutomaticMaskGenerator(sam_model, **kwargs)
+        model.mask_generator = SAM2AutomaticMaskGenerator(sam_model, **kwargs)
     except Exception as exc:
         return {"configured": False, "reason": str(exc), "requested": kwargs}
     return {"configured": True, "settings": kwargs}
@@ -387,7 +367,7 @@ def _is_tray_or_background_like_proposal(
     # Prefer the pre-computed depth-based background exclusion mask when available.
     if background_exclusion_mask is not None and int(np.count_nonzero(background_exclusion_mask)) > 0:
         background_overlap = background_overlap_fraction(mask, background_exclusion_mask)
-        if background_overlap >= LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD:
+        if background_overlap >= BACKGROUND_OVERLAP_REJECTION_THRESHOLD:
             return True
 
     height, width = mask.shape
@@ -657,7 +637,7 @@ def _sam2_auto_candidate_pool(
     image = Image.open(image_path).convert("RGB")
     image_np = np.asarray(image)
     image_area = float(image_np.shape[0] * image_np.shape[1])
-    model = _load_langsam(device)
+    model = _load_sam2_wrapper(device)
     generator_settings = _configure_sam2_auto_generator(
         model,
         points_per_side=points_per_side,
@@ -869,7 +849,7 @@ def _save_sam2_rgb_parts_sheet(
     return sheet_path
 
 
-def generate_masks_with_sam2_langsam_pipeline(
+def generate_masks_with_sam2_vlm_pipeline(
     image_path: Path,
     output_mask_dir: Path,
     review_model_id: str,

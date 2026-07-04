@@ -589,7 +589,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "scene_id": scene_id,
             "query_obj_id": query_obj_id,
             "annotation": annotation,
-            "point_source": "anchor-langsam-fusion",
+            "point_source": "sam2-vlm-anchor",
             "output_dir": str(out_dir.resolve()),
             "image_path": str(image_path.resolve()),
             "depth_path": str(depth_path.resolve()),
@@ -600,9 +600,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "background_mask_source": graph_payload.get("background_mask_source"),
             "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
             "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
-            "openai_sam2_review_json": str((out_dir / "openai_sam2_review.json").resolve()),
-            "object_sam2_review_json": str((out_dir / "sam2_review.json").resolve()),
-            "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
+            "vlm_review_json": str((out_dir / "vlm.json").resolve()),
+            "perception_label_png": str((out_dir / "label_2_vlm.png").resolve()),
             "num_nodes": len(graph_payload["graph"]["nodes"]),
             "num_edges": len(graph_payload["graph"]["edges"]),
             "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
@@ -612,18 +611,15 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         return summary
 
-    # GT-only mode: just return the gt summary
-    summary_path = gt_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    return summary
+    return gt_summary
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> OpenAI review -> LangSAM refine -> occlusion graph.")
+    parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> VLM review -> occlusion graph.")
     parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
     parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
     parser.add_argument("--mode", choices=["gt", "vlm"], default="vlm",
-                        help="gt: ground-truth occlusion graph only; vlm: full SAM2+VLM+LangSAM pipeline (default: vlm)")
+                        help="gt: ground-truth occlusion graph only; vlm: full SAM2+VLM pipeline (default: vlm)")
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
     parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
@@ -658,7 +654,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Depth SAM2 stability_score_thresh; default: use --sam2-stability-score-thresh")
     parser.add_argument("--save-candidates", action="store_true")
     parser.add_argument("--debug", choices=["sam2"], default=None,
-                        help="sam2: stop after SAM2 auto; vlm1: stop after first VLM response")
+                        help="sam2: stop after SAM2 auto candidate generation")
     parser.add_argument("--device", default=None)
     return parser
 
@@ -689,8 +685,8 @@ def main() -> None:
             item_args.serve = False
             try:
                 run_pipeline(item_args, df=df)
-                from SmartGrasp.perception.sam2auto import _clear_langsam_image_state
-                _clear_langsam_image_state()
+                from SmartGrasp.perception.sam2auto import clear_sam2_image_state
+                clear_sam2_image_state()
             except Exception as exc:
                 print(f"Failed scene_id={scene_id}: {exc}", flush=True)
     elif args.scene_ids:
@@ -701,8 +697,8 @@ def main() -> None:
             item_args.scene_id = scene_id
             item_args.query_obj_id = None
             summaries.append(run_pipeline(item_args, df=df))
-            from SmartGrasp.perception.sam2auto import _clear_langsam_image_state
-            _clear_langsam_image_state()
+            from SmartGrasp.perception.sam2auto import clear_sam2_image_state
+            clear_sam2_image_state()
         print(json.dumps({"runs": summaries}, ensure_ascii=False, indent=2))
     else:
         run_pipeline(args)

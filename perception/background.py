@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from SmartGrasp.perception._shared import _clean_mask, _dilate_mask, _valid_depth_values
+from SmartGrasp.perception._shared import _clean_mask
 
 try:
     import cv2  # type: ignore
@@ -19,7 +19,7 @@ BACKGROUND_EXPANSION_HUE_TOLERANCE = 14.0
 BACKGROUND_EXPANSION_MIN_ANCHOR_FRACTION = 0.025
 BACKGROUND_EXPANSION_MAX_HUE_MODES = 4
 BACKGROUND_EXPANSION_MAX_COMPONENT_AREA_RATIO = 0.23
-LANGSAM_BACKGROUND_OVERLAP_FALLBACK_THRESHOLD = 0.5
+BACKGROUND_OVERLAP_REJECTION_THRESHOLD = 0.5
 
 
 def _hue_distance(hue: np.ndarray, center: float) -> np.ndarray:
@@ -189,32 +189,3 @@ def background_overlap_fraction(mask: np.ndarray, background_mask: np.ndarray | 
     if area == 0:
         return 0.0
     return float(np.count_nonzero(mask_bool & np.asarray(background_mask, dtype=bool)) / area)
-
-
-def mask_boundary_depth_delta(
-    mask_a: np.ndarray,
-    mask_b: np.ndarray,
-    depth_map: np.ndarray,
-    boundary_kernel_size: int = 3,
-) -> tuple[float | None, int]:
-    a = np.asarray(mask_a, dtype=bool)
-    b = np.asarray(mask_b, dtype=bool)
-    dilated_a = _dilate_mask(a, boundary_kernel_size)
-    dilated_b = _dilate_mask(b, boundary_kernel_size)
-
-    # The boundary samples are the pixels from each mask that touch the other
-    # mask after dilation. Comparing medians on those two thin strips estimates
-    # the physical depth step across the visual seam, while avoiding unrelated
-    # depth values from the rest of either object.
-    boundary_a = a & dilated_b
-    boundary_b = b & dilated_a
-    contact_pixels = int(np.count_nonzero(boundary_a) + np.count_nonzero(boundary_b))
-    if contact_pixels == 0:
-        return None, 0
-
-    depth_a = _valid_depth_values(depth_map, boundary_a)
-    depth_b = _valid_depth_values(depth_map, boundary_b)
-    if depth_a.size == 0 or depth_b.size == 0:
-        return None, contact_pixels
-
-    return float(abs(np.median(depth_a) - np.median(depth_b))), contact_pixels

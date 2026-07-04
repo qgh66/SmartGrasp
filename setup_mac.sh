@@ -35,10 +35,9 @@ fi
 
 # 3. 激活环境并安装额外依赖
 echo ""
-echo "📦 安装 SAM2 + LangSAM ..."
+echo "📦 安装 SAM2 ..."
 conda run -n ${ENV_NAME} pip install --quiet \
     git+https://github.com/facebookresearch/sam2.git \
-    git+https://github.com/luca-medeiros/lang-segment-anything.git \
     2>&1 | tail -5
 
 echo ""
@@ -50,7 +49,7 @@ echo "   conda activate ${ENV_NAME}"
 echo ""
 echo "验证安装："
 echo "   python -c 'import torch; print(\"PyTorch:\", torch.__version__); print(\"MPS available:\", torch.backends.mps.is_available())'"
-echo "   python -c 'import lang_sam; print(\"LangSAM: OK\")'"
+echo "   python -c 'import sam2; print(\"SAM2: OK\")'"
 echo ""
 echo "设置环境变量："
 echo "   export SMARTGRASP_DATA_DIR=/path/to/FreeGraspData"

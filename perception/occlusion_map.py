@@ -12,7 +12,7 @@ from PIL import Image
 
 from SmartGrasp.perception._shared import (
     _draw_mask_records_label, _load_depth_map,
-    _log_step, _mask_centroid_xy, _prepare_mask_output_dir,
+    _log_step, _prepare_mask_output_dir,
     _safe_label, _save_mask_png, _write_json, SMARTGRASP_ROOT,
 )
 from SmartGrasp.perception.background import (
@@ -325,31 +325,11 @@ def build_occlusion_graph(
     return graph, adjacency
 
 
-def _compute_occlusion_layers(graph: nx.DiGraph) -> dict[int, int]:
-    """Assign each node a layer = longest path length from any source node.
-
-    Layer 0 = front-most (not occluded by any object).
-    Layer k = occluded by a chain of k objects in front.
-    """
-    layers: dict[int, int] = {n: 0 for n in graph.nodes()}
-    if graph.number_of_nodes() == 0:
-        return layers
-    try:
-        topo_order = list(nx.topological_sort(graph))
-    except (nx.NetworkXError, nx.NetworkXUnfeasible):
-        return layers
-    for u in topo_order:
-        for v in graph.successors(u):
-            layers[v] = max(layers[v], layers[u] + 1)
-    return layers
-
-
 def visualize_occlusion_graph(
     graph: nx.DiGraph,
     ax: Optional[plt.Axes] = None,
     title: str = "Occlusion Relationship Graph",
     positions: dict[int, tuple[float, float]] | None = None,
-    node_layers: dict[int, int] | None = None,
     node_labels: dict[int, str] | None = None,
     background_image: np.ndarray | None = None,
 ) -> plt.Axes:
@@ -357,7 +337,6 @@ def visualize_occlusion_graph(
 
     Args:
         positions: Optional dict node_id → (x, y) in data coordinates.
-        node_layers: Optional dict node_id → layer_index for per-layer coloring.
         node_labels: Optional dict node_id → display label string.
         background_image: Optional RGB image array (H, W, 3) to render as background.
     """
@@ -395,22 +374,6 @@ def visualize_occlusion_graph(
         ax.set_aspect("equal")
     else:
         pos = nx.spring_layout(graph, seed=42)
-
-    # --- node colors by occlusion layer ---
-    if node_layers is not None:
-        max_layer = max(node_layers.values()) if node_layers else 0
-        num_layers = max_layer + 1
-        cmap = plt.cm.tab10
-        colors = [cmap(node_layers.get(n, 0) % 10) for n in graph.nodes()]
-        # Add a tiny legend-like annotation
-        from matplotlib.patches import Patch
-        legend_handles = [
-            Patch(color=cmap(l % 10), label=f"Layer {l} (front)" if l == 0 else f"Layer {l}")
-            for l in range(min(num_layers, 6))
-        ]
-        ax.legend(handles=legend_handles, loc="upper right", fontsize=8, framealpha=0.7)
-    else:
-        colors = "#cfe8ff"
 
     # --- node labels ---
     labels = node_labels if node_labels is not None else {n: str(n) for n in graph.nodes()}
@@ -472,8 +435,7 @@ if __name__ == "__main__":
     print("Adjacency matrix:")
     print(demo_adjacency.astype(int))
 
-    demo_layers = _compute_occlusion_layers(demo_graph)
-    visualize_occlusion_graph(demo_graph, node_layers=demo_layers)
+    visualize_occlusion_graph(demo_graph)
     plt.tight_layout()
     output_path = SMARTGRASP_ROOT / "perception" / "org_demo_graph.png"
     plt.savefig(output_path, dpi=180, bbox_inches="tight")
@@ -530,9 +492,9 @@ def build_org_json(
     background_mask_path = _save_background_exclusion_mask(background_exclusion_mask, output_mask_dir)
     t1 = _log_step("① background_mask", t0)
 
-    from SmartGrasp.perception.sam2auto import generate_masks_with_sam2_langsam_pipeline  # lazy import
+    from SmartGrasp.perception.sam2auto import generate_masks_with_sam2_vlm_pipeline  # lazy import
 
-    mask_records, anchor_report = generate_masks_with_sam2_langsam_pipeline(
+    mask_records, anchor_report = generate_masks_with_sam2_vlm_pipeline(
         image_path=image_path,
         output_mask_dir=output_mask_dir,
         review_model_id=review_model_id,
@@ -602,8 +564,7 @@ def build_org_json(
         # Image coords: (0,0) top-left, imshow(origin='upper') matches this
         viz_positions[nid] = (float(px), float(py))
         viz_labels[nid] = str(rec["object_id"])
-    viz_layers = _compute_occlusion_layers(graph)
-
+    # --- visualize with scene background ---
     fig, viz_ax = plt.subplots(figsize=(12, 9))
     # Load scene image as background
     bg_img: np.ndarray | None = None
@@ -614,7 +575,6 @@ def build_org_json(
         ax=viz_ax,
         title=f"Occlusion Graph — {image_path.parent.name}",
         positions=viz_positions,
-        node_layers=viz_layers,
         node_labels=viz_labels,
         background_image=bg_img,
     )
@@ -652,6 +612,6 @@ def build_org_json(
 
     _write_json(output_json_path, payload)
 
-    t4 = _log_step("④ occlusion_graph", t2)
+    _log_step("④ occlusion_graph", t2)
     _log_step("total", t0)
     return payload
