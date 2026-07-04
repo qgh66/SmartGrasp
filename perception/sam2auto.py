@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,11 +33,14 @@ import matplotlib
 matplotlib.use("Agg")
 
 _SAM2_WRAPPER_CACHE: dict[tuple[str, str], Any] = {}
+_SAM2_ROOT = Path("/home/admin128/Gsam2/Grounded-SAM-2")
+if _SAM2_ROOT.exists() and str(_SAM2_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SAM2_ROOT))
 DEFAULT_SAM2_CONFIG = os.environ.get("SAM2_CONFIG", "configs/sam2.1/sam2.1_hiera_s.yaml")
 DEFAULT_SAM2_CHECKPOINT = Path(
     os.environ.get(
         "SAM2_CHECKPOINT",
-        str(Path.home() / ".cache/torch/hub/checkpoints/sam2.1_hiera_small.pt"),
+        str(_SAM2_ROOT / "checkpoints" / "sam2.1_hiera_small.pt"),
     )
 )
 
@@ -47,7 +51,8 @@ class Sam2AutoWrapper:
     mask_generator: Any
 
     def generate(self, image_np: np.ndarray) -> list[dict[str, Any]]:
-        return list(self.mask_generator.generate(image_np))
+        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=torch.cuda.is_available()):
+            return list(self.mask_generator.generate(image_np))
 
 
 def _load_sam2_wrapper(device: str) -> Any:
@@ -80,17 +85,15 @@ def clear_sam2_image_state() -> None:
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-        torch.mps.empty_cache()
 
 
 def _sam2_auto_generate(model: Any, image: Image.Image) -> list[dict[str, Any]]:
-    # Fixed seeds for reproducible SAM2 output across Mac/Linux/CUDA/MPS
+    # Fixed seeds for reproducible SAM2 output across Linux/CUDA
     torch.manual_seed(42)
     np.random.seed(42)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(42)
-    image_np = np.asarray(image.convert("RGB"))
+    image_np = np.array(image.convert("RGB"))
     if not hasattr(model, "generate"):
         raise RuntimeError("Loaded SAM2 wrapper does not expose automatic mask generation.")
     return list(model.generate(image_np))
@@ -629,8 +632,6 @@ def _sam2_auto_candidate_pool(
     if device is None:
         if torch.cuda.is_available():
             device = "cuda"
-        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-            device = "mps"
         else:
             device = "cpu"
 

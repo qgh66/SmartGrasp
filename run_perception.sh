@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# SmartGrasp Perception Pipeline — macOS 本地运行（无需 SLURM）
+# SmartGrasp Perception Pipeline — Linux 本地运行（无需 SLURM）
 # ============================================================================
 set -euo pipefail
 
@@ -14,11 +14,12 @@ LOG_NUM=$((LOG_NUM + 1))
 LOG_FILE="logs/$(printf "%03d" "$LOG_NUM")_scene_${1:-${SCENE_ID:-unknown}}.log"
 
 # ---- Python 解释器 ----
-# 优先用 smartgrasp-mac conda 环境的 python
+# 优先用 smartgrasp conda 环境的 python
 PYTHON=""
 for candidate in \
-    "$HOME/anaconda3/envs/smartgrasp-mac/bin/python" \
-    "/opt/anaconda3/envs/smartgrasp-mac/bin/python" \
+    "$HOME/anaconda3/envs/smartgrasp/bin/python" \
+    "$HOME/miniconda3/envs/smartgrasp/bin/python" \
+    "/opt/anaconda3/envs/smartgrasp/bin/python" \
     "$(which python3 2>/dev/null)"; do
     if [[ -x "$candidate" ]]; then
         PYTHON="$candidate"
@@ -27,7 +28,7 @@ for candidate in \
 done
 
 if [[ -z "$PYTHON" ]]; then
-    echo "❌ 找不到 Python，请先激活 conda 环境: conda activate smartgrasp-mac" >&2
+    echo "❌ 找不到 Python，请先激活 conda 环境: conda activate smartgrasp" >&2
     exit 1
 fi
 
@@ -94,7 +95,7 @@ echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENE_DISPLAY} → ${LOG_FILE}"
 # ---- 运行（全部输出写入 log） ----
 {
     echo "========================================="
-    echo " SmartGrasp Perception (macOS)"
+    echo " SmartGrasp Perception (Linux)"
     echo "========================================="
     echo "  Python:    $PYTHON"
     echo "  Scene(s):  $SCENE_DISPLAY"

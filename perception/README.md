@@ -31,7 +31,7 @@ _shared.py ◄── background.py ◄── sam2auto.py ◄── occlusion_map
 ### 环境
 
 ```bash
-conda activate smartgrasp-mac
+conda activate smartgrasp
 ```
 
 ### GT 模式（仅地面真值遮挡图）
