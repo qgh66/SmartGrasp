@@ -33,8 +33,21 @@ import matplotlib
 matplotlib.use("Agg")
 
 _SAM2_WRAPPER_CACHE: dict[tuple[str, str], Any] = {}
-_SAM2_ROOT = Path("/home/admin128/Gsam2/Grounded-SAM-2")
-if _SAM2_ROOT.exists() and str(_SAM2_ROOT) not in sys.path:
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_SAM2_ROOT = Path(os.environ.get("SAM2_ROOT", _PROJECT_ROOT / "sam2_repo"))
+if not _SAM2_ROOT.exists():
+    for candidate in (
+        _PROJECT_ROOT / "sam2",
+        Path.home() / "sam2",
+        Path.home() / "Gsam2" / "Grounded-SAM-2",
+        Path.home() / "Grounded-SAM-2",
+    ):
+        if candidate.exists():
+            _SAM2_ROOT = candidate
+            break
+if not _SAM2_ROOT.exists():
+    raise FileNotFoundError("SAM2 root not found. Set env SAM2_ROOT or place sam2 in project root.")
+if str(_SAM2_ROOT) not in sys.path:
     sys.path.insert(0, str(_SAM2_ROOT))
 DEFAULT_SAM2_CONFIG = os.environ.get("SAM2_CONFIG", "configs/sam2.1/sam2.1_hiera_s.yaml")
 DEFAULT_SAM2_CHECKPOINT = Path(
