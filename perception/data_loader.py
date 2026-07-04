@@ -73,7 +73,7 @@ def analyze_data_directory():
     # 检查 npz 压缩包
     npz_zip = DATA_DIR / 'npz_file.zip'
     if npz_zip.exists() and not NPZ_DIR.exists():
-        print(f'\n[提示] 发现 npz_file.zip 但未解压，检查压缩包内容...')
+        print('\n[提示] 发现 npz_file.zip 但未解压，检查压缩包内容...')
         try:
             with zipfile.ZipFile(npz_zip, 'r') as zip_ref:
                 file_list = zip_ref.namelist()
@@ -100,7 +100,7 @@ def analyze_parquet_files(example_count=3):
     for pf in sorted(parquet_files):
         print(f'  - {os.path.basename(pf)}: {format_size(os.path.getsize(pf))}')
     
-    print(f'合并读取中...')
+    print('合并读取中...')
     dfs = [pd.read_parquet(f) for f in sorted(parquet_files)]
     df = pd.concat(dfs, ignore_index=True)
 

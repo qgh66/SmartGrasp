@@ -21,23 +21,14 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+from SmartGrasp.perception._shared import _save_mask_png
+from SmartGrasp.perception.background import generate_background_exclusion_mask_from_source
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
-from SmartGrasp.perception.molmo.molmo_annotator.draw import draw_labeled_image_matplotlib
-from SmartGrasp.perception.occul_map.org import build_occlusion_graph, graph_to_jsonable
+from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
 
 OUT_ROOT = SMARTGRASP_ROOT / "data"
-DEFAULT_MOLMO_PROMPT = (
-    "Point out all objects in the green tray. "
-    "Return one point for each visible object instance, including repeated objects that look similar or have the same category. "
-    "Do not merge adjacent objects, even if they touch or have similar colors. "
-    "Ignore the green tray/green box itself and any other background support surface. "
-    "Do separate different instances even if they are very close or nearly touching."
-    "Use one point near the center of the visible region of each object. "
-    "Use short labels with a likely noun plus visible attributes such as color, shape, material, size, brand text, or pose. "
-    "If the exact category is unclear, describe visible attributes, for example red round lid, yellow rectangular packet, blue cylindrical can, or small white plastic piece. "
-    "Before finishing, check the image again for any missed partially visible object and for any accidentally marked background support surface."
-)
+
 def read_dataset() -> pd.DataFrame:
     parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
     if not parquet_files:
@@ -94,7 +85,7 @@ def build_gt_points(instances_objects: np.ndarray, annotation: str, query_obj_id
     for object_id in object_ids:
         x, y = object_centroid(instances_objects == object_id)
         label = annotation if query_obj_id == object_id else f"object_{object_id}"
-        points.append({"molmo_id": object_id, "x": x, "y": y, "label": label})
+        points.append({"object_id": object_id, "x": x, "y": y, "label": label})
     return points
 
 
@@ -115,7 +106,7 @@ def write_points_json(
         "raw_model_output": "",
         "points": points,
     }
-    path = out_dir / "molmo_points.json"
+    path = out_dir / "points.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
@@ -123,6 +114,25 @@ def write_points_json(
 def save_depth(depth: np.ndarray, out_dir: Path) -> Path:
     path = out_dir / "depth.npy"
     np.save(path, depth.astype(np.float32, copy=False))
+    return path
+
+
+def save_depth_image(depth: np.ndarray, out_dir: Path) -> Path:
+    path = out_dir / "scene_depth.png"
+    depth = np.asarray(depth, dtype=np.float32)
+    valid = np.isfinite(depth) & (depth > 0)
+    if not np.any(valid):
+        Image.new("L", depth.shape[::-1], 0).save(path)
+        return path
+
+    near, far = np.percentile(depth[valid], [2, 98])
+    if far <= near:
+        gray = np.zeros(depth.shape, dtype=np.uint8)
+    else:
+        normalized = (far - np.clip(depth, near, far)) / max(far - near, 1e-6)
+        gray = np.zeros(depth.shape, dtype=np.uint8)
+        gray[valid] = np.clip(normalized[valid] * 255.0, 0, 255).astype(np.uint8)
+    Image.fromarray(gray, mode="L").save(path)
     return path
 
 
@@ -146,7 +156,7 @@ def save_gt_masks(instances_objects: np.ndarray, out_dir: Path) -> list[dict[str
         records.append(
             {
                 "node_id": node_id,
-                "molmo_id": object_id,
+                "object_id": object_id,
                 "label": f"object_{object_id}",
                 "point": {"x": int(object_centroid(mask)[0]), "y": int(object_centroid(mask)[1])},
                 "mask_path": str(mask_path.resolve()),
@@ -156,6 +166,14 @@ def save_gt_masks(instances_objects: np.ndarray, out_dir: Path) -> list[dict[str
     return records
 
 
+def save_background_exclusion_mask(background: np.ndarray | None, mask_dir: Path) -> str | None:
+    if background is None or int(np.count_nonzero(background)) == 0:
+        return None
+    background_path = mask_dir / "000_background_mask.png"
+    _save_mask_png(np.asarray(background, dtype=bool), background_path)
+    return str(background_path.resolve())
+
+
 def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Path, title: str) -> None:
     fig, ax = plt.subplots(figsize=(8, 6))
     if graph.number_of_nodes() > 0:
@@ -163,7 +181,7 @@ def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Pat
         labels = {}
         for node in graph.nodes():
             node_payload = graph_json["nodes"][int(node)]
-            labels[node] = str(node_payload.get("molmo_id", node))
+            labels[node] = str(node_payload.get("object_id", node))
         nx.draw_networkx_nodes(graph, pos, node_color="#e7f0ff", edgecolors="#194b7a", linewidths=1.2, node_size=1500, ax=ax)
         nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, font_weight="bold", ax=ax)
         nx.draw_networkx_edges(
@@ -184,45 +202,6 @@ def visualize_graph(graph: nx.DiGraph, graph_json: dict[str, Any], out_path: Pat
             info = data.get("info")
             if info is not None:
                 edge_labels[(u, v)] = f"gap={info.depth_gap:.3f}"
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8, ax=ax)
-    ax.set_title(f"{title}\narrow direction: occluder -> occluded")
-    ax.axis("off")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=180, bbox_inches="tight")
-    plt.close(fig)
-
-
-def visualize_graph_payload(graph_payload: dict[str, Any], out_path: Path, title: str) -> None:
-    graph = nx.DiGraph()
-    for node in graph_payload["nodes"]:
-        graph.add_node(int(node["node_id"]))
-    for edge in graph_payload["edges"]:
-        graph.add_edge(int(edge["source"]), int(edge["target"]), payload=edge)
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    if graph.number_of_nodes() > 0:
-        pos = directed_graph_layout(graph)
-        labels = {int(node["node_id"]): str(node.get("molmo_id", node["node_id"])) for node in graph_payload["nodes"]}
-        nx.draw_networkx_nodes(graph, pos, node_color="#e7f0ff", edgecolors="#194b7a", linewidths=1.2, node_size=1500, ax=ax)
-        nx.draw_networkx_labels(graph, pos, labels=labels, font_size=10, font_weight="bold", ax=ax)
-        nx.draw_networkx_edges(
-            graph,
-            pos,
-            arrows=True,
-            arrowstyle="-|>",
-            arrowsize=24,
-            width=2.4,
-            edge_color="#194b7a",
-            connectionstyle="arc3,rad=0.08",
-            min_source_margin=18,
-            min_target_margin=22,
-            ax=ax,
-        )
-        edge_labels = {}
-        for source, target, data in graph.edges(data=True):
-            edge = data["payload"]
-            if "depth_gap" in edge:
-                edge_labels[(source, target)] = f"gap={edge['depth_gap']:.3f}"
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8, ax=ax)
     ax.set_title(f"{title}\narrow direction: occluder -> occluded")
     ax.axis("off")
@@ -262,18 +241,16 @@ def build_graph_from_gt_masks(
     instances_objects: np.ndarray,
     depth: np.ndarray,
     out_dir: Path,
-    epsilon: float,
     kernel_size: int,
     min_contact_pixels: int,
     min_contact_ratio: float,
 ) -> dict[str, Any]:
     node_records = save_gt_masks(instances_objects, out_dir)
-    object_ids = [record["molmo_id"] for record in node_records]
+    object_ids = [record["object_id"] for record in node_records]
     masks = np.stack([(instances_objects == object_id) for object_id in object_ids], axis=0)
     graph, adjacency = build_occlusion_graph(
         masks=masks,
         depth_map=depth,
-        epsilon=epsilon,
         kernel_size=kernel_size,
         min_contact_pixels=min_contact_pixels,
         min_contact_ratio=min_contact_ratio,
@@ -282,8 +259,8 @@ def build_graph_from_gt_masks(
     for edge in graph_payload["edges"]:
         source_node = node_records[edge["source"]]
         target_node = node_records[edge["target"]]
-        edge["source_molmo_id"] = int(source_node["molmo_id"])
-        edge["target_molmo_id"] = int(target_node["molmo_id"])
+        edge["source_object_id"] = int(source_node["object_id"])
+        edge["target_object_id"] = int(target_node["object_id"])
         edge["source_label"] = str(source_node["label"])
         edge["target_label"] = str(target_node["label"])
 
@@ -294,91 +271,10 @@ def build_graph_from_gt_masks(
     return payload
 
 
-def write_final_perception_label(
-    image_path: Path,
-    graph_payload: dict[str, Any],
-    out_dir: Path,
-) -> Path:
-    points_with_ids: list[tuple[int, int, int]] = []
-    for node in graph_payload.get("graph", {}).get("nodes", []):
-        point = node.get("point", {})
-        if "x" not in point or "y" not in point:
-            continue
-        points_with_ids.append((int(node.get("molmo_id", node["node_id"])), int(point["x"]), int(point["y"])))
-
-    out_path = out_dir / "label_1_molmo.png"
-    with Image.open(image_path) as image:
-        draw_labeled_image_matplotlib(
-            image=image,
-            points_with_ids=points_with_ids,
-            out_png_path=str(out_path),
-        )
-        draw_labeled_image_matplotlib(
-            image=image,
-            points_with_ids=points_with_ids,
-            out_png_path=str(out_dir / "perception_label.png"),
-        )
-    return out_path
-
-
 def reset_output_dir(out_dir: Path) -> None:
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
-
-def maybe_run_molmo(
-    image_path: Path,
-    prompt: str,
-    out_dir: Path,
-    model_id: str,
-) -> Path:
-    from SmartGrasp.perception.molmo.molmo_annotator import MolmoAnnotator
-
-    annotator = MolmoAnnotator(model_id=model_id)
-    result = annotator.annotate_to_folder(
-        str(image_path),
-        prompt,
-        str(out_dir),
-        return_base64=False,
-    )
-    points = result.get("json_data", {}).get("points", [])
-    if not points:
-        raise RuntimeError("Molmo did not return a usable result.")
-
-    # Write points.json with molmo_id assigned
-    with Image.open(image_path) as image:
-        width, height = image.size
-    sanitized_points = [
-        {"molmo_id": i + 1, "x": int(p["x"]), "y": int(p["y"]), "label": sanitize_point_label(str(p.get("label", "")))}
-        for i, p in enumerate(points)
-    ]
-    payload = {
-        "model_id": model_id,
-        "prompt": prompt,
-        "image": {"path": str(image_path), "width": int(width), "height": int(height)},
-        "parse_mode": "point_markup",
-        "raw_model_output": "",
-        "points": sanitized_points,
-    }
-    final_json_path = out_dir / "molmo_points.json"
-    final_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return final_json_path
-
-
-def sanitize_point_label(label: str) -> str:
-    parts = [part for part in str(label).replace("-", " ").replace("_", " ").split() if part]
-    vague = {"unknown", "unknownproduct", "object", "item", "product", "thing", "container"}
-    filtered = [part for part in parts if part.lower() not in vague]
-    return " ".join(filtered or parts).strip() or "unlabeled visible object"
-
-
-def sanitize_points_json(points_path: Path) -> None:
-    payload = json.loads(points_path.read_text(encoding="utf-8"))
-    for point in payload.get("points", []):
-        if "label" in point:
-            point["label"] = sanitize_point_label(str(point["label"]))
-    points_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_json_file(path: Path) -> dict[str, Any]:
@@ -395,52 +291,92 @@ def display_label(label: Any) -> str:
     return str(label).replace("_", " ")
 
 
-def edge_strength_label(contact_ratio: float) -> str:
-    if contact_ratio >= 0.03:
-        return "strong"
-    if contact_ratio >= 0.01:
-        return "medium"
-    return "weak"
-
-
-def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any]) -> dict[str, Any]:
-    points_payload = load_json_file(points_path)
+def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], scene_dir: Path) -> dict[str, Any]:
+    """Build the new-format summary: objects with parts + occlusion graph with edges."""
     graph = graph_payload["graph"]
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
     edges = graph.get("edges", [])
-    molmo_points = points_payload.get("points", [])
+    out_dir = scene_dir / "perception"
+    vlm_path = out_dir / "vlm.json"
 
-    object_order: list[dict[str, Any]] = []
-    for matrix_index, node in enumerate(nodes):
-        molmo_id = int(node.get("molmo_id", node["node_id"]))
-        object_order.append(
-            {
-                "matrix_index": matrix_index,
-                "node_id": int(node["node_id"]),
-                "molmo_id": molmo_id,
-                "label": display_label(node.get("label", f"object_{molmo_id}")),
-            }
-        )
+    # Build sam2_id → mask_path mapping
+    sam2_to_mask: dict[int, str] = {}
+    for node in nodes:
+        for sid in node.get("sam2_ids", []):
+            sam2_to_mask[int(sid)] = node.get("mask_path", "")
 
-    node_id_to_index = {item["node_id"]: item["matrix_index"] for item in object_order}
-    size = len(object_order)
-    occlusion_matrix = [[0.0 for _ in range(size)] for _ in range(size)]
+    # Build object info from VLM
+    objects = []
+    if vlm_path.exists():
+        with open(vlm_path) as f:
+            vlm = json.load(f)
+        for obj in vlm.get("objects", []):
+            oid = obj["id"]
+            parts = []
+            for part in obj.get("visible_parts", []):
+                mask_paths = []
+                for sid in part.get("sam2_ids", []):
+                    mp = sam2_to_mask.get(int(sid))
+                    if mp:
+                        try:
+                            mask_paths.append(str(Path(mp).relative_to(out_dir)))
+                        except ValueError:
+                            mask_paths.append(mp)
+                parts.append({
+                    "description": part.get("description", ""),
+                    "sam2_ids": part.get("sam2_ids", []),
+                    "mask_paths": mask_paths,
+                })
+            centroid = {"x": 0, "y": 0}
+            for node in nodes:
+                if node.get("object_id") == oid:
+                    centroid = {"x": node["point"]["x"], "y": node["point"]["y"]}
+                    break
+            mask_rel = ""
+            for sid in obj.get("sam2_ids", []):
+                mp = sam2_to_mask.get(int(sid))
+                if mp:
+                    try:
+                        mask_rel = str(Path(mp).relative_to(out_dir))
+                    except ValueError:
+                        mask_rel = mp
+                    break
+            objects.append({
+                "object_id": oid,
+                "label": obj.get("description", ""),
+                "relative_position": obj.get("relative_position", ""),
+                "centroid": centroid,
+                "mask_path": mask_rel,
+                "sam2_ids": obj.get("sam2_ids", []),
+                "parts": parts,
+            })
 
+    # Build occlusion graph summary
+    graph_edges = []
     for edge in edges:
-        source_index = node_id_to_index.get(int(edge["source"]))
-        target_index = node_id_to_index.get(int(edge["target"]))
-        if source_index is None or target_index is None:
-            continue
-        contact_ratio = float(edge.get("contact_ratio", 0.0))
-        occlusion_matrix[source_index][target_index] = safe_float(contact_ratio) or 0.0
+        src_node = nodes[int(edge["source"])]
+        tgt_node = nodes[int(edge["target"])]
+        graph_edges.append({
+            "source_object_id": int(edge.get("source_object_id", src_node.get("object_id", 0))),
+            "target_object_id": int(edge.get("target_object_id", tgt_node.get("object_id", 0))),
+            "source_label": str(edge.get("source_label", src_node.get("label", ""))),
+            "target_label": str(edge.get("target_label", tgt_node.get("label", ""))),
+            "depth_gap": round(float(edge.get("depth_gap", 0)), 3),
+            "contact_pixels": int(edge.get("contact_pixels", 0)),
+            "contact_ratio": round(float(edge.get("contact_ratio", 0)), 5),
+        })
+    adj = [[0 for _ in range(len(nodes))] for _ in range(len(nodes))]
+    for edge in edges:
+        adj[int(edge["source"])][int(edge["target"])] = 1
 
-    matrix_labels = [f"{item['molmo_id']}: {item['label']}" for item in object_order]
     return {
-        "molmo_points": molmo_points,
-        "matrix_labels": matrix_labels,
-        "occlusion_matrix_direction": "row object occludes column object",
-        "occlusion_matrix_metric": "contact_ratio",
-        "occlusion_matrix": occlusion_matrix,
+        "objects": objects,
+        "occlusion_graph": {
+            "num_nodes": len(nodes),
+            "num_edges": len(edges),
+            "edges": graph_edges,
+            "adjacency_matrix": adj,
+        },
     }
 
 
@@ -455,24 +391,25 @@ def build_gt_reference_outputs(
     args: argparse.Namespace,
     source_image_path: Path | None = None,
 ) -> dict[str, Any]:
-    gt_dir = OUT_ROOT / f"scene_{scene_id}" / "gt"
+    scene_dir = OUT_ROOT / f"scene_{scene_id}"
+    gt_dir = scene_dir / "gt"
     reset_output_dir(gt_dir)
     image_path = copy_or_save_sample_image(row, source_image_path, gt_dir)
     with Image.open(image_path) as image:
         width, height = image.size
     depth_path = save_depth(depth, gt_dir)
+    depth_image_path = save_depth_image(depth, gt_dir)
     points = build_gt_points(instances_objects, annotation, query_obj_id)
     points_path = write_points_json(gt_dir, image_path, width, height, prompt, points, "gt_centers")
     graph_payload = build_graph_from_gt_masks(
         instances_objects=instances_objects,
         depth=depth,
         out_dir=gt_dir,
-        epsilon=args.epsilon,
         kernel_size=args.kernel_size,
         min_contact_pixels=args.min_contact_pixels,
         min_contact_ratio=args.min_contact_ratio,
     )
-    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
+    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
     summary = {
         "scene_id": scene_id,
         "query_obj_id": query_obj_id,
@@ -481,6 +418,7 @@ def build_gt_reference_outputs(
         "output_dir": str(gt_dir.resolve()),
         "image_path": str(image_path.resolve()),
         "depth_path": str(depth_path.resolve()),
+        "depth_image_path": str(depth_image_path.resolve()),
         "points_json": str(points_path.resolve()),
         "graph_json": str((gt_dir / "occlusion_graph.json").resolve()),
         "graph_png": str((gt_dir / "occlusion_graph.png").resolve()),
@@ -500,11 +438,19 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     row = select_sample(df, args.scene_id, args.query_obj_id)
     scene_id = int(row["sceneId"])
     query_obj_id = int(row["queryObjId"])
+    from SmartGrasp.perception._shared import set_log_scene_id
+    set_log_scene_id(scene_id)
 
     scene_dir = OUT_ROOT / f"scene_{scene_id}"
-    out_dir = scene_dir / ("perception" if args.point_source == "molmo" else "gt")
+    out_dir = scene_dir / "perception"
+    # Clean output directory by removing contents individually
+    # (avoids iCloud Drive conflict copies caused by rmtree+recreate race)
     if out_dir.exists():
-        shutil.rmtree(out_dir)
+        for child in out_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     image_path = save_sample_image(row, out_dir)
@@ -517,122 +463,198 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         instances_objects = np.asarray(npz["instances_objects"])
 
     depth_path = save_depth(depth, out_dir)
-    prompt = args.prompt or DEFAULT_MOLMO_PROMPT.format(annotation=row["annotation"])
-    gt_summary = None
-    if args.point_source == "molmo":
-        gt_summary = build_gt_reference_outputs(
-            row=row,
-            scene_id=scene_id,
-            query_obj_id=query_obj_id,
-            annotation=str(row["annotation"]),
-            instances_objects=instances_objects,
-            depth=depth,
-            prompt=prompt,
-            args=args,
-            source_image_path=image_path,
-        )
+    depth_image_path = save_depth_image(depth, out_dir)
+    prompt = args.prompt or ""
+    annotation = str(row["annotation"])
 
-    if args.point_source == "molmo":
-        from SmartGrasp.perception.occul_map.molmo_sam_org import build_org_json
+    gt_summary = build_gt_reference_outputs(
+        row=row,
+        scene_id=scene_id,
+        query_obj_id=query_obj_id,
+        annotation=annotation,
+        instances_objects=instances_objects,
+        depth=depth,
+        prompt=prompt,
+        args=args,
+        source_image_path=image_path,
+    )
 
-        points_path = maybe_run_molmo(
-            image_path,
-            prompt,
-            out_dir,
-            args.molmo_model_id,
-        )
+    if args.mode == "vlm":
+        from SmartGrasp.perception.occlusion_map import build_org_json
+
+        # ---- Debug: sam2 only ----
+        if args.debug == "sam2":
+            from SmartGrasp.perception.sam2auto import (
+                _sam2_auto_candidate_pool,
+                _draw_sam2_auto_label_image,
+                _save_sam2_rgb_parts_sheet,
+            )
+            bg_mask = None
+            background_mask_path = None
+            try:
+                bg_mask = generate_background_exclusion_mask_from_source(
+                    mask_source=args.mask,
+                    depth_map=depth,
+                    image=Image.open(image_path).convert("RGB"),
+                    instances_objects=instances_objects,
+                    mask_clean_kernel=args.mask_clean_kernel,
+                )
+                background_mask_path = save_background_exclusion_mask(bg_mask, out_dir / "mask")
+            except Exception as exc:
+                print(f"bg_mask failed: {exc}", file=sys.stderr)
+            candidates, report, _, _ = _sam2_auto_candidate_pool(
+                image_path=image_path, output_mask_dir=out_dir / "mask",
+                min_area_ratio=args.proposal_min_area_ratio,
+                max_area_ratio=args.proposal_max_area_ratio,
+                mask_clean_kernel=args.mask_clean_kernel,
+                save_candidates=True, device=args.device,
+                background_exclusion_mask=bg_mask,
+                points_per_side=args.sam2_points_per_side,
+                crop_n_layers=args.sam2_crop_n_layers,
+                pred_iou_thresh=args.sam2_pred_iou_thresh,
+                stability_score_thresh=args.sam2_stability_score_thresh,
+                depth_points_per_side=args.depth_sam2_points_per_side,
+                depth_crop_n_layers=args.depth_sam2_crop_n_layers,
+                depth_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
+                depth_stability_score_thresh=args.depth_sam2_stability_score_thresh,
+                border_fraction_threshold=args.proposal_border_fraction_threshold,
+                depth_map=depth,
+            )
+            # Generate visualization images
+            label_path = out_dir / "label_1_sam2auto.png"
+            _draw_sam2_auto_label_image(image_path, candidates, label_path)
+            _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
+            debug_out = {
+                "debug": "sam2",
+                "scene_id": scene_id,
+                "num_candidates": len(candidates),
+                "label_png": str(label_path.resolve()),
+                "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+                "background_mask_path": background_mask_path,
+                "background_mask_source": args.mask,
+                "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
+                "report": report,
+            }
+            debug_path = out_dir / "debug_sam2.json"
+            debug_path.write_text(json.dumps(debug_out, ensure_ascii=False, indent=2), encoding="utf-8")
+            return debug_out
+
         graph_payload = build_org_json(
-            points_json_path=points_path.resolve(),
+            image_path=image_path,
             depth_path=depth_path.resolve(),
             output_json_path=(out_dir / "occlusion_graph.json").resolve(),
             output_mask_dir=(out_dir / "mask").resolve(),
-            segmentation_backend=args.segmentation_backend,
-            sam_model_id=args.sam_model_id,
-            epsilon=args.epsilon,
+            review_model_id=args.review_model_id,
+            review_api_key_env=args.review_api_key_env,
+            review_base_url=args.review_base_url,
+            review_timeout=args.review_timeout,
             kernel_size=args.kernel_size,
             min_contact_pixels=args.min_contact_pixels,
             min_contact_ratio=args.min_contact_ratio,
-            sam_point_grid_radius=args.sam_point_grid_radius,
-            sam_prompt_mode=args.sam_prompt_mode,
-            sam_negative_points=args.sam_negative_points,
             mask_clean_kernel=args.mask_clean_kernel,
-            proposal_backend=args.proposal_backend,
             proposal_min_area_ratio=args.proposal_min_area_ratio,
             proposal_max_area_ratio=args.proposal_max_area_ratio,
-            proposal_iou_threshold=args.proposal_iou_threshold,
-            proposal_containment_threshold=args.proposal_containment_threshold,
-            proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-            max_proposal_masks=args.max_proposal_masks,
             save_candidates=args.save_candidates,
             device=args.device,
+            sam2_points_per_side=args.sam2_points_per_side,
+            sam2_crop_n_layers=args.sam2_crop_n_layers,
+            sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
+            sam2_stability_score_thresh=args.sam2_stability_score_thresh,
+            depth_sam2_points_per_side=args.depth_sam2_points_per_side,
+            depth_sam2_crop_n_layers=args.depth_sam2_crop_n_layers,
+            depth_sam2_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
+            depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
+            proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
+            background_mask_source=args.mask,
+            gt_instances_objects=instances_objects if args.mask == "gt" else None,
         )
-        visualize_graph_payload(graph_payload["graph"], out_dir / "occlusion_graph.png", "Molmo/SAM Occlusion Graph")
-    else:
-        points = build_gt_points(instances_objects, str(row["annotation"]), query_obj_id)
-        points_path = write_points_json(out_dir, image_path, width, height, prompt, points, "gt_centers")
-        graph_payload = build_graph_from_gt_masks(
-            instances_objects=instances_objects,
-            depth=depth,
-            out_dir=out_dir,
-            epsilon=args.epsilon,
-            kernel_size=args.kernel_size,
-            min_contact_pixels=args.min_contact_pixels,
-            min_contact_ratio=args.min_contact_ratio,
-        )
+        # Graph PNG already saved by build_org_json with scene-image background
+        # Write a minimal points.json for summary generation
+        points_payload = {
+            "points": [
+                {
+                    "object_id": int(node.get("object_id", node.get("node_id", 0))),
+                    "x": int(node.get("point", {}).get("x", 0)),
+                    "y": int(node.get("point", {}).get("y", 0)),
+                    "label": str(node.get("label", "")),
+                }
+                for node in graph_payload["graph"].get("nodes", [])
+            ]
+        }
+        points_path = out_dir / "points.json"
+        points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    scene_graph_summary = build_summary_scene_graph(points_path, graph_payload)
-    summary = {
-        "scene_id": scene_id,
-        "query_obj_id": query_obj_id,
-        "annotation": str(row["annotation"]),
-        "point_source": args.point_source,
-        "output_dir": str(out_dir.resolve()),
-        "image_path": str(image_path.resolve()),
-        "depth_path": str(depth_path.resolve()),
-        "points_json": str(points_path.resolve()),
-        "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
-        "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
-        "raw_label_1_molmo_png": str((out_dir / "label_2_langsam.png").resolve()) if args.point_source == "molmo" else None,
-        "perception_label_png": str((out_dir / "label_3_final.png").resolve()),
-        "num_nodes": len(graph_payload["graph"]["nodes"]),
-        "num_edges": len(graph_payload["graph"]["edges"]),
-        "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()) if gt_summary else None,
-        **scene_graph_summary,
-    }
-    summary_path = out_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return summary
+        scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
+        summary = {
+            "scene_id": scene_id,
+            "query_obj_id": query_obj_id,
+            "annotation": annotation,
+            "point_source": "sam2-vlm-anchor",
+            "output_dir": str(out_dir.resolve()),
+            "image_path": str(image_path.resolve()),
+            "depth_path": str(depth_path.resolve()),
+            "depth_image_path": str(depth_image_path.resolve()),
+            "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
+            "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
+            "background_mask_path": graph_payload.get("background_mask_path"),
+            "background_mask_source": graph_payload.get("background_mask_source"),
+            "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
+            "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+            "vlm_review_json": str((out_dir / "vlm.json").resolve()),
+            "perception_label_png": str((out_dir / "label_2_vlm.png").resolve()),
+            "num_nodes": len(graph_payload["graph"]["nodes"]),
+            "num_edges": len(graph_payload["graph"]["edges"]),
+            "gt_summary_json": str((scene_dir / "gt" / "summary.json").resolve()),
+            **scene_graph_summary,
+        }
+        summary_path = out_dir / "summary.json"
+        summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        return summary
+
+    return gt_summary
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run SmartGrasp data -> Molmo points -> occlusion graph pipeline.")
+    parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> VLM review -> occlusion graph.")
     parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
     parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
+    parser.add_argument("--mode", choices=["gt", "vlm"], default="vlm",
+                        help="gt: ground-truth occlusion graph only; vlm: full SAM2+VLM pipeline (default: vlm)")
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
-    parser.add_argument("--point-source", choices=["gt-centers", "molmo"], default="gt-centers")
-    parser.add_argument("--prompt", default=None, help="Prompt used when running Molmo or saved in points JSON.")
-    parser.add_argument("--molmo-model-id", default="allenai/Molmo-7B-D-0924")
-
-    parser.add_argument("--segmentation-backend", choices=["sam", "langsam", "auto"], default="sam")
-    parser.add_argument("--sam-model-id", default="facebook/sam-vit-base")
-    parser.add_argument("--epsilon", type=float, default=0.05)
+    parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
+    parser.add_argument(
+        "--mask",
+        choices=["gt", "depth"],
+        default="gt",
+        help="Background exclusion mask source. gt uses the inverse union of GT object masks; depth uses depth+HSV generation. Default: gt.",
+    )
+    parser.add_argument("--review-model-id", default="gpt-5.5")
+    parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
+    parser.add_argument("--review-base-url", default=None)
+    parser.add_argument("--review-timeout", type=float, default=120.0)
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)
-    parser.add_argument("--sam-point-grid-radius", type=int, default=0)
-    parser.add_argument("--sam-prompt-mode", choices=["cross", "grid", "ring", "auto"], default="cross")
-    parser.add_argument("--sam-negative-points", type=int, default=0)
     parser.add_argument("--mask-clean-kernel", type=int, default=3)
-    parser.add_argument("--proposal-backend", choices=["none", "sam2-auto"], default="sam2-auto")
-    parser.add_argument("--proposal-min-area-ratio", type=float, default=0.0015)
+    parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
     parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)
-    parser.add_argument("--proposal-iou-threshold", type=float, default=0.35)
-    parser.add_argument("--proposal-containment-threshold", type=float, default=0.6)
     parser.add_argument("--proposal-border-fraction-threshold", type=float, default=0.18)
-    parser.add_argument("--max-proposal-masks", type=int, default=3)
+    parser.add_argument("--sam2-points-per-side", type=int, default=24)
+    parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
+    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.85)
+    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.95)
+    parser.add_argument("--depth-sam2-points-per-side", type=int, default=None,
+                        help="Depth SAM2 points_per_side; default: use --sam2-points-per-side")
+    parser.add_argument("--depth-sam2-crop-n-layers", type=int, default=None,
+                        help="Depth SAM2 crop_n_layers; default: use --sam2-crop-n-layers")
+    parser.add_argument("--depth-sam2-pred-iou-thresh", type=float, default=None,
+                        help="Depth SAM2 pred_iou_thresh; default: use --sam2-pred-iou-thresh")
+    parser.add_argument("--depth-sam2-stability-score-thresh", type=float, default=None,
+                        help="Depth SAM2 stability_score_thresh; default: use --sam2-stability-score-thresh")
     parser.add_argument("--save-candidates", action="store_true")
+    parser.add_argument("--debug", choices=["sam2"], default=None,
+                        help="sam2: stop after SAM2 auto candidate generation")
     parser.add_argument("--device", default=None)
     return parser
 
@@ -663,6 +685,8 @@ def main() -> None:
             item_args.serve = False
             try:
                 run_pipeline(item_args, df=df)
+                from SmartGrasp.perception.sam2auto import clear_sam2_image_state
+                clear_sam2_image_state()
             except Exception as exc:
                 print(f"Failed scene_id={scene_id}: {exc}", flush=True)
     elif args.scene_ids:
@@ -673,6 +697,8 @@ def main() -> None:
             item_args.scene_id = scene_id
             item_args.query_obj_id = None
             summaries.append(run_pipeline(item_args, df=df))
+            from SmartGrasp.perception.sam2auto import clear_sam2_image_state
+            clear_sam2_image_state()
         print(json.dumps({"runs": summaries}, ensure_ascii=False, indent=2))
     else:
         run_pipeline(args)
