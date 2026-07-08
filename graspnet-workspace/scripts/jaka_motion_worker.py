@@ -267,6 +267,16 @@ def execute_sequence(args: argparse.Namespace) -> None:
                 check_call("linear_move_extend", ret)
                 if args.tcp_monitor:
                     print_tcp_pose(robot, f"step={index} after_move")
+            elif step_type == "joint_move":
+                joints = step.get("joints_rad")
+                if not isinstance(joints, list) or len(joints) != 6:
+                    raise ValueError(f"Joint move step {index} must provide 6 joint values in radians")
+                target_joints = [float(value) for value in joints]
+                print(f"[joint-base] step={index} target_rad={target_joints}", flush=True)
+                ret = robot.joint_move(target_joints, 0, True, float(args.joint_velocity_rad_s))
+                check_call("joint_move", ret)
+                if args.tcp_monitor:
+                    print_tcp_pose(robot, f"step={index} after_joint_move")
             elif step_type == "gripper":
                 if args.tcp_monitor:
                     print_tcp_pose(robot, f"step={index} before_gripper")
@@ -293,6 +303,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--robotiq-port", default="/dev/ttyUSB0", help="Robotiq serial port.")
     parser.add_argument("--velocity", type=float, default=60.0, help="JAKA linear_move_extend velocity.")
     parser.add_argument("--acceleration", type=float, default=60.0, help="JAKA linear_move_extend acceleration.")
+    parser.add_argument("--joint-velocity-rad-s", type=float, default=0.5, help="JAKA joint_move velocity in rad/s.")
     parser.add_argument("--no-tcp-monitor", dest="tcp_monitor", action="store_false", help="Disable live TCP pose printing during execution.")
     parser.add_argument("--tcp-monitor-interval", type=float, default=0.25, help="Seconds between live TCP pose prints.")
     parser.add_argument("--jkrc-dir", default=str(DEFAULT_JKRC_DIR), help="Directory containing jkrc.so and libjakaAPI.so.")

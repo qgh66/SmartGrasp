@@ -534,3 +534,26 @@ cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 python scripts/print_jaka_tcp_pose.py \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
+
+## 运动到默认位置,拍照但是不抓取:
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 20 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 10 \
+  --acceleration 10
+
+## 拍照,抓取:
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 20 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 40 \
+  --acceleration 20 \
+  --execute 

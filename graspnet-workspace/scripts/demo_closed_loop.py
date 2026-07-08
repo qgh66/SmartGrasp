@@ -27,6 +27,13 @@ from simulation.camera import VirtualCamera
 from simulation.robot_gripper import JakaZu3Robotiq85Gripper
 from simulation.evaluator import GraspEvaluator
 
+REPO_ROOT = os.path.dirname(ROOT)
+EXECUTION_DIR = os.path.join(REPO_ROOT, "execution")
+if EXECUTION_DIR not in sys.path:
+    sys.path.insert(0, EXECUTION_DIR)
+
+from perception_io import load_point_cloud
+
 
 def _resolve_path(path, *, config_dir=None):
     """Resolve a user/config path against common SmartGrasp roots."""
@@ -119,6 +126,19 @@ def crop_to_object(pc, object_points=None, margin=0.05, num_points=20000, table_
     return cropped[idx][np.newaxis].astype(np.float32)
 
 
+def sample_point_cloud(points, num_points=20000):
+    """Return a GraspNet-ready (1, num_points, 3) point cloud."""
+    points = np.asarray(points, dtype=np.float32)
+    if points.ndim != 2 or points.shape[1] < 3:
+        raise ValueError(f"Point cloud must have shape (N,3+), got {points.shape}")
+    points = points[:, :3]
+    points = points[np.isfinite(points).all(axis=1)]
+    if len(points) == 0:
+        raise ValueError("Point cloud has no finite xyz points")
+    idx = np.random.choice(len(points), int(num_points), replace=len(points) < int(num_points))
+    return points[idx][np.newaxis].astype(np.float32)
+
+
 def filter_grasps_to_object(gg, object_points, max_center_dist=0.04, bbox_margin=0.04):
     """Keep GraspNet candidates whose centers are close to the target object."""
     if object_points is None or len(object_points) == 0 or len(gg) == 0:
@@ -164,6 +184,13 @@ def parse_args():
                    help='多物体工业场景 JSON 配置；指定后优先使用配置中的 objects')
     p.add_argument('--target-object', default=None,
                    help='多物体场景中的目标物体 name；不指定时使用 metadata.role=target 或第一个物体')
+    p.add_argument('--target-point-cloud', default=None,
+                   help='上游感知输出的目标物体点云 .npy/.npz，要求米制；默认按 world 坐标系处理')
+    p.add_argument('--target-point-cloud-frame', default='world',
+                   choices=['world', 'camera'],
+                   help='上游目标点云坐标系；当前抓取执行要求 world，camera 仅记录诊断')
+    p.add_argument('--target-point-cloud-source', default=None,
+                   help='点云来源诊断字符串，如 upstream_point_cloud 或 mask_depth_intrinsics')
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
@@ -272,13 +299,40 @@ def main():
     # 避免 GraspNet 在平坦桌面上生成大量落在桌面、偏离物体的抓取。
     crop_cfg = scene_config.get("crop", {}) if scene_config else {}
     target_points = object_clouds.get(int(obj_id))
-    pc = crop_to_object(
-        pc,
-        object_points=target_points,
-        margin=float(crop_cfg.get("margin", 0.05)),
-        num_points=int(crop_cfg.get("num_points", 20000)),
-        table_z=float(crop_cfg.get("table_z", 0.005)),
-    )
+    target_point_source = {
+        "source": "pybullet_segmentation",
+        "frame": "world",
+        "num_points": int(len(target_points)) if target_points is not None else 0,
+    }
+    if args.target_point_cloud:
+        upstream_points, upstream_info = load_point_cloud(args.target_point_cloud)
+        if args.target_point_cloud_frame != "world":
+            print(
+                "  ⚠️  上游点云不是 world 坐标系，当前仅记录诊断；"
+                "请提供 world frame 点云或先做外参转换。"
+            )
+        target_points = upstream_points
+        target_point_source = {
+            **upstream_info,
+            "source": args.target_point_cloud_source or upstream_info.get("source"),
+            "frame": args.target_point_cloud_frame,
+        }
+        pc = sample_point_cloud(
+            upstream_points,
+            num_points=int(crop_cfg.get("num_points", 20000)),
+        )
+        print(
+            f'  🔌 使用上游目标点云: {len(upstream_points)} 点, '
+            f'frame={args.target_point_cloud_frame}'
+        )
+    else:
+        pc = crop_to_object(
+            pc,
+            object_points=target_points,
+            margin=float(crop_cfg.get("margin", 0.05)),
+            num_points=int(crop_cfg.get("num_points", 20000)),
+            table_z=float(crop_cfg.get("table_z", 0.005)),
+        )
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✂️  裁剪后点云: {pc.shape}, 物体点数: {n_obj_pts}')
 
@@ -340,6 +394,7 @@ def main():
         'target_body_id': int(obj_id),
         'objects': scene.get_object_poses(),
         'object_point_counts': object_point_counts,
+        'target_point_source': target_point_source,
         'grasp_filter': grasp_filter_stats,
         'object_position': list(obj_pos),
         'object_orientation': list(obj_orn),
@@ -388,6 +443,7 @@ def main():
     with open(viz_path, 'wb') as _f:
         pickle.dump({'rgb': rgb, 'depth': depth, 'point_cloud': pc,
                      'seg': seg, 'object_point_counts': object_point_counts,
+                     'target_point_source': target_point_source,
                      'objects': scene.get_object_poses(),
                      'grasp_filter': grasp_filter_stats,
                      'target_body_id': int(obj_id),

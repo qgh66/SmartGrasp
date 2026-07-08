@@ -59,9 +59,13 @@ DEFAULT_CHECKPOINT = WORKSPACE_ROOT / "checkpoints" / "checkpoint-rs.tar"
 DEFAULT_HAND_EYE_CALIBRATION = WORKSPACE_ROOT / "calibration" / "hand_eye_tcp_camera.json"
 DEFAULT_TCP_CAMERA_TRANSLATION_OFFSET_MM = [0.0, 0.0, -82.5]
 DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM = 174.0
+BASE_GRIPPER_OPENING_AXIS = np.array([0.0, 1.0, 0.0], dtype=float)
+DEFAULT_GRIPPER_ROLL_OFFSET_DEG = 120.0
 DEFAULT_JAKA_IP = "192.168.1.199"
 DEFAULT_ROBOTIQ_PORT = "/dev/ttyUSB0"
 DEFAULT_READY_POSE = [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0]
+DEFAULT_CAPTURE_JOINT_POSE_DEG = [0.0, 90.0, 45.0, 135.0, 270.0, 72.0]
+DEFAULT_JOINT_VELOCITY_RAD_S = 0.5
 DEFAULT_CAMERA_INDEX = 1
 DEFAULT_CAMERA_SERIAL_SUFFIX = "72508"
 DEFAULT_JAKA_PYTHON = os.environ.get("JAKA_PYTHON", "/home/admin128/anaconda3/envs/smartgrasp310/bin/python")
@@ -796,11 +800,52 @@ def camera_grasp_to_robot_transform(record: dict[str, Any], calibration: dict[st
     return calibration["plate_to_robot"] @ np.linalg.inv(calibration["board_to_camera"]) @ camera_from_grasp_mm
 
 
-def offset_grasp_center_to_tcp(robot_from_grasp: np.ndarray, offset_mm: float) -> np.ndarray:
-    """Move from GraspNet grasp center back to the physical TCP along approach."""
+def normalized(vector: np.ndarray, name: str) -> np.ndarray:
+    norm = float(np.linalg.norm(vector))
+    if norm < 1e-9:
+        raise ValueError(f"Cannot normalize near-zero vector: {name}")
+    return np.asarray(vector, dtype=float) / norm
+
+
+def build_grasp_to_tcp_rotation(calibration: dict[str, Any]) -> np.ndarray:
+    if "grasp_to_tcp_rotation" in calibration:
+        return np.asarray(calibration["grasp_to_tcp_rotation"], dtype=float).reshape(3, 3)
+    if calibration.get("mode") != "hand_eye" or "base_from_tcp_capture" not in calibration:
+        return np.array(
+            [
+                [0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                [-1.0, 0.0, 0.0],
+            ],
+            dtype=float,
+        )
+
+    capture_tcp_rotation = np.asarray(calibration["base_from_tcp_capture"], dtype=float).reshape(4, 4)[:3, :3]
+    tcp_z_base = normalized(capture_tcp_rotation[:, 2], "capture TCP local Z")
+    opening_axis_base = BASE_GRIPPER_OPENING_AXIS - np.dot(BASE_GRIPPER_OPENING_AXIS, tcp_z_base) * tcp_z_base
+    opening_axis_base = normalized(opening_axis_base, "projected gripper opening axis")
+    tcp_x_base = normalized(np.cross(opening_axis_base, tcp_z_base), "derived TCP local X")
+    ideal_tcp_rotation = np.column_stack([tcp_x_base, opening_axis_base, tcp_z_base])
+    ideal_grasp_rotation = np.column_stack([tcp_z_base, opening_axis_base, -tcp_x_base])
+    grasp_to_tcp_rotation = ideal_grasp_rotation.T @ ideal_tcp_rotation
+    calibration["grasp_to_tcp_rotation"] = grasp_to_tcp_rotation
+    calibration["grasp_to_tcp_rotation_convention"] = (
+        "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy"
+    )
+    calibration["gripper_opening_axis_base"] = BASE_GRIPPER_OPENING_AXIS.tolist()
+    calibration["capture_tcp_local_z_base"] = tcp_z_base.tolist()
+    calibration["capture_gripper_opening_axis_base"] = opening_axis_base.tolist()
+    return grasp_to_tcp_rotation
+
+
+def grasp_center_to_jaka_tcp_transform(robot_from_grasp: np.ndarray, offset_mm: float, grasp_to_tcp_rotation: np.ndarray) -> np.ndarray:
+    """Convert a GraspNet grasp-center frame into the physical JAKA TCP frame."""
     robot_from_tcp = robot_from_grasp.copy()
-    approach_axis = robot_from_grasp[:3, 0]
-    robot_from_tcp[:3, 3] = robot_from_grasp[:3, 3] - approach_axis * float(offset_mm)
+    robot_from_tcp[:3, :3] = robot_from_grasp[:3, :3] @ grasp_to_tcp_rotation
+    tcp_axis = robot_from_tcp[:3, 2]
+    robot_from_tcp[:3, 3] = robot_from_grasp[:3, 3] - tcp_axis * float(offset_mm)
+    robot_from_tcp[0, 3] -= 20.0
+    robot_from_tcp[1, 3] -= 25.0
     return robot_from_tcp
 
 
@@ -808,19 +853,36 @@ def compute_robot_targets(
     records: list[dict[str, Any]],
     calibration: dict[str, Any] | None,
     grasp_center_to_tcp_offset_mm: float = 0.0,
+    gripper_roll_offset_deg: float = 0.0,
 ) -> list[dict[str, Any]]:
     if calibration is None:
         return records
+    grasp_to_tcp_rotation = build_grasp_to_tcp_rotation(calibration)
+    roll_offset_rotation = Rotation.from_euler("z", float(gripper_roll_offset_deg), degrees=True).as_matrix()
+    calibration["base_grasp_to_tcp_rotation"] = grasp_to_tcp_rotation
+    grasp_to_tcp_rotation = grasp_to_tcp_rotation @ roll_offset_rotation
+    calibration["grasp_to_tcp_rotation_with_roll_offset"] = grasp_to_tcp_rotation
+    calibration["gripper_roll_offset_deg"] = float(gripper_roll_offset_deg)
     for record in records:
         robot_from_grasp = camera_grasp_to_robot_transform(record, calibration)
-        robot_from_tcp = offset_grasp_center_to_tcp(robot_from_grasp, grasp_center_to_tcp_offset_mm)
+        robot_from_tcp = grasp_center_to_jaka_tcp_transform(
+            robot_from_grasp,
+            grasp_center_to_tcp_offset_mm,
+            grasp_to_tcp_rotation,
+        )
         record["grasp_center_jaka_pose"] = transform_to_jaka_pose(robot_from_grasp)
         record["target_jaka_tcp_pose"] = transform_to_jaka_pose(robot_from_tcp)
         record["target_robot_from_grasp"] = robot_from_grasp
         record["target_robot_from_grasp_center"] = robot_from_grasp
         record["target_robot_from_tcp"] = robot_from_tcp
         record["grasp_center_to_tcp_offset_mm"] = float(grasp_center_to_tcp_offset_mm)
-        record["grasp_center_to_tcp_offset_axis"] = "-grasp_local_x"
+        record["grasp_center_to_tcp_offset_axis"] = "-tcp_local_z"
+        record["grasp_to_tcp_rotation"] = grasp_to_tcp_rotation
+        record["gripper_roll_offset_deg"] = float(gripper_roll_offset_deg)
+        record["grasp_to_tcp_rotation_convention"] = calibration.get(
+            "grasp_to_tcp_rotation_convention",
+            "fallback_static: tcp_z=grasp_x,tcp_y=grasp_y,tcp_x=-grasp_z",
+        )
         record["calibration_mode"] = calibration["mode"]
         record["calibration_source"] = calibration.get("source_path") or calibration.get("source_dir")
         if calibration["mode"] == "hand_eye":
@@ -899,6 +961,77 @@ def filter_target_tcp_z(
             flush=True,
         )
     return filtered_records, info
+
+
+def tcp_downward_angle_deg(record: dict[str, Any]) -> float | None:
+    if "target_robot_from_tcp" not in record:
+        return None
+    transform = np.asarray(record["target_robot_from_tcp"], dtype=float).reshape(4, 4)
+    tcp_z_axis = normalized(transform[:3, 2], "target TCP local Z")
+    downward_axis = np.array([0.0, 0.0, -1.0], dtype=float)
+    cosine = float(np.clip(np.dot(tcp_z_axis, downward_axis), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cosine)))
+
+
+def rerank_candidates_by_topdown(
+    records: list[dict[str, Any]],
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    info: dict[str, Any] = {
+        "enabled": bool(args.prefer_topdown_candidate),
+        "method": "min_tcp_local_z_angle_to_base_down",
+        "window_size": int(args.topdown_rerank_window),
+        "num_input_candidates": int(len(records)),
+        "reranked": [],
+    }
+    if not args.prefer_topdown_candidate or len(records) == 0:
+        info["reason"] = "disabled_or_no_candidates"
+        return records, info
+
+    window_size = max(1, min(int(args.topdown_rerank_window), len(records)))
+    window = records[:window_size]
+    tail = records[window_size:]
+    for rank, record in enumerate(window):
+        angle_deg = tcp_downward_angle_deg(record)
+        record["topdown_rerank"] = {
+            "input_rank": int(rank),
+            "tcp_local_z_angle_to_base_down_deg": angle_deg,
+        }
+
+    reranked_window = sorted(
+        window,
+        key=lambda record: (
+            float("inf") if record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"] is None
+            else float(record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"]),
+            -float(record["score"]),
+        ),
+    )
+    for output_rank, record in enumerate(reranked_window):
+        record["topdown_rerank"]["output_rank"] = int(output_rank)
+
+    info["reranked"] = [
+        {
+            "raw_grasp_index": int(record.get("raw_grasp_index", record.get("grasp_index", -1))),
+            "input_rank": int(record["topdown_rerank"]["input_rank"]),
+            "output_rank": int(record["topdown_rerank"]["output_rank"]),
+            "score": float(record["score"]),
+            "tcp_local_z_angle_to_base_down_deg": record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"],
+        }
+        for record in reranked_window
+    ]
+    if reranked_window:
+        print(
+            "[candidate-rerank] top-down preferred order: "
+            + ", ".join(
+                f"raw_grasp_{item['raw_grasp_index']} "
+                f"angle={item['tcp_local_z_angle_to_base_down_deg']:.3f}deg "
+                f"score={item['score']:.4f}"
+                for item in info["reranked"]
+                if item["tcp_local_z_angle_to_base_down_deg"] is not None
+            ),
+            flush=True,
+        )
+    return reranked_window + tail, info
 
 
 def filter_grasp_centers_in_target_mask(
@@ -1202,7 +1335,7 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
         target_transform = np.asarray(selected_record.get("target_robot_from_tcp", center_transform), dtype=float).reshape(4, 4)
         center_mm = center_transform[:3, 3]
         tcp_mm = target_transform[:3, 3]
-        moving_vector_mm = target_transform[:3, 0] * float(approach_offset_mm)
+        moving_vector_mm = target_transform[:3, 2] * float(approach_offset_mm)
         pre_grasp_mm = tcp_mm - moving_vector_mm
         capture_tcp_pose = selected_record.get("capture_tcp_pose")
         if capture_tcp_pose is not None:
@@ -1243,11 +1376,27 @@ def move_jaka_pose(target_pose: list[float], ip: str, velocity: float, accelerat
         robot.logout()
 
 
+def move_jaka_joints(target_joints_rad: list[float], ip: str, velocity_rad_s: float) -> None:
+    jkrc = import_jkrc_backend()
+
+    robot = jkrc.RC(ip)
+    check_jaka_call("login", robot.login())
+    try:
+        check_jaka_call("power_on", robot.power_on())
+        check_jaka_call("enable_robot", robot.enable_robot())
+        ret = robot.joint_move(target_joints_rad, 0, True, velocity_rad_s)
+        check_jaka_call("joint_move", ret)
+    finally:
+        robot.logout()
+
+
 def run_jaka_sequence(sequence: list[dict[str, Any]], args: argparse.Namespace, label: str) -> None:
     if args.jaka_executor == "direct":
         for step in sequence:
             if step["type"] == "move":
                 move_jaka_pose(step["pose"], args.jaka_ip, args.velocity, args.acceleration)
+            elif step["type"] == "joint_move":
+                move_jaka_joints(step["joints_rad"], args.jaka_ip, args.joint_velocity_rad_s)
             elif step["type"] == "gripper":
                 command_gripper(step["command"], args.robotiq_port)
             else:
@@ -1276,6 +1425,8 @@ def run_jaka_sequence(sequence: list[dict[str, Any]], args: argparse.Namespace, 
         str(args.velocity),
         "--acceleration",
         str(args.acceleration),
+        "--joint-velocity-rad-s",
+        str(args.joint_velocity_rad_s),
         "--jkrc-dir",
         args.jkrc_dir,
     ]
@@ -1418,10 +1569,11 @@ def command_gripper(opening: str, comport: str) -> None:
 def prepare_robot(args: argparse.Namespace) -> None:
     if args.skip_ready:
         return
+    capture_joints_rad = np.deg2rad(np.asarray(args.capture_joint_pose_deg, dtype=float)).astype(float).tolist()
     run_jaka_sequence(
         [
+            {"type": "joint_move", "joints_rad": capture_joints_rad},
             {"type": "gripper", "command": "open"},
-            {"type": "move", "pose": args.ready_pose},
         ],
         args,
         label="prepare_robot",
@@ -1429,7 +1581,7 @@ def prepare_robot(args: argparse.Namespace) -> None:
 
 
 def offset_pose_along_approach(target_transform: np.ndarray, offset_mm: float) -> list[float]:
-    approach_axis = target_transform[:3, 0]
+    approach_axis = target_transform[:3, 2]
     transform = target_transform.copy()
     transform[:3, 3] = transform[:3, 3] - approach_axis * offset_mm
     return transform_to_jaka_pose(transform)
@@ -1493,9 +1645,15 @@ def save_outputs(
         collision_obstacle_cloud,
         args,
     )
-    records = compute_robot_targets(records, calibration, args.grasp_center_to_tcp_offset_mm)
+    records = compute_robot_targets(
+        records,
+        calibration,
+        args.grasp_center_to_tcp_offset_mm,
+        args.gripper_roll_offset_deg,
+    )
     records, target_tcp_z_filter_info = filter_target_tcp_z(records, args)
     records, outlier_filter_info = filter_grasp_center_outliers(records, args)
+    records, topdown_rerank_info = rerank_candidates_by_topdown(records, args)
     records = renumber_candidate_records(records)
     print_candidate_target_centers(records, args.candidate_index, args.approach_offset_mm)
 
@@ -1549,6 +1707,7 @@ def save_outputs(
         "model_free_collision_filter": collision_filter_info,
         "target_tcp_z_filter": target_tcp_z_filter_info,
         "center_outlier_filter": outlier_filter_info,
+        "topdown_rerank": topdown_rerank_info,
         "point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("point_cloud_source"),
         "grasp_point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("grasp_point_cloud_source"),
         "point_cloud_info": serializable_point_cloud_info,
@@ -1574,7 +1733,38 @@ def save_outputs(
             else None
         ),
         "grasp_center_to_tcp_offset_mm": float(args.grasp_center_to_tcp_offset_mm),
-        "grasp_center_to_tcp_offset_axis": "-grasp_local_x",
+        "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+        "gripper_roll_offset_deg": float(args.gripper_roll_offset_deg),
+        "base_grasp_to_tcp_rotation": (
+            calibration.get("base_grasp_to_tcp_rotation")
+            if calibration is not None and "base_grasp_to_tcp_rotation" in calibration
+            else None
+        ),
+        "grasp_to_tcp_rotation": (
+            calibration.get("grasp_to_tcp_rotation_with_roll_offset")
+            if calibration is not None and "grasp_to_tcp_rotation_with_roll_offset" in calibration
+            else None
+        ),
+        "grasp_to_tcp_rotation_convention": (
+            calibration.get("grasp_to_tcp_rotation_convention")
+            if calibration is not None and "grasp_to_tcp_rotation_convention" in calibration
+            else "fallback_static: tcp_z=grasp_x,tcp_y=grasp_y,tcp_x=-grasp_z"
+        ),
+        "gripper_opening_axis_base": (
+            calibration.get("gripper_opening_axis_base")
+            if calibration is not None and "gripper_opening_axis_base" in calibration
+            else None
+        ),
+        "capture_tcp_local_z_base": (
+            calibration.get("capture_tcp_local_z_base")
+            if calibration is not None and "capture_tcp_local_z_base" in calibration
+            else None
+        ),
+        "capture_gripper_opening_axis_base": (
+            calibration.get("capture_gripper_opening_axis_base")
+            if calibration is not None and "capture_gripper_opening_axis_base" in calibration
+            else None
+        ),
         "requires_ready_pose_matching_calibration": not (calibration is not None and calibration["mode"] == "hand_eye"),
         "candidates": records,
     }
@@ -1672,7 +1862,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-target-tcp-z-mm",
         type=float,
-        default=0.0,
+        default=180.0,
         help="Minimum allowed final TCP z in JAKA base frame, in millimeters.",
     )
     parser.add_argument(
@@ -1759,14 +1949,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="TCP pose at capture time for hand-eye mode, in mm + xyz Euler radians.",
     )
     parser.add_argument("--execute", action="store_true", help="Move JAKA to the selected candidate after capture/inference.")
-    parser.add_argument("--skip-ready", action="store_true", help="Do not move to ready pose/open gripper before capture.")
+    parser.add_argument("--skip-ready", action="store_true", help="Do not move to the capture joint pose/open gripper before capture.")
     parser.add_argument(
         "--ready-pose",
         type=float,
         nargs=6,
         default=DEFAULT_READY_POSE,
         metavar=("X", "Y", "Z", "RX", "RY", "RZ"),
-        help="Initial JAKA TCP pose before capture: mm + xyz Euler radians.",
+        help="Legacy Cartesian ready pose, kept for compatibility; capture now defaults to --capture-joint-pose-deg.",
+    )
+    parser.add_argument(
+        "--capture-joint-pose-deg",
+        type=float,
+        nargs=6,
+        default=DEFAULT_CAPTURE_JOINT_POSE_DEG,
+        metavar=("J1", "J2", "J3", "J4", "J5", "J6"),
+        help="Default JAKA joint pose before every new camera capture, in degrees.",
     )
     parser.add_argument("--jaka-ip", default=DEFAULT_JAKA_IP, help="JAKA controller IP.")
     parser.add_argument("--robotiq-port", default=DEFAULT_ROBOTIQ_PORT, help="Robotiq serial port.")
@@ -1787,18 +1985,37 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Directory containing the controller-compatible jkrc.so and libjakaAPI.so for the JAKA subprocess.",
     )
     parser.add_argument("--candidate-index", type=int, default=0, help="Candidate index to execute.")
+    parser.add_argument(
+        "--prefer-topdown-candidate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rerank the first --topdown-rerank-window surviving candidates by TCP local Z closeness to base -Z.",
+    )
+    parser.add_argument(
+        "--topdown-rerank-window",
+        type=int,
+        default=10,
+        help="Only rerank this many highest-score surviving candidates when --prefer-topdown-candidate is enabled.",
+    )
     parser.add_argument("--velocity", type=float, default=60.0, help="JAKA linear_move_extend velocity.")
     parser.add_argument("--acceleration", type=float, default=60.0, help="JAKA linear_move_extend acceleration.")
+    parser.add_argument("--joint-velocity-rad-s", type=float, default=DEFAULT_JOINT_VELOCITY_RAD_S, help="JAKA joint_move velocity in rad/s.")
     parser.add_argument(
         "--grasp-center-to-tcp-offset-mm",
         type=float,
         default=DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM,
         help=(
             "Distance from GraspNet grasp center back to the physical Robotiq TCP, "
-            "applied along -GraspNet local X before robot execution."
+            "applied along -TCP local Z after mapping GraspNet grasp frame to the JAKA TCP frame."
         ),
     )
-    parser.add_argument("--approach-offset-mm", type=float, default=80.0, help="Pre-grasp retreat along GraspNet local X.")
+    parser.add_argument(
+        "--gripper-roll-offset-deg",
+        type=float,
+        default=DEFAULT_GRIPPER_ROLL_OFFSET_DEG,
+        help="Fixed rotation around TCP local Z to align the physical gripper opening direction.",
+    )
+    parser.add_argument("--approach-offset-mm", type=float, default=80.0, help="Pre-grasp retreat along TCP local Z.")
     parser.add_argument("--lift-mm", type=float, default=120.0, help="Post-close vertical lift in robot base frame.")
     return parser
 
@@ -1816,9 +2033,9 @@ def main() -> None:
     else:
         calibration = load_legacy_plate_calibration(camera_coordinates_dir)
 
-    if args.execute:
-        prepare_robot(args)
     capture_was_reused = bool(args.reuse_capture)
+    if not capture_was_reused:
+        prepare_robot(args)
     frame = (
         load_captured_frame(output_dir)
         if capture_was_reused
@@ -1889,6 +2106,7 @@ def main() -> None:
         "camera_index": args.camera_index,
         "camera_serial": args.camera_serial,
         "ready_pose": args.ready_pose,
+        "capture_joint_pose_deg": args.capture_joint_pose_deg,
         "executed": bool(args.execute),
     }
     print(json.dumps(summary, indent=2))

@@ -1,0 +1,29 @@
+{
+  "request_id": "scene_0001_step_00_upstream_pc",
+  "branch": "fully_visible",
+  "task_type": "grasp",
+  "object": {
+    "id": 3,
+    "name": "medium_clamp",
+    "category": "clamp",
+    "role": "target"
+  },
+  "scene": {
+    "scene_config": "graspnet-workspace/config/industrial_scene.json",
+    "rgb_path": null,
+    "depth_path": null,
+    "mask_path": null,
+    "point_cloud_path": "perception/output/scene_0001/object_3_points_world.npy",
+    "point_cloud_frame": "world",
+    "point_cloud_unit": "meter",
+    "camera_intrinsics_path": null,
+    "camera_to_world_path": null,
+    "occlusion_graph_path": "data/integrated_runs/scene_0001_query_tool/occlusion_graph.json"
+  },
+  "execution": {
+    "top_k": 5,
+    "device": "cuda:0",
+    "output": "graspnet-workspace/results/scene_0001_step_00_upstream_pc_grasp.json",
+    "gui": false
+  }
+}

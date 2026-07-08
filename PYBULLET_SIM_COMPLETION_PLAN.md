@@ -66,7 +66,7 @@ reveal push 或 pick-and-place
 | 1. fully_visible 抓取原型 | 已完成 | 当前能跑 PyBullet 场景、GraspNet、JAKA+Robotiq 抓取评估 |
 | 2. 统一 JSON 接口雏形 | 已完成 | `execution/run_execution.py` 已支持 fully_visible/grasp 转调当前脚本 |
 | 3. reveal 物理执行 | 进行中 | push 物理执行入口已接入，待实际运行验证；pick-and-place 未实现 |
-| 4. 上游真实 mask/点云接入 | 未完成 | 当前仍主要使用 PyBullet segmentation 模拟感知结果 |
+| 4. 上游真实 mask/点云接入 | 进行中 | 已支持 point_cloud_path 与 mask/depth/intrinsics 接口，待队友真实数据和坐标系验证 |
 | 5. ID/name/body_id 对齐 | 未完成 | 需要把感知 ID、推理 object、PyBullet body id 统一映射 |
 | 6. 抓取成功率调优 | 未完成 | 当前流程能跑完，但抓取成功率还需要调 |
 | 7. 闭环重新观测输出 | 未完成 | reveal/grasp 后需要输出更新后的 RGB-D/seg/scene state |
@@ -331,7 +331,7 @@ python execution/run_execution.py \
 
 ## 阶段 4：上游真实 mask / 点云接入
 
-状态：未完成
+状态：进行中
 
 目标：
 
@@ -340,8 +340,11 @@ python execution/run_execution.py \
 当前情况：
 
 ```text
-当前 fully_visible 抓取使用 PyBullet segmentation 获取 target_points。
-这适合仿真自测，但不是最终和感知模块联调的形式。
+execution/perception_io.py 已支持读取上游 point_cloud_path。
+execution/perception_io.py 已支持 mask + depth + intrinsics 反投影生成目标点云。
+execution/run_execution.py 会按输入优先级自动准备 target point cloud。
+demo_closed_loop.py 已支持 --target-point-cloud。
+如果上游没有提供点云或 mask/depth/intrinsics，则继续 fallback 到 PyBullet segmentation。
 ```
 
 需要支持的输入：
@@ -376,6 +379,26 @@ point_cloud_path
 ```
 
 建议优先做路线 A，因为它和感知模块的 SAM mask 输出最贴近。
+
+当前实际已支持：
+
+```text
+.npy / .npz 点云
+.npy / .npz / PNG / JPG mask
+.npy / .npz / 图像 depth
+fx/fy/cx/cy 或 K/camera_matrix 内参 JSON
+T_world_camera / camera_to_world 外参 JSON
+```
+
+当前还需要队友确认：
+
+```text
+point_cloud_path 是 world frame 还是 camera frame
+point_cloud_path 单位是 meter 还是 millimeter
+mask 是 0/255 PNG 还是 bool/0-1 npy
+depth 乘什么 depth_scale 后是 meter
+object.id 和 scene_config 中 object.name 的映射是否稳定
+```
 
 需要注意：
 

@@ -12,8 +12,10 @@ from typing import Any
 
 try:
     from .reveal_api import execute_reveal_action
+    from .perception_io import build_target_points_from_scene
 except ImportError:
     from reveal_api import execute_reveal_action
+    from perception_io import build_target_points_from_scene
 
 import sys
 
@@ -63,6 +65,32 @@ def default_raw_output(request: dict[str, Any], action_type: str) -> str:
     return f"results/{request_id}_{action_type}.json"
 
 
+def prepare_target_point_cloud(request: dict[str, Any]) -> tuple[Path | None, dict[str, Any]]:
+    scene = request.get("scene", {})
+    points, info = build_target_points_from_scene(scene)
+    if points is None:
+        return None, info
+
+    if info.get("frame") != "world":
+        info["usable_for_execution"] = False
+        info["warning"] = (
+            "Point cloud is not in PyBullet/world frame. "
+            "Provide scene.camera_to_world_path or a world-frame point_cloud_path."
+        )
+        return None, info
+
+    request_id = request.get("request_id") or "execution_request"
+    cache_dir = WORKSPACE_ROOT / "results" / "execution_inputs"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{request_id}_target_points_world.npy"
+    import numpy as np
+
+    np.save(cache_path, points.astype("float32"))
+    info["usable_for_execution"] = True
+    info["prepared_point_cloud_path"] = str(cache_path)
+    return cache_path, info
+
+
 def normalize_result(
     request: dict[str, Any],
     *,
@@ -107,6 +135,7 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
     raw_output = execution.get("output") or default_raw_output(request, "grasp")
     top_k = str(execution.get("top_k", 5))
     device = str(execution.get("device", "cuda:0"))
+    target_point_cloud_path, target_point_info = prepare_target_point_cloud(request)
 
     cmd = [
         "bash",
@@ -122,6 +151,15 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
         "--output",
         workspace_arg(raw_output),
     ]
+    if target_point_cloud_path is not None:
+        cmd.extend([
+            "--target-point-cloud",
+            workspace_arg(target_point_cloud_path),
+            "--target-point-cloud-frame",
+            "world",
+            "--target-point-cloud-source",
+            str(target_point_info.get("source", "upstream")),
+        ])
     env = os.environ.copy()
     if execution.get("gui"):
         env["PYBULLET_GUI"] = "1"
@@ -156,6 +194,7 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
         "log_tail": completed.stdout.splitlines()[-80:],
         "grasp_filter": raw_result.get("grasp_filter"),
         "object_point_counts": raw_result.get("object_point_counts"),
+        "target_point_source": raw_result.get("target_point_source") or target_point_info,
     }
     artifacts = {
         "result_json": str(raw_output_path),

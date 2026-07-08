@@ -6,6 +6,52 @@
 /home/admin128/qiuguanhe/SmartGrasp
 ```
 
+## 0. 队友必须提供/确认的信息
+
+为了让执行层使用真实感知结果，而不是只用 PyBullet segmentation，请感知/推理模块先确认下面这些字段：
+
+```text
+1. point_cloud_path 是否能提供：
+   - 推荐格式：.npy 或 .npz
+   - shape：N x 3 或 N x 6，前三列必须是 xyz
+   - 坐标系：优先 PyBullet/world frame
+   - 单位：优先 meter
+
+2. 如果不能直接提供 world-frame 点云，需要提供：
+   - mask_path
+   - depth_path
+   - camera_intrinsics_path
+   - depth_scale
+   - camera_to_world_path
+
+3. mask/depth 格式需要确认：
+   - mask：PNG/JPG 或 .npy/.npz，非 0 像素表示目标物体
+   - depth：.npy/.npz 或图像，乘 depth_scale 后单位必须是 meter
+   - intrinsics：JSON，包含 fx/fy/cx/cy，或 K/camera_matrix
+
+4. object.id 和 object.name 需要稳定：
+   - object.id 是感知/推理链路里的物体 ID
+   - object.name 必须能对应 PyBullet scene_config 中的物体 name
+```
+
+当前执行层的输入优先级：
+
+```text
+优先级 1：scene.point_cloud_path
+  -> 直接读取目标物体点云
+  -> 如果 point_cloud_frame=world，则用于 GraspNet 抓取
+
+优先级 2：scene.mask_path + scene.depth_path + scene.camera_intrinsics_path
+  -> 执行层反投影生成目标物体点云
+  -> 如果提供 camera_to_world_path，则转换到 world frame 后用于抓取
+
+优先级 3：以上都没有
+  -> fallback 到 PyBullet segmentation
+  -> 用于本地仿真自测
+```
+
+注意：抓取执行最终需要 **PyBullet/world frame、meter 单位** 的点云。camera frame 点云目前只会记录诊断，不会直接用于真实抓取执行。
+
 执行层统一入口：
 
 ```text
@@ -43,6 +89,12 @@ python execution/run_execution.py \
 
 ```bash
 python execution/run_execution.py \
+  --input execution/examples/upstream_point_cloud_grasp_request.json \
+  --output graspnet-workspace/results/test_upstream_point_cloud_response.json
+```
+
+```bash
+python execution/run_execution.py \
   --input execution/examples/reveal_request.json \
   --output graspnet-workspace/results/test_reveal_response.json
 ```
@@ -51,7 +103,47 @@ python execution/run_execution.py \
 
 ### Fully Visible：直接抓目标物体
 
-当推理模块判断目标完整可见时，发送：
+当推理模块判断目标完整可见时，推荐发送 world-frame 点云：
+
+```json
+{
+  "request_id": "scene_0001_step_00_upstream_pc",
+  "branch": "fully_visible",
+  "task_type": "grasp",
+  "object": {
+    "id": 3,
+    "name": "medium_clamp",
+    "category": "clamp",
+    "role": "target"
+  },
+  "scene": {
+    "scene_config": "graspnet-workspace/config/industrial_scene.json",
+    "rgb_path": null,
+    "depth_path": null,
+    "mask_path": null,
+    "point_cloud_path": "perception/output/scene_0001/object_3_points_world.npy",
+    "point_cloud_frame": "world",
+    "point_cloud_unit": "meter",
+    "camera_intrinsics_path": null,
+    "camera_to_world_path": null,
+    "occlusion_graph_path": "data/integrated_runs/scene_0001_query_tool/occlusion_graph.json"
+  },
+  "execution": {
+    "top_k": 5,
+    "device": "cuda:0",
+    "output": "graspnet-workspace/results/scene_0001_step_00_upstream_pc_grasp.json",
+    "gui": false
+  }
+}
+```
+
+现成示例：
+
+```text
+execution/examples/upstream_point_cloud_grasp_request.json
+```
+
+如果上游还没有点云，可以先发送 fallback 版本：
 
 ```json
 {
@@ -70,7 +162,10 @@ python execution/run_execution.py \
     "depth_path": null,
     "mask_path": null,
     "point_cloud_path": null,
+    "point_cloud_frame": "world",
+    "point_cloud_unit": "meter",
     "camera_intrinsics_path": null,
+    "camera_to_world_path": null,
     "occlusion_graph_path": null
   },
   "execution": {
@@ -115,7 +210,10 @@ execution/examples/fully_visible_grasp_request.json
     "depth_path": null,
     "mask_path": "perception/output/scene_0001/object_6_mask.png",
     "point_cloud_path": "perception/output/scene_0001/object_6_points.npy",
+    "point_cloud_frame": "world",
+    "point_cloud_unit": "meter",
     "camera_intrinsics_path": null,
+    "camera_to_world_path": null,
     "occlusion_graph_path": "data/integrated_runs/scene_0001_query_tool/occlusion_graph.json"
   },
   "execution": {
@@ -165,18 +263,25 @@ object.name         执行层当前主要用它在仿真场景中找物体。
 object.category     物体类别。
 object.role         target 或 occluder。
 scene.scene_config  PyBullet 场景配置。
+scene.point_cloud_path        上游目标点云，推荐 world frame + meter。
+scene.point_cloud_frame       world 或 camera；当前抓取执行要求 world。
+scene.point_cloud_unit        meter 或 millimeter；millimeter 会自动转 meter。
+scene.mask_path               目标物体 mask，用于 mask+depth 反投影。
+scene.depth_path              深度图，用于 mask+depth 反投影。
+scene.camera_intrinsics_path  相机内参 JSON。
+scene.camera_to_world_path    camera frame 到 PyBullet/world frame 的 4x4 外参 JSON。
+scene.depth_scale             depth 乘这个比例后得到 meter；默认 1.0。
 execution.output    执行层详细结果 JSON。
 ```
 
-可选/预留字段：
+当前支持的点云/图像输入：
 
 ```text
-scene.rgb_path
-scene.depth_path
-scene.mask_path
-scene.point_cloud_path
-scene.camera_intrinsics_path
-scene.occlusion_graph_path
+.npy: 直接保存 numpy array
+.npz: 支持 points / point_cloud / xyz / arr_0 / depth / mask 等 key
+mask 图像: PNG/JPG，非 0 像素表示目标物体
+intrinsics JSON: {"fx":..., "fy":..., "cx":..., "cy":...}
+外参 JSON: {"T_world_camera": [[... 4x4 ...]]}
 ```
 
 当前本地仿真阶段，执行层主要使用：
@@ -184,6 +289,7 @@ scene.occlusion_graph_path
 ```text
 object.name
 scene.scene_config
+scene.point_cloud_path 或 mask/depth/intrinsics
 branch
 task_type
 reveal.action_type
@@ -235,6 +341,14 @@ artifacts.result_json
 artifacts.viz_data_pkl
 request_reloop
 diagnostics
+```
+
+`diagnostics.target_point_source` 会说明本次抓取点云来源：
+
+```text
+point_cloud_path              使用了上游点云
+mask_depth_intrinsics         使用 mask + depth + intrinsics 生成点云
+pybullet_segmentation_fallback 没有上游点云，回退到 PyBullet segmentation
 ```
 
 判断规则：
