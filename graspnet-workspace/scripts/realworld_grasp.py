@@ -49,6 +49,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT / "graspnet_api"))
 from graspnetAPI import GraspGroup  # noqa: E402
 from models.graspnet import GraspNet, pred_decode  # noqa: E402
 from simulation.candidate_visualizer import export_candidate_html, export_candidate_ply, export_candidate_png  # noqa: E402
+from utils.collision_detector import ModelFreeCollisionDetector  # noqa: E402
 
 
 IMAGE_WIDTH = 1280
@@ -56,6 +57,8 @@ IMAGE_HEIGHT = 720
 DEFAULT_OUTPUT_DIR = SMARTGRASP_ROOT / "result"
 DEFAULT_CHECKPOINT = WORKSPACE_ROOT / "checkpoints" / "checkpoint-rs.tar"
 DEFAULT_HAND_EYE_CALIBRATION = WORKSPACE_ROOT / "calibration" / "hand_eye_tcp_camera.json"
+DEFAULT_TCP_CAMERA_TRANSLATION_OFFSET_MM = [0.0, 0.0, -82.5]
+DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM = 174.0
 DEFAULT_JAKA_IP = "192.168.1.199"
 DEFAULT_ROBOTIQ_PORT = "/dev/ttyUSB0"
 DEFAULT_READY_POSE = [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0]
@@ -269,24 +272,6 @@ def load_captured_frame(output_dir: Path) -> dict[str, Any]:
     return {"color_bgr": color_bgr, "depth_raw": depth_raw, "meta": meta}
 
 
-def apply_camera_box_exclusion(cloud: np.ndarray, boxes: list[list[float]] | None) -> np.ndarray:
-    if not boxes:
-        return cloud
-    keep = np.ones(len(cloud), dtype=bool)
-    for box in boxes:
-        xmin, xmax, ymin, ymax, zmin, zmax = [float(value) for value in box]
-        inside = (
-            (cloud[:, 0] >= xmin)
-            & (cloud[:, 0] <= xmax)
-            & (cloud[:, 1] >= ymin)
-            & (cloud[:, 1] <= ymax)
-            & (cloud[:, 2] >= zmin)
-            & (cloud[:, 2] <= zmax)
-        )
-        keep &= ~inside
-    return cloud[keep]
-
-
 def organized_point_cloud_from_depth(
     depth_raw: np.ndarray,
     meta: dict[str, Any],
@@ -327,16 +312,6 @@ def organized_point_cloud_from_depth(
         valid &= ~inside
 
     return xyz_image, valid
-
-
-def point_cloud_from_depth(depth_raw: np.ndarray, meta: dict[str, Any], args: argparse.Namespace) -> np.ndarray:
-    """Back-project aligned depth to camera-frame xyz in meters."""
-    xyz_image, valid = organized_point_cloud_from_depth(depth_raw, meta, args)
-    cloud = xyz_image[valid]
-
-    if len(cloud) == 0:
-        raise RuntimeError("No valid point cloud points after depth/bounds filtering.")
-    return cloud
 
 
 def save_object_mask_images(
@@ -534,11 +509,71 @@ def collect_interactive_sam_mask(frame: dict[str, Any], output_dir: Path, args: 
     return current_mask, prompt_payload
 
 
+def mask_bbox_xyxy(mask: np.ndarray) -> tuple[int, int, int, int]:
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        raise RuntimeError("Cannot build a crop from an empty object mask.")
+    return int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
+
+
+def expand_bbox_xyxy(
+    bbox: tuple[int, int, int, int],
+    image_shape: tuple[int, int],
+    margin_px: int,
+    margin_ratio: float,
+) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = bbox
+    height, width = image_shape
+    pad_x = int(round((x2 - x1) * float(margin_ratio))) + int(margin_px)
+    pad_y = int(round((y2 - y1) * float(margin_ratio))) + int(margin_px)
+    return (
+        max(0, x1 - pad_x),
+        max(0, y1 - pad_y),
+        min(width, x2 + pad_x),
+        min(height, y2 + pad_y),
+    )
+
+
+def bbox_mask_xyxy(image_shape: tuple[int, int], bbox: tuple[int, int, int, int]) -> np.ndarray:
+    mask = np.zeros(image_shape, dtype=bool)
+    x1, y1, x2, y2 = bbox
+    mask[y1:y2, x1:x2] = True
+    return mask
+
+
+def save_grasp_crop_overlay(
+    color_bgr: np.ndarray,
+    object_mask: np.ndarray,
+    object_bbox: tuple[int, int, int, int],
+    grasp_bbox: tuple[int, int, int, int],
+    output_dir: Path,
+) -> Path:
+    overlay = color_bgr.copy()
+    overlay[object_mask] = (0, 255, 0)
+    debug = cv2.addWeighted(overlay, 0.35, color_bgr, 0.65, 0)
+    ox1, oy1, ox2, oy2 = object_bbox
+    gx1, gy1, gx2, gy2 = grasp_bbox
+    cv2.rectangle(debug, (gx1, gy1), (gx2 - 1, gy2 - 1), (0, 0, 255), 2)
+    cv2.rectangle(debug, (ox1, oy1), (ox2 - 1, oy2 - 1), (255, 0, 0), 2)
+    path = output_dir / "grasp_crop_overlay.png"
+    cv2.imwrite(str(path), debug)
+    return path
+
+
+def camera_point_to_pixel(point_camera_m: np.ndarray, intrinsics: dict[str, Any]) -> tuple[int, int] | None:
+    x, y, z = np.asarray(point_camera_m, dtype=float).reshape(3)
+    if not np.isfinite(z) or z <= 0:
+        return None
+    u = int(round(x * float(intrinsics["fx"]) / z + float(intrinsics["cx"])))
+    v = int(round(y * float(intrinsics["fy"]) / z + float(intrinsics["cy"])))
+    return u, v
+
+
 def build_grasp_point_cloud(
     frame: dict[str, Any],
     output_dir: Path,
     args: argparse.Namespace,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
     xyz_image, valid = organized_point_cloud_from_depth(frame["depth_raw"], frame["meta"], args)
     full_cloud = xyz_image[valid]
     color_rgb_image = cv2.cvtColor(frame["color_bgr"], cv2.COLOR_BGR2RGB)
@@ -547,38 +582,80 @@ def build_grasp_point_cloud(
         raise RuntimeError("No valid point cloud points after depth/bounds filtering.")
 
     if not args.use_sam_mask:
-        return full_cloud, full_cloud, full_cloud_rgb, full_cloud_rgb, {
+        return full_cloud, full_cloud, full_cloud_rgb, full_cloud_rgb, full_cloud, {
             "point_cloud_source": "full_depth",
+            "grasp_point_cloud_source": "full_depth",
+            "obstacle_point_cloud_source": "full_depth_fallback_no_object_mask",
+            "num_obstacle_points": int(len(full_cloud)),
             "object_mask": None,
+            "camera_intrinsics": frame["meta"]["intrinsics"],
         }
 
     sam_mask, object_mask_info = collect_interactive_sam_mask(frame, output_dir, args)
-    object_mask = sam_mask & valid
+    target_mask = sam_mask.astype(bool)
+    object_mask = target_mask & valid
+    obstacle_mask = valid & ~object_mask
     object_cloud = xyz_image[object_mask]
     object_cloud_rgb = color_rgb_image[object_mask]
+    obstacle_cloud = xyz_image[obstacle_mask]
     if len(object_cloud) < args.object_min_points:
         raise RuntimeError(
             f"Object mask produced only {len(object_cloud)} valid depth points; "
             f"minimum is {args.object_min_points}."
         )
+    object_bbox = mask_bbox_xyxy(target_mask)
+    grasp_bbox = expand_bbox_xyxy(
+        object_bbox,
+        object_mask.shape,
+        args.grasp_crop_margin_px,
+        args.grasp_crop_margin_ratio,
+    )
+    grasp_crop_mask = bbox_mask_xyxy(object_mask.shape, grasp_bbox)
+    grasp_input_mask = valid & grasp_crop_mask
+    grasp_cloud = xyz_image[grasp_input_mask]
+    grasp_cloud_rgb = color_rgb_image[grasp_input_mask]
+    if len(grasp_cloud) == 0:
+        raise RuntimeError("Expanded object crop produced no valid depth points for GraspNet.")
+
+    crop_overlay_path = save_grasp_crop_overlay(frame["color_bgr"], target_mask, object_bbox, grasp_bbox, output_dir)
     object_mask_info["num_depth_valid_mask_pixels"] = int(np.count_nonzero(object_mask))
     object_mask_info["num_object_points"] = int(len(object_cloud))
+    object_mask_info["object_bbox_xyxy"] = [int(value) for value in object_bbox]
+    object_mask_info["grasp_crop_bbox_xyxy"] = [int(value) for value in grasp_bbox]
+    object_mask_info["grasp_crop_margin_px"] = int(args.grasp_crop_margin_px)
+    object_mask_info["grasp_crop_margin_ratio"] = float(args.grasp_crop_margin_ratio)
+    object_mask_info["num_grasp_crop_points"] = int(len(grasp_cloud))
+    object_mask_info["num_obstacle_points"] = int(len(obstacle_cloud))
     np.save(output_dir / "point_cloud_object_camera.npy", object_cloud.astype(np.float32, copy=False))
+    np.save(output_dir / "point_cloud_grasp_input_camera.npy", grasp_cloud.astype(np.float32, copy=False))
+    np.save(output_dir / "point_cloud_obstacles_camera.npy", obstacle_cloud.astype(np.float32, copy=False))
     print(
-        "[object-mask] saved mask.png and mask_overlay.png from raw SAM mask; "
+        "[object-mask] saved mask.png and FreeGrasp-style crop input; "
         f"mask_pixels={object_mask_info['mask_pixels']} "
-        f"depth_valid_points={object_mask_info['num_object_points']} "
         f"object_points={len(object_cloud)} "
+        f"grasp_crop_points={len(grasp_cloud)} "
+        f"obstacle_points={len(obstacle_cloud)} "
+        f"grasp_crop_bbox={object_mask_info['grasp_crop_bbox_xyxy']} "
         f"mode={object_mask_info['mode']}",
         flush=True,
     )
-    return full_cloud, object_cloud, full_cloud_rgb, object_cloud_rgb, {
-        "point_cloud_source": "interactive_sam_object_mask",
+    return full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, {
+        "point_cloud_source": "interactive_sam_expanded_bbox_crop",
+        "grasp_point_cloud_source": "valid_depth_inside_expanded_object_bbox",
+        "obstacle_point_cloud_source": "full_depth_minus_interactive_sam_object_mask",
         "mask_path": object_mask_info["mask_path"],
         "mask_overlay_path": object_mask_info["mask_overlay_path"],
+        "grasp_crop_overlay_path": str(crop_overlay_path.resolve()),
         "sam_prompt_points_path": str((output_dir / "sam_prompt_points.json").resolve()),
         "object_point_cloud_path": str((output_dir / "point_cloud_object_camera.npy").resolve()),
+        "grasp_input_point_cloud_path": str((output_dir / "point_cloud_grasp_input_camera.npy").resolve()),
+        "obstacle_point_cloud_path": str((output_dir / "point_cloud_obstacles_camera.npy").resolve()),
+        "num_grasp_input_points": int(len(grasp_cloud)),
+        "num_object_points": int(len(object_cloud)),
+        "num_obstacle_points": int(len(obstacle_cloud)),
         "object_mask": object_mask_info,
+        "object_mask_array": target_mask,
+        "camera_intrinsics": frame["meta"]["intrinsics"],
     }
 
 
@@ -618,7 +695,7 @@ def run_graspnet(cloud_sampled: np.ndarray, checkpoint_path: Path, device_name: 
     grasps = GraspGroup(grasp_preds[0].detach().cpu().numpy())
     grasps.sort_by_score()
     if len(grasps) == 0:
-        raise RuntimeError("GraspNet returned no grasp candidates.")
+        print("[graspnet] returned no grasp candidates.", flush=True)
     return grasps
 
 
@@ -674,19 +751,24 @@ def load_legacy_plate_calibration(camera_coordinates_dir: Path) -> dict[str, Any
     }
 
 
-def load_hand_eye_calibration(calibration_path: Path) -> dict[str, Any]:
+def load_hand_eye_calibration(calibration_path: Path, translation_offset_mm: list[float] | None = None) -> dict[str, Any]:
     if not calibration_path.exists():
         raise FileNotFoundError(f"Missing hand-eye calibration: {calibration_path}")
     payload = json.loads(calibration_path.read_text(encoding="utf-8"))
     if "T_tcp_camera" not in payload:
         raise ValueError(f"Hand-eye calibration must contain T_tcp_camera: {calibration_path}")
     tcp_from_camera = np.asarray(payload["T_tcp_camera"], dtype=float).reshape(4, 4)
+    offset = np.zeros(3, dtype=float) if translation_offset_mm is None else np.asarray(translation_offset_mm, dtype=float).reshape(3)
+    tcp_from_camera[:3, 3] += offset
     return {
         "mode": "hand_eye",
         "tcp_from_camera": tcp_from_camera,
         "runtime_transform": "T_tcp_camera",
         "runtime_chain": "T_base_tcp_capture @ T_tcp_camera @ T_camera_grasp",
         "source_path": str(calibration_path),
+        "translation_offset_mm": offset.tolist(),
+        "raw_tcp_from_camera_translation_mm": np.asarray(payload["T_tcp_camera"], dtype=float).reshape(4, 4)[:3, 3].tolist(),
+        "tcp_from_camera_translation_mm": tcp_from_camera[:3, 3].tolist(),
         "payload": payload,
     }
 
@@ -714,13 +796,31 @@ def camera_grasp_to_robot_transform(record: dict[str, Any], calibration: dict[st
     return calibration["plate_to_robot"] @ np.linalg.inv(calibration["board_to_camera"]) @ camera_from_grasp_mm
 
 
-def compute_robot_targets(records: list[dict[str, Any]], calibration: dict[str, Any] | None) -> list[dict[str, Any]]:
+def offset_grasp_center_to_tcp(robot_from_grasp: np.ndarray, offset_mm: float) -> np.ndarray:
+    """Move from GraspNet grasp center back to the physical TCP along approach."""
+    robot_from_tcp = robot_from_grasp.copy()
+    approach_axis = robot_from_grasp[:3, 0]
+    robot_from_tcp[:3, 3] = robot_from_grasp[:3, 3] - approach_axis * float(offset_mm)
+    return robot_from_tcp
+
+
+def compute_robot_targets(
+    records: list[dict[str, Any]],
+    calibration: dict[str, Any] | None,
+    grasp_center_to_tcp_offset_mm: float = 0.0,
+) -> list[dict[str, Any]]:
     if calibration is None:
         return records
     for record in records:
         robot_from_grasp = camera_grasp_to_robot_transform(record, calibration)
-        record["target_jaka_tcp_pose"] = transform_to_jaka_pose(robot_from_grasp)
+        robot_from_tcp = offset_grasp_center_to_tcp(robot_from_grasp, grasp_center_to_tcp_offset_mm)
+        record["grasp_center_jaka_pose"] = transform_to_jaka_pose(robot_from_grasp)
+        record["target_jaka_tcp_pose"] = transform_to_jaka_pose(robot_from_tcp)
         record["target_robot_from_grasp"] = robot_from_grasp
+        record["target_robot_from_grasp_center"] = robot_from_grasp
+        record["target_robot_from_tcp"] = robot_from_tcp
+        record["grasp_center_to_tcp_offset_mm"] = float(grasp_center_to_tcp_offset_mm)
+        record["grasp_center_to_tcp_offset_axis"] = "-grasp_local_x"
         record["calibration_mode"] = calibration["mode"]
         record["calibration_source"] = calibration.get("source_path") or calibration.get("source_dir")
         if calibration["mode"] == "hand_eye":
@@ -733,6 +833,141 @@ def candidate_center_mm(record: dict[str, Any]) -> np.ndarray:
     if "target_robot_from_grasp" in record:
         return np.asarray(record["target_robot_from_grasp"], dtype=float).reshape(4, 4)[:3, 3]
     return np.asarray(record["translation_camera_m"], dtype=float).reshape(3) * 1000.0
+
+
+def target_tcp_z_mm(record: dict[str, Any]) -> float | None:
+    if "target_robot_from_tcp" in record:
+        return float(np.asarray(record["target_robot_from_tcp"], dtype=float).reshape(4, 4)[2, 3])
+    if "target_jaka_tcp_pose" in record:
+        return float(record["target_jaka_tcp_pose"][2])
+    return None
+
+
+def filter_target_tcp_z(
+    records: list[dict[str, Any]],
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    info: dict[str, Any] = {
+        "enabled": bool(args.filter_target_tcp_z),
+        "method": "min_target_tcp_z",
+        "min_z_mm": float(args.min_target_tcp_z_mm),
+        "num_input_candidates": int(len(records)),
+        "num_removed": 0,
+        "removed": [],
+    }
+    if not args.filter_target_tcp_z or len(records) == 0:
+        info["reason"] = "disabled_or_no_candidates"
+        return records, info
+
+    filtered_records: list[dict[str, Any]] = []
+    removed_records: list[dict[str, Any]] = []
+    for record in records:
+        z_mm = target_tcp_z_mm(record)
+        kept = z_mm is not None and z_mm >= float(args.min_target_tcp_z_mm)
+        record["target_tcp_z_filter"] = {
+            "target_tcp_z_mm": z_mm,
+            "min_z_mm": float(args.min_target_tcp_z_mm),
+            "kept": bool(kept),
+        }
+        if kept:
+            filtered_records.append(record)
+        else:
+            removed_records.append(record)
+
+    info["num_removed"] = int(len(removed_records))
+    info["removed"] = [
+        {
+            "raw_grasp_index": int(record.get("grasp_index", -1)),
+            "score": float(record["score"]),
+            "target_tcp_z_mm": record["target_tcp_z_filter"]["target_tcp_z_mm"],
+            "min_z_mm": record["target_tcp_z_filter"]["min_z_mm"],
+        }
+        for record in removed_records
+    ]
+    if removed_records:
+        removed_text = []
+        for item in info["removed"]:
+            z_value = item["target_tcp_z_mm"]
+            z_text = "unavailable" if z_value is None else f"{z_value:.3f}mm"
+            removed_text.append(
+                f"raw_grasp_{item['raw_grasp_index']} "
+                f"tcp_z={z_text} < {item['min_z_mm']:.3f}mm"
+            )
+        print(
+            "[candidate-filter] removed low TCP-z candidates: "
+            + ", ".join(removed_text),
+            flush=True,
+        )
+    return filtered_records, info
+
+
+def filter_grasp_centers_in_target_mask(
+    records: list[dict[str, Any]],
+    target_mask: np.ndarray | None,
+    intrinsics: dict[str, Any] | None,
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    info: dict[str, Any] = {
+        "enabled": bool(args.filter_grasp_centers_in_mask),
+        "method": "project_grasp_center_to_target_mask",
+        "num_input_candidates": int(len(records)),
+        "num_removed": 0,
+        "removed": [],
+    }
+    if not args.filter_grasp_centers_in_mask or len(records) == 0:
+        info["reason"] = "disabled_or_no_candidates"
+        return records, info
+    if target_mask is None or intrinsics is None:
+        info["reason"] = "missing_target_mask_or_intrinsics"
+        return records, info
+
+    mask = np.asarray(target_mask, dtype=bool)
+    height, width = mask.shape
+    filtered_records: list[dict[str, Any]] = []
+    removed_records: list[dict[str, Any]] = []
+    for record in records:
+        pixel = camera_point_to_pixel(record["translation_camera_m"], intrinsics)
+        kept = False
+        reason = "invalid_projection"
+        if pixel is not None:
+            u, v = pixel
+            if 0 <= u < width and 0 <= v < height:
+                kept = bool(mask[v, u])
+                reason = "inside_target_mask" if kept else "outside_target_mask"
+            else:
+                reason = "projection_outside_image"
+        record["target_mask_center_filter"] = {
+            "pixel_uv": None if pixel is None else [int(pixel[0]), int(pixel[1])],
+            "kept": bool(kept),
+            "reason": reason,
+        }
+        if kept:
+            filtered_records.append(record)
+        else:
+            removed_records.append(record)
+
+    info["num_removed"] = int(len(removed_records))
+    info["removed"] = [
+        {
+            "raw_grasp_index": int(record.get("grasp_index", -1)),
+            "score": float(record["score"]),
+            "pixel_uv": record["target_mask_center_filter"]["pixel_uv"],
+            "reason": record["target_mask_center_filter"]["reason"],
+            "translation_camera_m": record["translation_camera_m"],
+        }
+        for record in removed_records
+    ]
+    if removed_records:
+        print(
+            "[candidate-filter] removed target-mask misses: "
+            + ", ".join(
+                f"raw_grasp_{item['raw_grasp_index']} "
+                f"pixel={item['pixel_uv']} reason={item['reason']}"
+                for item in info["removed"]
+            ),
+            flush=True,
+        )
+    return filtered_records, info
 
 
 def connected_components_from_distance(centers_mm: np.ndarray, radius_mm: float) -> list[list[int]]:
@@ -835,6 +1070,99 @@ def filter_grasp_center_outliers(
     return filtered_records, info
 
 
+def filter_grasp_collisions(
+    records: list[dict[str, Any]],
+    grasp_group: GraspGroup,
+    obstacle_cloud: np.ndarray,
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    info: dict[str, Any] = {
+        "enabled": bool(args.filter_grasp_collisions),
+        "method": "model_free_collision_detector",
+        "scene": "obstacle_point_cloud",
+        "voxel_size": float(args.grasp_collision_voxel_size),
+        "approach_dist": float(args.grasp_collision_approach_dist),
+        "collision_thresh": float(args.grasp_collision_thresh),
+        "filter_empty_grasps": bool(args.filter_empty_grasps),
+        "empty_thresh": float(args.empty_grasp_thresh),
+        "num_obstacle_points": int(len(obstacle_cloud)),
+        "num_input_candidates": int(len(records)),
+        "num_removed": 0,
+        "removed": [],
+    }
+    if not args.filter_grasp_collisions or len(records) == 0:
+        info["reason"] = "disabled_or_no_candidates"
+        return records, info
+
+    obstacle_points = np.asarray(obstacle_cloud, dtype=np.float32)
+    if obstacle_points.ndim != 2 or obstacle_points.shape[1] != 3 or len(obstacle_points) == 0:
+        info["reason"] = f"invalid_obstacle_cloud_shape_{obstacle_points.shape}"
+        return records, info
+
+    detector = ModelFreeCollisionDetector(obstacle_points, voxel_size=args.grasp_collision_voxel_size)
+    detect_result = detector.detect(
+        grasp_group,
+        approach_dist=args.grasp_collision_approach_dist,
+        collision_thresh=args.grasp_collision_thresh,
+        return_empty_grasp=bool(args.filter_empty_grasps),
+        empty_thresh=args.empty_grasp_thresh,
+        return_ious=True,
+    )
+    if args.filter_empty_grasps:
+        collision_mask, empty_mask, iou_list = detect_result
+    else:
+        collision_mask, iou_list = detect_result
+        empty_mask = np.zeros_like(collision_mask, dtype=bool)
+
+    iou_names = ["global", "left_finger", "right_finger", "bottom", "shifting"]
+    collision_mask = np.asarray(collision_mask, dtype=bool)
+    empty_mask = np.asarray(empty_mask, dtype=bool)
+    remove_mask = collision_mask | empty_mask
+
+    filtered_records: list[dict[str, Any]] = []
+    removed_records: list[dict[str, Any]] = []
+    for index, record in enumerate(records):
+        collision_info = {
+            "collision": bool(collision_mask[index]),
+            "empty_grasp": bool(empty_mask[index]),
+            "kept": not bool(remove_mask[index]),
+            "ious": {
+                name: float(np.asarray(values, dtype=float)[index])
+                for name, values in zip(iou_names, iou_list)
+            },
+        }
+        record["model_free_collision_filter"] = collision_info
+        if remove_mask[index]:
+            removed_records.append(record)
+        else:
+            filtered_records.append(record)
+
+    info["num_removed"] = int(len(removed_records))
+    info["removed"] = [
+        {
+            "raw_grasp_index": int(record.get("grasp_index", -1)),
+            "score": float(record["score"]),
+            "translation_camera_m": record["translation_camera_m"],
+            "collision": bool(record["model_free_collision_filter"]["collision"]),
+            "empty_grasp": bool(record["model_free_collision_filter"]["empty_grasp"]),
+            "ious": record["model_free_collision_filter"]["ious"],
+        }
+        for record in removed_records
+    ]
+    if removed_records:
+        print(
+            "[candidate-filter] removed collision candidates: "
+            + ", ".join(
+                f"raw_grasp_{item['raw_grasp_index']} "
+                f"collision={item['collision']} empty={item['empty_grasp']} "
+                f"global_iou={item['ious']['global']:.4f}"
+                for item in info["removed"]
+            ),
+            flush=True,
+        )
+    return filtered_records, info
+
+
 def renumber_candidate_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for new_index, record in enumerate(records):
         record["raw_grasp_index"] = int(record["grasp_index"])
@@ -843,7 +1171,7 @@ def renumber_candidate_records(records: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def print_candidate_target_centers(records: list[dict[str, Any]], selected_index: int, approach_offset_mm: float) -> None:
-    print("[candidate-target] final grasp centers in robot base frame:")
+    print("[candidate-target] final grasp centers and TCP targets in robot base frame:")
     selected_record = None
     for record in records:
         index = record["grasp_index"]
@@ -856,21 +1184,26 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
                 flush=True,
             )
             continue
-        target_transform = np.asarray(record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
-        center_mm = target_transform[:3, 3]
+        center_transform = np.asarray(record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
+        tcp_transform = np.asarray(record.get("target_robot_from_tcp", center_transform), dtype=float).reshape(4, 4)
+        center_mm = center_transform[:3, 3]
+        tcp_mm = tcp_transform[:3, 3]
         if index == selected_index:
             selected_record = record
         print(
-            f"grasp_{index} center x={center_mm[0]:.3f} y={center_mm[1]:.3f} z={center_mm[2]:.3f} mm",
+            f"grasp_{index} center x={center_mm[0]:.3f} y={center_mm[1]:.3f} z={center_mm[2]:.3f} mm "
+            f"tcp x={tcp_mm[0]:.3f} y={tcp_mm[1]:.3f} z={tcp_mm[2]:.3f} mm",
             flush=True,
         )
     if selected_record is None and records:
         selected_record = records[0]
     if selected_record is not None and "target_robot_from_grasp" in selected_record:
-        target_transform = np.asarray(selected_record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
-        center_mm = target_transform[:3, 3]
+        center_transform = np.asarray(selected_record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
+        target_transform = np.asarray(selected_record.get("target_robot_from_tcp", center_transform), dtype=float).reshape(4, 4)
+        center_mm = center_transform[:3, 3]
+        tcp_mm = target_transform[:3, 3]
         moving_vector_mm = target_transform[:3, 0] * float(approach_offset_mm)
-        pre_grasp_mm = center_mm - moving_vector_mm
+        pre_grasp_mm = tcp_mm - moving_vector_mm
         capture_tcp_pose = selected_record.get("capture_tcp_pose")
         if capture_tcp_pose is not None:
             capture_tcp_mm = np.asarray(capture_tcp_pose[:3], dtype=float)
@@ -888,6 +1221,10 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
         )
         print(
             f"grasp center = [{center_mm[0]:.3f}, {center_mm[1]:.3f}, {center_mm[2]:.3f}] mm",
+            flush=True,
+        )
+        print(
+            f"tcp target = [{tcp_mm[0]:.3f}, {tcp_mm[1]:.3f}, {tcp_mm[2]:.3f}] mm",
             flush=True,
         )
 
@@ -1105,7 +1442,10 @@ def lift_pose_from_target(target_transform: np.ndarray, lift_mm: float) -> list[
 
 
 def execute_grasp_sequence(record: dict[str, Any], args: argparse.Namespace) -> None:
-    target_transform = np.asarray(record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
+    target_transform = np.asarray(
+        record.get("target_robot_from_tcp", record["target_robot_from_grasp"]),
+        dtype=float,
+    ).reshape(4, 4)
     pre_grasp_pose = offset_pose_along_approach(target_transform, args.approach_offset_mm)
     grasp_pose = transform_to_jaka_pose(target_transform)
     lift_pose = lift_pose_from_target(target_transform, args.lift_mm)
@@ -1124,8 +1464,8 @@ def execute_grasp_sequence(record: dict[str, Any], args: argparse.Namespace) -> 
 
 def save_outputs(
     output_dir: Path,
-    cloud: np.ndarray,
-    cloud_rgb: np.ndarray | None,
+    grasp_cloud: np.ndarray,
+    grasp_cloud_rgb: np.ndarray | None,
     grasps: GraspGroup,
     top_k: int,
     calibration: dict[str, Any] | None,
@@ -1133,10 +1473,28 @@ def save_outputs(
     point_cloud_info: dict[str, Any] | None = None,
     ply_cloud: np.ndarray | None = None,
     ply_cloud_rgb: np.ndarray | None = None,
+    obstacle_cloud: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     top_count = min(top_k, len(grasps))
-    records = [grasp_to_record(grasps[index], index) for index in range(top_count)]
-    records = compute_robot_targets(records, calibration)
+    top_grasps = grasps[:top_count]
+    records = [grasp_to_record(top_grasps[index], index) for index in range(top_count)]
+    target_mask = None if point_cloud_info is None else point_cloud_info.get("object_mask_array")
+    intrinsics = None if point_cloud_info is None else point_cloud_info.get("camera_intrinsics")
+    records, target_mask_filter_info = filter_grasp_centers_in_target_mask(records, target_mask, intrinsics, args)
+    top_grasps_for_collision = GraspGroup()
+    for record in records:
+        raw_index = int(record["grasp_index"])
+        if 0 <= raw_index < len(top_grasps):
+            top_grasps_for_collision.add(top_grasps[raw_index])
+    collision_obstacle_cloud = grasp_cloud if obstacle_cloud is None else obstacle_cloud
+    records, collision_filter_info = filter_grasp_collisions(
+        records,
+        top_grasps_for_collision,
+        collision_obstacle_cloud,
+        args,
+    )
+    records = compute_robot_targets(records, calibration, args.grasp_center_to_tcp_offset_mm)
+    records, target_tcp_z_filter_info = filter_target_tcp_z(records, args)
     records, outlier_filter_info = filter_grasp_center_outliers(records, args)
     records = renumber_candidate_records(records)
     print_candidate_target_centers(records, args.candidate_index, args.approach_offset_mm)
@@ -1152,7 +1510,7 @@ def save_outputs(
         for item in records
     ]
     export_candidate_png(
-        point_cloud=cloud,
+        point_cloud=grasp_cloud,
         candidates=candidate_dicts,
         results=[],
         output_path=output_dir / "grasp_candidates.png",
@@ -1160,7 +1518,7 @@ def save_outputs(
         gripper_visual_scale=args.gripper_visual_scale,
     )
     export_candidate_html(
-        point_cloud=cloud,
+        point_cloud=grasp_cloud,
         candidates=candidate_dicts,
         results=[],
         output_path=output_dir / "grasp_candidates_3d.html",
@@ -1168,21 +1526,32 @@ def save_outputs(
         gripper_visual_scale=args.gripper_visual_scale,
     )
     export_candidate_ply(
-        point_cloud=cloud if ply_cloud is None else ply_cloud,
+        point_cloud=grasp_cloud if ply_cloud is None else ply_cloud,
         candidates=candidate_dicts,
         output_path=output_dir / "grasp_candidates.ply",
-        point_colors=cloud_rgb if ply_cloud_rgb is None else ply_cloud_rgb,
+        point_colors=grasp_cloud_rgb if ply_cloud_rgb is None else ply_cloud_rgb,
         max_points=args.ply_max_points,
         gripper_visual_scale=args.gripper_visual_scale,
     )
+    serializable_point_cloud_info = None
+    if point_cloud_info is not None:
+        serializable_point_cloud_info = {
+            key: value
+            for key, value in point_cloud_info.items()
+            if key not in {"object_mask_array"}
+        }
     payload = {
         "frame": "camera",
         "top_k": top_count,
         "num_candidates_after_filter": len(records),
         "grasp_candidates_ply": str((output_dir / "grasp_candidates.ply").resolve()),
+        "target_mask_center_filter": target_mask_filter_info,
+        "model_free_collision_filter": collision_filter_info,
+        "target_tcp_z_filter": target_tcp_z_filter_info,
         "center_outlier_filter": outlier_filter_info,
         "point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("point_cloud_source"),
-        "point_cloud_info": point_cloud_info,
+        "grasp_point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("grasp_point_cloud_source"),
+        "point_cloud_info": serializable_point_cloud_info,
         "calibration_mode": None if calibration is None else calibration["mode"],
         "camera_to_robot_chain": (
             calibration.get("runtime_chain", "T_base_tcp_capture @ T_tcp_camera @ T_camera_grasp")
@@ -1194,6 +1563,18 @@ def save_outputs(
             if calibration is not None and calibration["mode"] == "hand_eye"
             else None
         ),
+        "hand_eye_translation_offset_mm": (
+            calibration.get("translation_offset_mm")
+            if calibration is not None and calibration["mode"] == "hand_eye"
+            else None
+        ),
+        "tcp_from_camera_translation_mm": (
+            calibration.get("tcp_from_camera_translation_mm")
+            if calibration is not None and calibration["mode"] == "hand_eye"
+            else None
+        ),
+        "grasp_center_to_tcp_offset_mm": float(args.grasp_center_to_tcp_offset_mm),
+        "grasp_center_to_tcp_offset_axis": "-grasp_local_x",
         "requires_ready_pose_matching_calibration": not (calibration is not None and calibration["mode"] == "hand_eye"),
         "candidates": records,
     }
@@ -1214,7 +1595,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ckpt", default=str(DEFAULT_CHECKPOINT), help="GraspNet checkpoint path.")
     parser.add_argument("--device", default="cuda:0", help="Inference device, e.g. cuda:0 or cpu.")
     parser.add_argument("--num-points", type=int, default=20000, help="Point count sampled for GraspNet.")
-    parser.add_argument("--top-k", type=int, default=20, help="Number of candidates to save and visualize.")
+    parser.add_argument("--top-k", type=int, default=50, help="Number of candidates to save and visualize.")
     parser.add_argument("--viz-max-points", type=int, default=18000, help="Maximum points rendered in grasp_candidates.png.")
     parser.add_argument("--plotly-max-points", type=int, default=30000, help="Maximum points rendered in grasp_candidates_3d.html.")
     parser.add_argument("--ply-max-points", type=int, default=60000, help="Maximum points written to grasp_candidates.ply.")
@@ -1259,10 +1640,40 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sam-device", default=None, help="SAM device override, e.g. cuda, cuda:0, or cpu.")
     parser.add_argument("--mask-clean-kernel", type=int, default=3, help="Morphological cleanup kernel for SAM masks; use 1 to disable.")
     parser.add_argument(
+        "--grasp-crop-margin-px",
+        type=int,
+        default=50,
+        help="Fixed pixel margin added around the SAM object bbox before sending points to GraspNet.",
+    )
+    parser.add_argument(
+        "--grasp-crop-margin-ratio",
+        type=float,
+        default=0.2,
+        help="Relative bbox margin added around the SAM object bbox before sending points to GraspNet.",
+    )
+    parser.add_argument(
+        "--filter-grasp-centers-in-mask",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Project each candidate center to the RGB image and keep it only if it lands inside the SAM target mask.",
+    )
+    parser.add_argument(
         "--filter-grasp-outliers",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Remove grasp candidates whose centers are outside the largest spatial cluster.",
+    )
+    parser.add_argument(
+        "--filter-target-tcp-z",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Remove candidates whose final physical TCP target is below --min-target-tcp-z-mm.",
+    )
+    parser.add_argument(
+        "--min-target-tcp-z-mm",
+        type=float,
+        default=0.0,
+        help="Minimum allowed final TCP z in JAKA base frame, in millimeters.",
     )
     parser.add_argument(
         "--grasp-outlier-radius-mm",
@@ -1275,6 +1686,42 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Do not filter unless the largest center cluster has at least this many candidates.",
+    )
+    parser.add_argument(
+        "--filter-grasp-collisions",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use GraspNet model-free collision detection before saving candidate grasps.",
+    )
+    parser.add_argument(
+        "--grasp-collision-voxel-size",
+        type=float,
+        default=0.005,
+        help="Voxel size in meters for model-free collision detection scene downsampling.",
+    )
+    parser.add_argument(
+        "--grasp-collision-approach-dist",
+        type=float,
+        default=0.05,
+        help="Approach-path distance in meters checked by model-free collision detection.",
+    )
+    parser.add_argument(
+        "--grasp-collision-thresh",
+        type=float,
+        default=0.05,
+        help="Global collision IoU threshold; larger values keep more candidates. Matches GraspNet's common model-free default.",
+    )
+    parser.add_argument(
+        "--filter-empty-grasps",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Also remove candidates whose inner grasp region contains too few scene points.",
+    )
+    parser.add_argument(
+        "--empty-grasp-thresh",
+        type=float,
+        default=0.01,
+        help="Inner occupancy threshold used only when --filter-empty-grasps is enabled.",
     )
     parser.add_argument(
         "--camera-coordinates-dir",
@@ -1291,6 +1738,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--hand-eye-calibration",
         default=str(DEFAULT_HAND_EYE_CALIBRATION),
         help="JSON containing T_tcp_camera from solve_handeye_chessboard.py.",
+    )
+    parser.add_argument(
+        "--tcp-camera-translation-offset-mm",
+        type=float,
+        nargs=3,
+        default=DEFAULT_TCP_CAMERA_TRANSLATION_OFFSET_MM,
+        metavar=("DX", "DY", "DZ"),
+        help=(
+            "XYZ offset in TCP frame added to T_tcp_camera translation before converting grasps. "
+            "Default is the chessboard height validated correction."
+        ),
     )
     parser.add_argument(
         "--capture-tcp-pose",
@@ -1331,6 +1789,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-index", type=int, default=0, help="Candidate index to execute.")
     parser.add_argument("--velocity", type=float, default=60.0, help="JAKA linear_move_extend velocity.")
     parser.add_argument("--acceleration", type=float, default=60.0, help="JAKA linear_move_extend acceleration.")
+    parser.add_argument(
+        "--grasp-center-to-tcp-offset-mm",
+        type=float,
+        default=DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM,
+        help=(
+            "Distance from GraspNet grasp center back to the physical Robotiq TCP, "
+            "applied along -GraspNet local X before robot execution."
+        ),
+    )
     parser.add_argument("--approach-offset-mm", type=float, default=80.0, help="Pre-grasp retreat along GraspNet local X.")
     parser.add_argument("--lift-mm", type=float, default=120.0, help="Post-close vertical lift in robot base frame.")
     return parser
@@ -1342,7 +1809,10 @@ def main() -> None:
     checkpoint_path = Path(args.ckpt).expanduser().resolve()
     camera_coordinates_dir = Path(args.camera_coordinates_dir).expanduser().resolve()
     if args.calibration_mode == "hand_eye":
-        calibration = load_hand_eye_calibration(Path(args.hand_eye_calibration).expanduser().resolve())
+        calibration = load_hand_eye_calibration(
+            Path(args.hand_eye_calibration).expanduser().resolve(),
+            args.tcp_camera_translation_offset_mm,
+        )
     else:
         calibration = load_legacy_plate_calibration(camera_coordinates_dir)
 
@@ -1358,7 +1828,11 @@ def main() -> None:
         capture_tcp_pose = resolve_capture_tcp_pose(output_dir, args, capture_was_reused)
         calibration["capture_tcp_pose"] = capture_tcp_pose
         calibration["base_from_tcp_capture"] = jaka_pose_to_transform(capture_tcp_pose)
-    full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, point_cloud_info = build_grasp_point_cloud(frame, output_dir, args)
+    full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, point_cloud_info = build_grasp_point_cloud(
+        frame,
+        output_dir,
+        args,
+    )
     cloud_sampled = sample_points(grasp_cloud, args.num_points)
     np.save(output_dir / "point_cloud_camera.npy", full_cloud.astype(np.float32, copy=False))
     np.save(output_dir / "point_cloud_camera_rgb.npy", full_cloud_rgb.astype(np.uint8, copy=False))
@@ -1375,6 +1849,7 @@ def main() -> None:
         point_cloud_info,
         ply_cloud=full_cloud,
         ply_cloud_rgb=full_cloud_rgb,
+        obstacle_cloud=obstacle_cloud,
     )
 
     if args.execute:
@@ -1387,10 +1862,16 @@ def main() -> None:
         "rgb": str(output_dir / "rgb.png"),
         "depth_raw": str(output_dir / "depth.raw"),
         "point_cloud": str(output_dir / "point_cloud_camera.npy"),
-        "grasp_point_cloud_source": point_cloud_info.get("point_cloud_source"),
+        "grasp_point_cloud_source": point_cloud_info.get("grasp_point_cloud_source"),
         "mask_png": point_cloud_info.get("mask_path"),
         "mask_overlay_png": point_cloud_info.get("mask_overlay_path"),
+        "grasp_crop_overlay_png": point_cloud_info.get("grasp_crop_overlay_path"),
         "object_point_cloud": point_cloud_info.get("object_point_cloud_path"),
+        "grasp_input_point_cloud": point_cloud_info.get("grasp_input_point_cloud_path"),
+        "obstacle_point_cloud": point_cloud_info.get("obstacle_point_cloud_path"),
+        "num_grasp_input_points": point_cloud_info.get("num_grasp_input_points"),
+        "num_object_points": point_cloud_info.get("num_object_points"),
+        "num_obstacle_points": point_cloud_info.get("num_obstacle_points"),
         "grasp_candidates_png": str(output_dir / "grasp_candidates.png"),
         "grasp_candidates_ply": str(output_dir / "grasp_candidates.ply"),
         "grasp_candidates_3d_html": str(output_dir / "grasp_candidates_3d.html"),
@@ -1399,6 +1880,11 @@ def main() -> None:
         "calibration_mode": args.calibration_mode,
         "camera_coordinates_dir": str(camera_coordinates_dir),
         "hand_eye_calibration": str(Path(args.hand_eye_calibration).expanduser().resolve()),
+        "tcp_camera_translation_offset_mm": (
+            calibration.get("translation_offset_mm")
+            if calibration is not None and calibration["mode"] == "hand_eye"
+            else None
+        ),
         "capture_tcp_pose": calibration.get("capture_tcp_pose"),
         "camera_index": args.camera_index,
         "camera_serial": args.camera_serial,

@@ -17,21 +17,32 @@ cd "$ROOT_DIR"
 
 WORKSPACE_DIR="${GRASPNET_WORKSPACE_DIR:-$ROOT_DIR/graspnet-workspace}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-smartgrasp}"
-DEFAULT_PYTHON="/home/qiuguanhe/miniconda3/envs/${CONDA_ENV_NAME}/bin/python"
+DEFAULT_PYTHON="/home/admin128/anaconda3/envs/${CONDA_ENV_NAME}/bin/python"
 
 mkdir -p logs "$WORKSPACE_DIR/results"
 
-if command -v conda >/dev/null 2>&1; then
-  eval "$(conda shell.bash hook)"
-elif [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "$HOME/miniconda3/etc/profile.d/conda.sh"
-fi
-
-if command -v conda >/dev/null 2>&1; then
-  conda activate "$CONDA_ENV_NAME"
+if [[ "${CONDA_DEFAULT_ENV:-}" == "$CONDA_ENV_NAME" ]]; then
+  echo "conda env already active: $CONDA_ENV_NAME"
 else
-  echo "conda command not found; falling back to PYTHON=${PYTHON:-$DEFAULT_PYTHON}" >&2
+  # Conda activation hooks on this server read unset variables; relax nounset
+  # only while initializing/activating conda.
+  set +u
+  if command -v conda >/dev/null 2>&1; then
+    eval "$(conda shell.bash hook)"
+  elif [[ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/anaconda3/etc/profile.d/conda.sh"
+  elif [[ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+  fi
+
+  if command -v conda >/dev/null 2>&1; then
+    conda activate "$CONDA_ENV_NAME"
+  else
+    echo "conda command not found; falling back to PYTHON=${PYTHON:-$DEFAULT_PYTHON}" >&2
+  fi
+  set -u
 fi
 
 if command -v proxy_status >/dev/null 2>&1; then
@@ -50,7 +61,13 @@ else
   echo "proxy_status command not found; skip proxy check" >&2
 fi
 
-PYTHON="${PYTHON:-$(command -v python 2>/dev/null || printf '%s' "$DEFAULT_PYTHON")}"
+if [[ -z "${PYTHON:-}" ]]; then
+  if [[ -x "$DEFAULT_PYTHON" ]]; then
+    PYTHON="$DEFAULT_PYTHON"
+  else
+    PYTHON="$(command -v python 2>/dev/null || printf '%s' "$DEFAULT_PYTHON")"
+  fi
+fi
 if [[ ! -x "$PYTHON" ]]; then
   echo "smartgrasp python not found or not executable: $PYTHON" >&2
   exit 1
@@ -78,6 +95,8 @@ has_arg() {
 }
 
 GRASP_OBJ_PATH="${GRASP_OBJ_PATH:-}"
+GRASP_SCENE_CONFIG="${GRASP_SCENE_CONFIG:-}"
+GRASP_TARGET_OBJECT="${GRASP_TARGET_OBJECT:-}"
 GRASP_CHECKPOINT_PATH="${GRASP_CHECKPOINT_PATH:-$WORKSPACE_DIR/checkpoints/checkpoint-rs.tar}"
 GRASP_TOP_K="${GRASP_TOP_K:-5}"
 GRASP_DEVICE="${GRASP_DEVICE:-cuda:0}"
@@ -86,13 +105,14 @@ GRASP_RECORD_VIDEO="${GRASP_RECORD_VIDEO:-0}"
 PYBULLET_GUI="${PYBULLET_GUI:-0}"
 GRASP_SCALE="${GRASP_SCALE:-}"
 
-if [[ -z "$GRASP_OBJ_PATH" ]] && ! has_arg "--obj"; then
+if [[ -z "$GRASP_OBJ_PATH" ]] && [[ -z "$GRASP_SCENE_CONFIG" ]] && ! has_arg "--obj" && ! has_arg "--scene-config"; then
   cat >&2 <<USAGE
-Missing object mesh. Set GRASP_OBJ_PATH or pass --obj.
+Missing object mesh or scene config. Set GRASP_OBJ_PATH / GRASP_SCENE_CONFIG or pass --obj / --scene-config.
 
 Examples:
   GRASP_OBJ_PATH=/path/to/textured.obj sbatch run_grasp_simulation.sh
   sbatch run_grasp_simulation.sh --obj /path/to/textured.obj --top_k 5
+  sbatch run_grasp_simulation.sh --scene-config config/industrial_scene.json --target-object phillips_screwdriver
 USAGE
   exit 2
 fi
@@ -115,7 +135,8 @@ export PYTHONUNBUFFERED=1
 export MPLBACKEND="${MPLBACKEND:-Agg}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/smartgrasp-matplotlib-${USER:-user}}"
 export PYTHONPATH="$WORKSPACE_DIR:$WORKSPACE_DIR/models:$WORKSPACE_DIR/utils:$WORKSPACE_DIR/graspnet_api:${PYTHONPATH:-}"
-CUDA_ROOT="${CUDA_ROOT:-$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cu13}"
+ENV_PREFIX="${CONDA_PREFIX:-/home/admin128/anaconda3/envs/${CONDA_ENV_NAME}}"
+CUDA_ROOT="${CUDA_ROOT:-$ENV_PREFIX/lib/python3.12/site-packages/nvidia/cu13}"
 TORCH_LIB="$("$PYTHON" - <<'PY'
 from pathlib import Path
 import torch
@@ -133,6 +154,14 @@ CMD=(
 
 if [[ -n "$GRASP_OBJ_PATH" ]] && ! has_arg "--obj"; then
   CMD+=(--obj "$GRASP_OBJ_PATH")
+fi
+
+if [[ -n "$GRASP_SCENE_CONFIG" ]] && ! has_arg "--scene-config"; then
+  CMD+=(--scene-config "$GRASP_SCENE_CONFIG")
+fi
+
+if [[ -n "$GRASP_TARGET_OBJECT" ]] && ! has_arg "--target-object"; then
+  CMD+=(--target-object "$GRASP_TARGET_OBJECT")
 fi
 
 if ! has_arg "--ckpt"; then
@@ -176,6 +205,8 @@ echo "  root=$ROOT_DIR"
 echo "  workspace=$WORKSPACE_DIR"
 echo "  python=$PYTHON"
 echo "  object=${GRASP_OBJ_PATH:-<from args>}"
+echo "  scene_config=${GRASP_SCENE_CONFIG:-<from args>}"
+echo "  target_object=${GRASP_TARGET_OBJECT:-<from args/default>}"
 echo "  checkpoint=$GRASP_CHECKPOINT_PATH"
 echo "  device=$GRASP_DEVICE"
 echo "  top_k=$GRASP_TOP_K"

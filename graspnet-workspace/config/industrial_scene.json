@@ -1,0 +1,165 @@
+{
+  "description": "Industrial-tool tabletop scene for SmartGrasp PyBullet simulation.",
+  "settle_steps": 300,
+  "camera": {
+    "position": [0.32, 0.0, 0.62],
+    "target": [0.32, 0.0, 0.04],
+    "width": 1280,
+    "height": 720,
+    "fov": 60.0,
+    "near": 0.01,
+    "far": 5.0
+  },
+  "crop": {
+    "margin": 0.06,
+    "num_points": 20000,
+    "table_z": 0.005
+  },
+  "grasp_filter": {
+    "max_center_dist": 0.04,
+    "bbox_margin": 0.04
+  },
+  "objects": [
+    {
+      "name": "phillips_screwdriver",
+      "path": "assets/objects/industrial_tools/ycb/043_phillips_screwdriver/google_16k/textured.obj",
+      "position": [0.28, -0.08, 0.06],
+      "euler": [0.0, 0.0, 1.25],
+      "scale": 1.0,
+      "mass": 0.08,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "screwdriver",
+        "source": "ycb",
+        "role": "target"
+      }
+    },
+    {
+      "name": "flat_screwdriver",
+      "path": "assets/objects/industrial_tools/ycb/044_flat_screwdriver/google_16k/textured.obj",
+      "position": [0.39, 0.08, 0.06],
+      "euler": [0.0, 0.0, -0.75],
+      "scale": 1.0,
+      "mass": 0.08,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "screwdriver",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "adjustable_wrench",
+      "path": "assets/objects/industrial_tools/ycb/042_adjustable_wrench/google_16k/textured.obj",
+      "position": [0.22, 0.13, 0.07],
+      "euler": [0.0, 0.0, 0.35],
+      "scale": 1.0,
+      "mass": 0.18,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "wrench",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "power_drill",
+      "path": "assets/objects/industrial_tools/ycb/035_power_drill/google_16k/textured.obj",
+      "position": [0.43, -0.14, 0.08],
+      "euler": [0.0, 0.0, -1.1],
+      "scale": 1.0,
+      "mass": 0.45,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "power_drill",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "ycb_hammer",
+      "path": "assets/objects/industrial_tools/ycb/048_hammer/google_16k/textured.obj",
+      "position": [0.17, -0.15, 0.07],
+      "euler": [0.0, 0.0, 2.25],
+      "scale": 1.0,
+      "mass": 0.35,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "hammer",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "medium_clamp",
+      "path": "assets/objects/industrial_tools/ycb/050_medium_clamp/google_16k/textured.obj",
+      "position": [0.48, 0.02, 0.07],
+      "euler": [0.0, 0.0, 0.9],
+      "scale": 1.0,
+      "mass": 0.12,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "clamp",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "large_clamp",
+      "path": "assets/objects/industrial_tools/ycb/051_large_clamp/google_16k/textured.obj",
+      "position": [0.31, 0.18, 0.08],
+      "euler": [0.0, 0.0, -2.0],
+      "scale": 1.0,
+      "mass": 0.18,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "clamp",
+        "source": "ycb"
+      }
+    },
+    {
+      "name": "two_color_hammer",
+      "path": "assets/objects/industrial_tools/two_color_hammer/textured.obj",
+      "position": [0.56, -0.11, 0.08],
+      "euler": [0.0, 0.0, 1.7],
+      "scale": 1.0,
+      "mass": 0.30,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "hammer",
+        "source": "local"
+      }
+    },
+    {
+      "name": "small_clamp",
+      "path": "assets/objects/industrial_tools/small_clamp/textured.obj",
+      "position": [0.14, 0.02, 0.06],
+      "euler": [0.0, 0.0, -1.45],
+      "scale": 1.0,
+      "mass": 0.10,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "clamp",
+        "source": "local"
+      }
+    },
+    {
+      "name": "battery",
+      "path": "assets/objects/industrial_tools/battery/Scan.obj",
+      "position": [0.52, 0.16, 0.05],
+      "euler": [0.0, 0.0, 0.2],
+      "scale": 1.0,
+      "mass": 0.05,
+      "lateral_friction": 1.0,
+      "spinning_friction": 0.1,
+      "metadata": {
+        "category": "battery",
+        "source": "local"
+      }
+    }
+  ]
+}

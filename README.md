@@ -453,7 +453,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
-  --top-k 8 \
+  --top-k 20 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 10 \

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -13,12 +14,17 @@ from .planning.moveit_bridge import MoveItJakaPlanner
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-JAKA_URDF = REPO_ROOT / "assert" / "jaka_zu3" / "jaka_zu3_pybullet.urdf"
-ROBOTIQ_URDF = REPO_ROOT / "assert" / "ur5e" / "gripper" / "robotiq_2f_85.urdf"
+GRASPNET_ROOT = Path(__file__).resolve().parents[1]
+ROBOT_ASSET_DIR = GRASPNET_ROOT / "assets" / "robots" / "jaka_zu3"
+JAKA_URDF = ROBOT_ASSET_DIR / "gazebo_jaka_zu3_robotiq.urdf"
+ROBOTIQ_URDF = JAKA_URDF
 
 JAKA_FIXED_JOINT = 0
 JAKA_ARM_JOINTS = [1, 2, 3, 4, 5, 6]
 JAKA_EE_LINK = 6
+JAKA_JOINT_NAMES = [f"joint_{i}" for i in range(1, 7)]
+JAKA_FLANGE_LINK_NAME = "Link_6"
+ROBOTIQ_BASE_LINK_NAME = "robotiq_85_base_link"
 DEFAULT_JAKA_JOINTS = [0.0, -0.3, -0.1, -1.1, 1.57, 1.9]
 ROBOTIQ_TCP_OFFSET = np.array([0.0, 0.0, 0.1625], dtype=float)
 IK_CONTINUITY_WEIGHT = 0.003
@@ -84,7 +90,10 @@ class JakaZu3Robotiq85Gripper:
         self.grasp_constraint = None
         self.robot_gripper_constraint = None
         self._mimic_constraints: list[int] = []
+        self._joint_map: dict[str, int] = {}
+        self._link_map: dict[str, int] = {}
         self._robotiq_joint_map: dict[str, int] = {}
+        self._resolved_urdf_path: str | None = None
         self.ee_tip_id = None
         self.ee_finger_pad_ids: list[int] = []
         self._current_opening = 0.06
@@ -102,11 +111,17 @@ class JakaZu3Robotiq85Gripper:
         if self.robot_gripper_constraint is not None:
             p.removeConstraint(self.robot_gripper_constraint)
             self.robot_gripper_constraint = None
-        for body_id in (self.robotiq_id, self.robot_id):
+        for body_id in dict.fromkeys((self.robotiq_id, self.robot_id)):
             if body_id is not None:
                 p.removeBody(body_id)
         self.robotiq_id = None
         self.robot_id = None
+        if self._resolved_urdf_path:
+            try:
+                Path(self._resolved_urdf_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._resolved_urdf_path = None
 
     def set_pose(self, position, rotation_matrix):
         grasp_pos = np.asarray(position, dtype=float)
@@ -187,14 +202,17 @@ class JakaZu3Robotiq85Gripper:
         return self.grasp_constraint
 
     def get_tcp_pose(self):
+        if self.robot_id == self.robotiq_id:
+            ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
+            return _tip_pose_from_ee(ee_pos, ee_orn)
         robotiq_pos, robotiq_orn = p.getBasePositionAndOrientation(self.robotiq_id)
         return _tip_pose_from_ee(robotiq_pos, robotiq_orn)
 
     def contact_body_ids(self):
-        return [self.robotiq_id]
+        return list(dict.fromkeys([self.robotiq_id]))
 
     def collision_body_ids(self):
-        return [self.robot_id, self.robotiq_id]
+        return list(dict.fromkeys([self.robot_id, self.robotiq_id]))
 
     def release_grasp(self):
         if self.grasp_constraint is not None:
@@ -254,64 +272,87 @@ class JakaZu3Robotiq85Gripper:
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
 
     def _load_robot(self):
+        global JAKA_ARM_JOINTS, JAKA_EE_LINK
+
         if not JAKA_URDF.exists():
             raise FileNotFoundError(f"JAKA Zu3 URDF not found: {JAKA_URDF}")
+        resolved_urdf = self._resolve_package_uris(JAKA_URDF)
         self.robot_id = p.loadURDF(
-            str(JAKA_URDF),
+            str(resolved_urdf),
             basePosition=self.robot_base_position.tolist(),
             baseOrientation=[0, 0, 0, 1],
             useFixedBase=True,
             flags=p.URDF_USE_INERTIA_FROM_FILE,
         )
+        self._index_loaded_model()
+        JAKA_ARM_JOINTS = [self._joint_map[name] for name in JAKA_JOINT_NAMES]
+        JAKA_EE_LINK = self._link_map.get(ROBOTIQ_BASE_LINK_NAME, self._link_map[JAKA_FLANGE_LINK_NAME])
         for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, self.robot_joint_values):
             p.resetJointState(self.robot_id, joint_idx, joint_value)
 
     def _load_robotiq(self):
-        if not ROBOTIQ_URDF.exists():
-            raise FileNotFoundError(f"Robotiq-85 URDF not found: {ROBOTIQ_URDF}")
-        ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
-        self.robotiq_id = p.loadURDF(
-            str(ROBOTIQ_URDF),
-            basePosition=ee_pos,
-            baseOrientation=ee_orn,
-            useFixedBase=False,
-            flags=p.URDF_USE_INERTIA_FROM_FILE,
-        )
-        self.base_id = self.robotiq_id
-        self.left_id = self.robotiq_id
-        self.right_id = self.robotiq_id
-        self._robotiq_joint_map = {
-            p.getJointInfo(self.robotiq_id, i)[1].decode("utf-8"): i
-            for i in range(p.getNumJoints(self.robotiq_id))
-        }
-        for joint_idx in range(p.getNumJoints(self.robotiq_id)):
-            info = p.getJointInfo(self.robotiq_id, joint_idx)
+        self.robotiq_id = self.robot_id
+        self.base_id = self.robot_id
+        self.left_id = self.robot_id
+        self.right_id = self.robot_id
+        self._robotiq_joint_map = dict(self._joint_map)
+        self._add_robotiq_joint_aliases()
+        for joint_idx in range(p.getNumJoints(self.robot_id)):
+            info = p.getJointInfo(self.robot_id, joint_idx)
             joint_name = info[1].decode("utf-8")
+            link_name = info[12].decode("utf-8")
             joint_type = info[2]
-            if joint_name == "dummy_center_fixed_joint":
+            if link_name == ROBOTIQ_BASE_LINK_NAME:
                 self.ee_tip_id = joint_idx
-            if "finger_pad_joint" in joint_name:
+            if "finger_tip" in joint_name or "finger_tip" in link_name:
                 self.ee_finger_pad_ids.append(joint_idx)
-                p.changeDynamics(self.robotiq_id, joint_idx, lateralFriction=3.0, spinningFriction=0.2)
-            elif joint_type == p.JOINT_REVOLUTE:
+                p.changeDynamics(self.robot_id, joint_idx, lateralFriction=3.0, spinningFriction=0.2)
+            elif "robotiq_85" in joint_name and joint_type == p.JOINT_REVOLUTE:
                 p.setJointMotorControl2(
-                    self.robotiq_id, joint_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0
+                    self.robot_id, joint_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0
                 )
-        self.robot_gripper_constraint = p.createConstraint(
-            parentBodyUniqueId=self.robot_id,
-            parentLinkIndex=JAKA_EE_LINK,
-            childBodyUniqueId=self.robotiq_id,
-            childLinkIndex=-1,
-            jointType=p.JOINT_FIXED,
-            jointAxis=(0, 0, 1),
-            parentFramePosition=(0, 0, 0),
-            childFramePosition=(0, 0, 0),
-            childFrameOrientation=(0, 0, 0, 1),
-        )
-        p.changeConstraint(self.robot_gripper_constraint, maxForce=10000)
         self._setup_robotiq_mimic_constraints()
         self.set_opening(0.06)
         self._sync_attachment()
+
+    def _resolve_package_uris(self, urdf_path: Path) -> Path:
+        content = urdf_path.read_text(encoding="utf-8")
+        replacements = [
+            ("package://robotiq_description/meshes/", f"{ROBOT_ASSET_DIR.as_posix()}/meshes/robotiq_description/"),
+            ("package://robotiq_description/", f"{ROBOT_ASSET_DIR.as_posix()}/meshes/robotiq_description/"),
+            ("package://jaka_description/", f"{ROBOT_ASSET_DIR.as_posix()}/"),
+            ("package://jaka_rviz/", f"{ROBOT_ASSET_DIR.as_posix()}/"),
+        ]
+        for old, new in replacements:
+            content = content.replace(old, new)
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".urdf", delete=False)
+        tmp.write(content)
+        tmp.close()
+        self._resolved_urdf_path = tmp.name
+        return Path(tmp.name)
+
+    def _index_loaded_model(self):
+        self._joint_map = {}
+        self._link_map = {}
+        for joint_idx in range(p.getNumJoints(self.robot_id)):
+            info = p.getJointInfo(self.robot_id, joint_idx)
+            joint_name = info[1].decode("utf-8")
+            link_name = info[12].decode("utf-8")
+            self._joint_map[joint_name] = joint_idx
+            self._link_map[link_name] = joint_idx
+
+    def _add_robotiq_joint_aliases(self):
+        aliases = {
+            "finger_joint": "robotiq_85_left_knuckle_joint",
+            "right_outer_knuckle_joint": "robotiq_85_right_knuckle_joint",
+            "left_inner_knuckle_joint": "robotiq_85_left_inner_knuckle_joint",
+            "right_inner_knuckle_joint": "robotiq_85_right_inner_knuckle_joint",
+            "left_inner_finger_joint": "robotiq_85_left_finger_tip_joint",
+            "right_inner_finger_joint": "robotiq_85_right_finger_tip_joint",
+        }
+        for alias, actual_name in aliases.items():
+            if actual_name in self._robotiq_joint_map:
+                self._robotiq_joint_map[alias] = self._robotiq_joint_map[actual_name]
 
     def _move_arm_to(self, target_pos, target_orn, tcp_target=None):
         lower_limits = [-6.28, -1.48, -3.05, -1.48, -6.28, -6.28]
@@ -419,6 +460,11 @@ class JakaZu3Robotiq85Gripper:
 
     def _sync_attachment(self):
         if self.robot_id is None or self.robotiq_id is None:
+            return
+        if self.robot_id == self.robotiq_id:
+            self._hold_current_joints()
+            for _ in range(2):
+                p.stepSimulation()
             return
         self._hold_current_joints()
         ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
