@@ -1,0 +1,34 @@
+{
+  "request_id": "scene_0001_step_01",
+  "branch": "partially_occluded",
+  "task_type": "reveal",
+  "object": {
+    "id": 6,
+    "name": "adjustable_wrench",
+    "category": "wrench",
+    "role": "occluder"
+  },
+  "reveal": {
+    "action_type": "push",
+    "move_distance": 0.05,
+    "direction": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "center_point": null
+  },
+  "scene": {
+    "scene_config": "graspnet-workspace/config/industrial_scene.json",
+    "rgb_path": null,
+    "depth_path": null,
+    "mask_path": "perception/output/scene_0001/object_6_mask.png",
+    "point_cloud_path": "perception/output/scene_0001/object_6_points.npy",
+    "camera_intrinsics_path": null,
+    "occlusion_graph_path": "data/integrated_runs/scene_0001_query_tool/occlusion_graph.json"
+  },
+  "execution": {
+    "output": "graspnet-workspace/results/scene_0001_step_01_reveal.json",
+    "gui": false
+  }
+}

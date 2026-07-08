@@ -109,44 +109,7 @@ class VirtualCamera:
         Returns:
             (1, num_points, 3) torch.Tensor，世界坐标系。
         """
-        import pybullet as p
-
-        H, W = depth.shape
-        pos = np.array(self.position, dtype=np.float64)
-        tgt = np.array(self.target, dtype=np.float64)
-        up = np.array(self.up, dtype=np.float64)
-
-        # 相机局部坐标系基向量（世界系下）
-        forward = tgt - pos
-        forward = forward / np.linalg.norm(forward)
-        right = np.cross(forward, up)
-        right = right / np.linalg.norm(right)
-        cam_up = np.cross(right, forward)
-
-        # 针孔模型反投影。PyBullet 的 computeProjectionMatrixFOV 用的是垂直 FOV
-        # （沿 height），水平视场由 aspect=W/H 决定，因此焦距以 fy 为基准、fx=fy。
-        fy = (H / 2.0) / np.tan(np.deg2rad(self.fov) / 2.0)
-        fx = fy
-        cx, cy = W / 2.0, H / 2.0
-        xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
-
-        px = (xmap - cx) * depth / fx
-        py = (ymap - cy) * depth / fy
-        pz = depth
-
-        # 过滤无效点
-        valid = (np.isfinite(px) & np.isfinite(py) &
-                 (depth > 0.01) & (depth < self.far - 0.1))
-        px, py, pz = px[valid], py[valid], pz[valid]
-
-        if len(px) == 0:
-            raise RuntimeError("深度图中无有效点云，请检查相机位置。")
-
-        # 相机系 → 世界系
-        world_x = pos[0] + px*right[0] + py*cam_up[0] + pz*forward[0]
-        world_y = pos[1] + px*right[1] + py*cam_up[1] + pz*forward[1]
-        world_z = pos[2] + px*right[2] + py*cam_up[2] + pz*forward[2]
-        cloud = np.column_stack([world_x, world_y, world_z])
+        cloud = self.backproject_depth(depth)
 
         # 分开物体和桌面，确保物体点被保留
         obj_mask = cloud[:, 2] > 0.005  # Z>5mm 视为物体
@@ -181,6 +144,99 @@ class VirtualCamera:
             cloud_final = cloud_final[idxs]
 
         return torch.from_numpy(cloud_final[np.newaxis].astype(np.float32))
+
+    def backproject_depth(self, depth: np.ndarray):
+        """将整张深度图反投影到世界坐标系，不做采样。"""
+        H, W = depth.shape
+        pos = np.array(self.position, dtype=np.float64)
+        tgt = np.array(self.target, dtype=np.float64)
+        up = np.array(self.up, dtype=np.float64)
+
+        forward = tgt - pos
+        forward = forward / np.linalg.norm(forward)
+        right = np.cross(forward, up)
+        right = right / np.linalg.norm(right)
+        cam_up = np.cross(right, forward)
+
+        fy = (H / 2.0) / np.tan(np.deg2rad(self.fov) / 2.0)
+        fx = fy
+        cx, cy = W / 2.0, H / 2.0
+        xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
+
+        px = (xmap - cx) * depth / fx
+        py = (ymap - cy) * depth / fy
+        pz = depth
+
+        valid = (np.isfinite(px) & np.isfinite(py) &
+                 (depth > 0.01) & (depth < self.far - 0.1))
+        px, py, pz = px[valid], py[valid], pz[valid]
+
+        if len(px) == 0:
+            raise RuntimeError("深度图中无有效点云，请检查相机位置。")
+
+        world_x = pos[0] + px * right[0] + py * cam_up[0] + pz * forward[0]
+        world_y = pos[1] + px * right[1] + py * cam_up[1] + pz * forward[1]
+        world_z = pos[2] + px * right[2] + py * cam_up[2] + pz * forward[2]
+        return np.column_stack([world_x, world_y, world_z])
+
+    def backproject_with_segmentation(self, depth: np.ndarray, seg: np.ndarray):
+        """反投影深度图，并返回每个点对应的 PyBullet body id。"""
+        H, W = depth.shape
+        pos = np.array(self.position, dtype=np.float64)
+        tgt = np.array(self.target, dtype=np.float64)
+        up = np.array(self.up, dtype=np.float64)
+
+        forward = tgt - pos
+        forward = forward / np.linalg.norm(forward)
+        right = np.cross(forward, up)
+        right = right / np.linalg.norm(right)
+        cam_up = np.cross(right, forward)
+
+        fy = (H / 2.0) / np.tan(np.deg2rad(self.fov) / 2.0)
+        fx = fy
+        cx, cy = W / 2.0, H / 2.0
+        xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
+
+        px = (xmap - cx) * depth / fx
+        py = (ymap - cy) * depth / fy
+        pz = depth
+        valid = (np.isfinite(px) & np.isfinite(py) &
+                 (depth > 0.01) & (depth < self.far - 0.1))
+
+        px, py, pz = px[valid], py[valid], pz[valid]
+        seg_values = seg[valid].astype(np.int64)
+        body_ids = np.where(seg_values >= 0, seg_values & ((1 << 24) - 1), -1)
+
+        if len(px) == 0:
+            raise RuntimeError("深度图中无有效点云，请检查相机位置。")
+
+        world_x = pos[0] + px * right[0] + py * cam_up[0] + pz * forward[0]
+        world_y = pos[1] + px * right[1] + py * cam_up[1] + pz * forward[1]
+        world_z = pos[2] + px * right[2] + py * cam_up[2] + pz * forward[2]
+        cloud = np.column_stack([world_x, world_y, world_z])
+        return cloud, body_ids
+
+    def generate_object_point_clouds(
+        self,
+        depth: np.ndarray,
+        seg: np.ndarray,
+        object_ids,
+        num_points_per_object: int | None = None,
+    ):
+        """按 PyBullet body id 拆分每个物体的世界坐标点云。"""
+        cloud, body_ids = self.backproject_with_segmentation(depth, seg)
+        object_clouds = {}
+        for body_id in object_ids:
+            pts = cloud[body_ids == int(body_id)]
+            if num_points_per_object is not None and len(pts) > 0:
+                idx = np.random.choice(
+                    len(pts),
+                    num_points_per_object,
+                    replace=len(pts) < num_points_per_object,
+                )
+                pts = pts[idx]
+            object_clouds[int(body_id)] = pts.astype(np.float32)
+        return object_clouds
 
     # ------------------------------------------------------------------
     # 内部

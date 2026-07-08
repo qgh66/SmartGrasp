@@ -28,7 +28,65 @@ from simulation.robot_gripper import JakaZu3Robotiq85Gripper
 from simulation.evaluator import GraspEvaluator
 
 
-def crop_to_object(pc, margin=0.05, num_points=20000, table_z=0.005):
+def _resolve_path(path, *, config_dir=None):
+    """Resolve a user/config path against common SmartGrasp roots."""
+    raw = os.path.expanduser(str(path))
+    if os.path.isabs(raw):
+        return os.path.abspath(raw)
+
+    repo_root = os.path.dirname(ROOT)
+    candidates = []
+    if config_dir:
+        candidates.append(os.path.join(config_dir, raw))
+    candidates.extend([
+        os.path.join(ROOT, raw),
+        os.path.join(repo_root, raw),
+    ])
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return os.path.abspath(candidate)
+    return os.path.abspath(candidates[0])
+
+
+def load_scene_config(config_path):
+    """Load an industrial scene JSON and resolve object mesh paths."""
+    resolved_config_path = _resolve_path(config_path)
+    config_dir = os.path.dirname(resolved_config_path)
+    with open(resolved_config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    object_specs = config if isinstance(config, list) else config.get("objects", [])
+    if not object_specs:
+        raise ValueError(f"Scene config has no objects: {resolved_config_path}")
+
+    resolved_specs = []
+    for spec in object_specs:
+        item = dict(spec)
+        item["path"] = _resolve_path(item["path"], config_dir=config_dir)
+        resolved_specs.append(item)
+
+    if isinstance(config, list):
+        config = {"objects": object_specs}
+    config["_path"] = resolved_config_path
+    config["_resolved_objects"] = resolved_specs
+    return config
+
+
+def select_target_object(scene, target_name=None):
+    """Return (body_id, SceneObject) for the configured target object."""
+    if target_name:
+        body_id = scene.get_body_id_by_name(target_name)
+        return body_id, scene.get_object_info(body_id)
+
+    for body_id, obj in scene.get_object_registry().items():
+        if obj.metadata.get("role") == "target":
+            return body_id, obj
+
+    body_id = scene.object_ids[0]
+    return body_id, scene.get_object_info(body_id)
+
+
+def crop_to_object(pc, object_points=None, margin=0.05, num_points=20000, table_z=0.005):
     """按物体点云的 xy 包围盒裁剪整幅点云，保留物体及其周围一圈桌面。
 
     GraspNet 需要支撑面上下文，纯物体点会生成不出抓取；但整桌点云会让网络
@@ -44,7 +102,10 @@ def crop_to_object(pc, margin=0.05, num_points=20000, table_z=0.005):
         (1, num_points, 3) 裁剪并重采样后的点云。
     """
     cloud = pc[0]
-    obj = cloud[cloud[:, 2] > table_z]
+    if object_points is not None and len(object_points) > 0:
+        obj = np.asarray(object_points)
+    else:
+        obj = cloud[cloud[:, 2] > table_z]
     if len(obj) == 0:
         return pc
     lo = obj[:, :2].min(axis=0) - margin
@@ -58,10 +119,51 @@ def crop_to_object(pc, margin=0.05, num_points=20000, table_z=0.005):
     return cropped[idx][np.newaxis].astype(np.float32)
 
 
+def filter_grasps_to_object(gg, object_points, max_center_dist=0.04, bbox_margin=0.04):
+    """Keep GraspNet candidates whose centers are close to the target object."""
+    if object_points is None or len(object_points) == 0 or len(gg) == 0:
+        return gg, {"enabled": False, "kept": len(gg), "total": len(gg)}
+
+    obj = np.asarray(object_points, dtype=np.float32)
+    translations = np.asarray(gg.translations, dtype=np.float32)
+    lo = obj.min(axis=0) - float(bbox_margin)
+    hi = obj.max(axis=0) + float(bbox_margin)
+    bbox_mask = np.all((translations >= lo) & (translations <= hi), axis=1)
+
+    # Compute nearest target-object point distance in chunks to avoid a large
+    # temporary matrix when GraspNet returns many candidates.
+    min_dists = np.full(len(translations), np.inf, dtype=np.float32)
+    for start in range(0, len(translations), 256):
+        chunk = translations[start:start + 256]
+        dists = np.linalg.norm(chunk[:, None, :] - obj[None, :, :], axis=2)
+        min_dists[start:start + len(chunk)] = dists.min(axis=1)
+
+    dist_mask = min_dists <= float(max_center_dist)
+    keep_mask = bbox_mask | dist_mask
+    kept = int(keep_mask.sum())
+    stats = {
+        "enabled": True,
+        "kept": kept,
+        "total": int(len(gg)),
+        "max_center_dist": float(max_center_dist),
+        "bbox_margin": float(bbox_margin),
+        "best_center_dist": float(min_dists.min()) if len(min_dists) else None,
+    }
+    if kept == 0:
+        return gg, stats
+    filtered = gg[keep_mask]
+    filtered.sort_by_score()
+    return filtered, stats
+
+
 def parse_args():
     p = argparse.ArgumentParser(description='GraspNet + PyBullet 闭环仿真')
     p.add_argument('--obj', default='/home/admin128/beilei/obj_phase3/002/textured.obj',
                    help='物体 .obj 路径')
+    p.add_argument('--scene-config', default=None,
+                   help='多物体工业场景 JSON 配置；指定后优先使用配置中的 objects')
+    p.add_argument('--target-object', default=None,
+                   help='多物体场景中的目标物体 name；不指定时使用 metadata.role=target 或第一个物体')
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
@@ -116,34 +218,67 @@ def main():
     scene.connect()
     scene.load_plane()
 
-    # 随机朝向
-    from scipy.spatial.transform import Rotation as R
-    r = R.random()
-    orientation = tuple(r.as_quat()[[0, 1, 2, 3]])
+    scene_config = None
+    if args.scene_config:
+        scene_config = load_scene_config(args.scene_config)
+        scene.load_objects(scene_config["_resolved_objects"])
+        obj_id, target_object = select_target_object(scene, args.target_object)
+        print(f'  ✅ 场景加载完成: {len(scene.object_ids)} 个物体, 目标: {target_object.name}')
+    else:
+        # 单物体兼容路径：保留旧的 --obj 用法，方便单模型调试。
+        from scipy.spatial.transform import Rotation as R
+        r = R.random()
+        orientation = tuple(r.as_quat()[[0, 1, 2, 3]])
 
-    obj_id = scene.load_object(args.obj, position=(0.3, 0.0, 0.05),
-                                orientation=orientation, scale=args.scale, mass=0.03)
+        obj_id = scene.load_object(
+            args.obj,
+            position=(0.3, 0.0, 0.05),
+            orientation=orientation,
+            scale=args.scale,
+            mass=0.03,
+            name="target_object",
+            metadata={"role": "target"},
+        )
+        target_object = scene.get_object_info(obj_id)
+
     # 等待物体稳定
-    for _ in range(300):
+    settle_steps = int(scene_config.get("settle_steps", 300)) if scene_config else 300
+    for _ in range(settle_steps):
         scene.step()
     obj_pos, obj_orn = scene.get_object_pose(obj_id)
-    print(f'  ✅ 物体加载完成, 位置: {np.round(obj_pos, 3)}')
+    print(f'  ✅ 目标物体稳定, 位置: {np.round(obj_pos, 3)}')
 
     # ==============================================================
     # 3. 虚拟相机 + 点云
     # ==============================================================
     print('[3/5] 相机拍摄 + 点云生成...')
-    cam = VirtualCamera(position=(0.3, 0.0, 0.5), target=(0.3, 0.0, 0.05),
-                        near=0.01, far=5.0)
-    rgb, depth, _ = cam.capture()
+    camera_cfg = scene_config.get("camera", {}) if scene_config else {}
+    cam = VirtualCamera(position=tuple(camera_cfg.get("position", (0.3, 0.0, 0.5))),
+                        target=tuple(camera_cfg.get("target", (0.3, 0.0, 0.05))),
+                        near=float(camera_cfg.get("near", 0.01)),
+                        far=float(camera_cfg.get("far", 5.0)),
+                        width=int(camera_cfg.get("width", 1280)),
+                        height=int(camera_cfg.get("height", 720)),
+                        fov=float(camera_cfg.get("fov", 60.0)))
+    rgb, depth, seg = cam.capture()
     pc = cam.generate_point_cloud(depth, num_points=20000).numpy()
+    object_clouds = cam.generate_object_point_clouds(depth, seg, scene.object_ids)
+    object_point_counts = {body_id: int(len(pts)) for body_id, pts in object_clouds.items()}
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✅ 点云: {pc.shape}, 物体点数: {n_obj_pts}')
 
     # 按物体点云 xy 包围盒裁剪，裁掉远处大片桌面，只保留物体及周围一圈支撑面。
     # 参照参考流程的 crop_pointcloud（此处无 VLM，直接用物体点 bbox + margin），
     # 避免 GraspNet 在平坦桌面上生成大量落在桌面、偏离物体的抓取。
-    pc = crop_to_object(pc, margin=0.05, num_points=20000)
+    crop_cfg = scene_config.get("crop", {}) if scene_config else {}
+    target_points = object_clouds.get(int(obj_id))
+    pc = crop_to_object(
+        pc,
+        object_points=target_points,
+        margin=float(crop_cfg.get("margin", 0.05)),
+        num_points=int(crop_cfg.get("num_points", 20000)),
+        table_z=float(crop_cfg.get("table_z", 0.005)),
+    )
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✂️  裁剪后点云: {pc.shape}, 物体点数: {n_obj_pts}')
 
@@ -158,6 +293,21 @@ def main():
     gg = GraspGroup(grasp_preds[0].detach().cpu().numpy())
     gg.sort_by_score()
     print(f'  ✅ {len(gg)} 个候选, top score={gg[0].score:.4f}')
+
+    grasp_filter_stats = {}
+    if scene_config:
+        filter_cfg = scene_config.get("grasp_filter", {})
+        gg, grasp_filter_stats = filter_grasps_to_object(
+            gg,
+            target_points,
+            max_center_dist=float(filter_cfg.get("max_center_dist", 0.04)),
+            bbox_margin=float(filter_cfg.get("bbox_margin", 0.04)),
+        )
+        print(
+            f'  🎯 目标过滤: {grasp_filter_stats.get("kept")}/'
+            f'{grasp_filter_stats.get("total")} 个候选, '
+            f'最近中心距={grasp_filter_stats.get("best_center_dist")}'
+        )
 
     # ==============================================================
     # 5. 物理仿真评估
@@ -184,7 +334,13 @@ def main():
     out = {
         'total': len(results),
         'success': n_ok,
-        'obj_path': args.obj,
+        'obj_path': target_object.path,
+        'scene_config': scene_config.get("_path") if scene_config else None,
+        'target_object_name': target_object.name,
+        'target_body_id': int(obj_id),
+        'objects': scene.get_object_poses(),
+        'object_point_counts': object_point_counts,
+        'grasp_filter': grasp_filter_stats,
         'object_position': list(obj_pos),
         'object_orientation': list(obj_orn),
         'gripper': gripper.metadata(),
@@ -231,7 +387,14 @@ def main():
     viz_path = args.output.replace('.json', '_viz_data.pkl')
     with open(viz_path, 'wb') as _f:
         pickle.dump({'rgb': rgb, 'depth': depth, 'point_cloud': pc,
-                     'obj_path': args.obj, 'object_orientation': list(obj_orn)}, _f)
+                     'seg': seg, 'object_point_counts': object_point_counts,
+                     'objects': scene.get_object_poses(),
+                     'grasp_filter': grasp_filter_stats,
+                     'target_body_id': int(obj_id),
+                     'target_object_name': target_object.name,
+                     'scene_config': scene_config.get("_path") if scene_config else None,
+                     'obj_path': target_object.path,
+                     'object_orientation': list(obj_orn)}, _f)
     _sys.stdout.flush()
     print(f'💾 可视化数据已保存: {viz_path}')
 
