@@ -48,24 +48,28 @@ def _build_user_text_partial(
     if prompt_mode == "graspability":
         lines.append("")
         lines.append(
-            "Also estimate one integrated graspability score for each candidate "
-            "object in [0, 1] for the next removal grasp. Use the labeled scene "
-            "image and the SAM2 part contact sheet when available to identify the "
-            "best feasible visible part or region, but return only one object-level "
-            "graspability score. Assume the robot uses a parallel gripper. A high "
-            "score means there is an exposed, reachable, stable, sufficiently thick "
-            "part/region with enough clearance, and grasping it can move and remove "
-            "the whole object safely. A low score means the visible parts are tiny, "
-            "thin, buried, slippery-looking, merged with neighbors, occluded, hard "
-            "to approach, likely to collide, or unlikely to move the whole object "
-            "stably. Mention the best graspable part/region and any object-level "
-            "penalty in the reason."
+            "Also estimate graspability for the next removal grasp. Return both "
+            "one integrated object-level graspability score for each candidate "
+            "object and part-level graspability scores for every listed "
+            "sam2_part_id of that object. Use the labeled scene image and the "
+            "SAM2 part contact sheet when available. Assume the robot uses a "
+            "parallel gripper. Object-level graspability should still reflect "
+            "whether grasping the best feasible visible part/region can move and "
+            "remove the whole object safely. Part-level graspability should score "
+            "whether that exact SAM2 part is exposed, reachable, stable, thick "
+            "enough, has clearance, and is useful as a grasp contact/region. "
+            "Penalize tiny, thin, buried, merged, occluded, collision-prone, or "
+            "unstable parts. If a candidate has no listed sam2_part_ids, return "
+            "an empty object for it in graspability_parts. Mention the best "
+            "graspable part/region and any object-level penalty in the reason."
         )
         lines.append(
             f'Reply as JSON: {{"scores": {{"<mid>": <0..1>, ...}}, '
             f'"graspability": {{"<mid>": <0..1>, ...}}, '
+            f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
-            f'Mids must be exactly: {mids}.'
+            f'Mids must be exactly: {mids}. Include every listed sam2_part_id '
+            f'for each mid in graspability_parts.'
         )
     else:
         lines.append(
@@ -96,25 +100,29 @@ def _build_user_text_invisible(
     mids = [o["mid"] for o in occluders]
     if prompt_mode == "graspability":
         lines.append(
-            "Also estimate one integrated graspability score for each visible "
-            "top-layer candidate in [0, 1] for the next removal grasp. Use the "
-            "labeled scene image and the SAM2 part contact sheet when available to "
-            "identify the best feasible visible part or region, but return only one "
-            "object-level graspability score. Assume the robot uses a parallel "
-            "gripper. A high score means there is an exposed, reachable, stable, "
-            "sufficiently thick part/region with enough clearance, and grasping it "
-            "can move and remove the whole object safely. A low score means the "
-            "visible parts are small, thin, hidden, unstable, slippery-looking, "
-            "merged with neighbors, hard to approach, likely to collide, or "
-            "unlikely to move the whole object stably. Mention the best graspable "
-            "part/region and any object-level penalty in the reason."
+            "Also estimate graspability for the next removal grasp. Return both "
+            "one integrated object-level graspability score for each visible "
+            "top-layer candidate and part-level graspability scores for every "
+            "listed sam2_part_id of that object. Use the labeled scene image and "
+            "the SAM2 part contact sheet when available. Assume the robot uses a "
+            "parallel gripper. Object-level graspability should still reflect "
+            "whether grasping the best feasible visible part/region can move and "
+            "remove the whole object safely. Part-level graspability should score "
+            "whether that exact SAM2 part is exposed, reachable, stable, thick "
+            "enough, has clearance, and is useful as a grasp contact/region. "
+            "Penalize tiny, thin, buried, merged, occluded, collision-prone, or "
+            "unstable parts. If a candidate has no listed sam2_part_ids, return "
+            "an empty object for it in graspability_parts. Mention the best "
+            "graspable part/region and any object-level penalty in the reason."
         )
         lines.append("")
         lines.append(
             f'Reply ONLY with JSON: {{"scores": {{"<mid>": <0..1>, ...}}, '
             f'"graspability": {{"<mid>": <0..1>, ...}}, '
+            f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
             f'Mids must be exactly: {mids}. '
+            f'Include every listed sam2_part_id for each mid in graspability_parts. '
             f'The scores represent mutually-exclusive hypotheses and should roughly sum to 1.0. '
             f'NO markdown, NO code fences, NO prose.'
         )

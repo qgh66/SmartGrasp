@@ -37,7 +37,7 @@ def load_sample(
     _attach_scene_artifacts(summary_path.parent, node_info)
 
     depth = _load_depth(summary.get("depth_path"), summary_path.parent)
-    labeled_rgb = _load_labeled_rgb(summary_path.parent)
+    labeled_rgb = _load_labeled_rgb(summary_path.parent, summary)
     parts_sheet_path = _resolve_parts_sheet_path(summary, summary_path.parent)
     sam2_rgb_parts_sheet = _load_rgb_image(parts_sheet_path) if parts_sheet_path else None
 
@@ -176,12 +176,19 @@ def _parse_str_tuple_mapping(raw: dict) -> dict[int, tuple[str, ...]]:
     return out
 
 
-def _load_labeled_rgb(scene_dir: Path) -> np.ndarray | None:
+def _load_labeled_rgb(scene_dir: Path, summary: dict | None = None) -> np.ndarray | None:
     """Load a labeled RGB overlay from common scene locations."""
     candidates: list[Path] = []
+    summary = summary or {}
+    if summary.get("perception_label_png"):
+        label_path = Path(summary["perception_label_png"])
+        if not label_path.is_absolute():
+            label_path = scene_dir / label_path
+        candidates.append(label_path)
 
     # 1) Files next to the summary.
     candidates += [
+        scene_dir / "label_2_vlm.png",
         scene_dir / "label_3_final.png",
         scene_dir / "scene_labeled.png",
         scene_dir / "perception_label.png",
@@ -192,6 +199,7 @@ def _load_labeled_rgb(scene_dir: Path) -> np.ndarray | None:
     sibling_perception = scene_dir.parent / "perception"
     if sibling_perception.exists() and sibling_perception != scene_dir:
         candidates += [
+            sibling_perception / "label_2_vlm.png",
             sibling_perception / "label_3_final.png",
             sibling_perception / "scene_labeled.png",
             sibling_perception / "perception_label.png",

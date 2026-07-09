@@ -58,6 +58,40 @@ D_CNL="${DEPTH_SAM2_CROP_N_LAYERS:-0}"
 D_PIT="${DEPTH_SAM2_PRED_IOU_THRESH:-0.58}"
 D_SST="${DEPTH_SAM2_STABILITY_SCORE_THRESH:-0.73}"
 
+check_source_inputs() {
+    local ok=0
+    compgen -G "$SMARTGRASP_DATA_DIR/*.parquet" >/dev/null || {
+        echo "  missing source: $SMARTGRASP_DATA_DIR/*.parquet"
+        ok=1
+    }
+    [[ -f "$SMARTGRASP_DATA_DIR/npz_file.zip" ]] || {
+        echo "  missing source: $SMARTGRASP_DATA_DIR/npz_file.zip"
+        ok=1
+    }
+    return "$ok"
+}
+
+check_scene_outputs() {
+    local ok=0
+    local scene_id
+    for scene_id in "$@"; do
+        local perception_dir="$ROOT_DIR/data/scene_${scene_id}/perception"
+        local required=(
+            "$perception_dir/summary.json"
+            "$perception_dir/scene_image.png"
+            "$perception_dir/depth.npy"
+        )
+        local path
+        for path in "${required[@]}"; do
+            [[ -f "$path" ]] || {
+                echo "  missing output: $path"
+                ok=1
+            }
+        done
+    done
+    return "$ok"
+}
+
 # ---- 解析场景 ----
 if [[ $# -eq 0 ]] || [[ "$1" == "--all" ]]; then
     SCENES=("${ALL_SCENES[@]}")
@@ -82,6 +116,8 @@ run_once() {
     [[ -n "${D_CNL:-}" ]] && extra+=(--depth-sam2-crop-n-layers "$D_CNL")
     [[ -n "${D_PIT:-}" ]] && extra+=(--depth-sam2-pred-iou-thresh "$D_PIT")
     [[ -n "${D_SST:-}" ]] && extra+=(--depth-sam2-stability-score-thresh "$D_SST")
+    local debug_args=()
+    [[ "${DEBUG:-}" == "sam2" ]] && debug_args=(--debug "$DEBUG")
 
     {
         echo "========================================="
@@ -97,7 +133,7 @@ run_once() {
         echo ""
 
         START_TIME=$(date +%s)
-        "$PYTHON" -u perception/perception.py \
+        if "$PYTHON" -u perception/perception.py \
             "${scene_args[@]}" --mode "$MODE" \
             --review-model-id "${REVIEW_MODEL_ID:-gpt-5.5}" \
             --review-api-key-env OPENAI_API_KEY \
@@ -114,22 +150,43 @@ run_once() {
             --sam2-crop-n-layers "$SAM2_CNL" \
             --sam2-pred-iou-thresh "$SAM2_PIT" \
             --sam2-stability-score-thresh "$SAM2_SST" \
-            "${extra[@]}" \
+            ${extra[@]+"${extra[@]}"} \
             ${DEVICE:+--device "$DEVICE"} \
-            ${DEBUG:+--debug "$DEBUG"} \
-            ${SAVE_CANDIDATES:+--save-candidates}
-
-        EXIT_CODE=$?
+            ${debug_args[@]+"${debug_args[@]}"} \
+            ${SAVE_CANDIDATES:+--save-candidates}; then
+            EXIT_CODE=0
+        else
+            EXIT_CODE=$?
+        fi
+        if [[ $EXIT_CODE -eq 0 ]]; then
+            echo ""
+            echo "Output check priority 1: perception/summary.json, perception/scene_image.png, perception/depth.npy"
+            if ! check_scene_outputs "${scenes[@]}"; then
+                EXIT_CODE=1
+            fi
+        fi
+        if [[ $EXIT_CODE -ne 0 ]]; then
+            echo ""
+            echo "Input search priority 1: data/scene_<id>/perception/summary.json, scene_image.png, depth.npy"
+            if check_scene_outputs "${scenes[@]}"; then
+                echo "  priority-1 inputs found; fallback source check skipped"
+            else
+                echo ""
+                echo "Input search priority 2: *.parquet, npz_file.zip"
+                check_source_inputs || true
+            fi
+        fi
         END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
         echo ""
         echo "========================================="
         if [[ $EXIT_CODE -eq 0 ]]; then
-            echo " ✅ PASS  (${DURATION}s)"
+            echo " generation check complete (${DURATION}s)"
         else
             echo " ❌ FAIL  (${DURATION}s, exit code=$EXIT_CODE)"
         fi
         echo "========================================="
+        return "$EXIT_CODE"
     } &> "$log_file"
 }
 
@@ -140,11 +197,11 @@ if [[ ${#SCENES[@]} -eq 1 ]]; then
     LOG_NUM=$((LOG_NUM + 1))
     LOG_FILE="logs/$(printf "%03d" "$LOG_NUM")_scene_${SCENES[0]}.log"
     echo "[$(printf "%03d" "$LOG_NUM")] scene ${SCENES[0]} → ${LOG_FILE}"
-    run_once "$LOG_FILE" "${SCENES[@]}"
-    if grep -q "✅ PASS" "$LOG_FILE" 2>/dev/null; then
-        echo "    ✅ PASS  — $LOG_FILE"
+    if run_once "$LOG_FILE" "${SCENES[@]}"; then
+        echo "    generation check complete — $LOG_FILE"
     else
         echo "    ❌ FAIL  — $LOG_FILE"
+        exit 1
     fi
 else
     # 批量 + 自动恢复
@@ -158,7 +215,10 @@ else
         LOG_FILE="logs/$(printf "%03d" "$LOG_NUM")_scenes_${CURRENT_SCENES[0]}-${CURRENT_SCENES[-1]}.log"
         echo "[$(printf "%03d" "$LOG_NUM")] batch ${#CURRENT_SCENES[@]} scenes → ${LOG_FILE}"
 
-        run_once "$LOG_FILE" "${CURRENT_SCENES[@]}"
+        RUN_OK=0
+        if run_once "$LOG_FILE" "${CURRENT_SCENES[@]}"; then
+            RUN_OK=1
+        fi
 
         # 检查 API error → 裁剪剩余场景重试
         if grep -qi "API error" "$LOG_FILE" 2>/dev/null; then
@@ -178,8 +238,8 @@ else
         fi
 
         # 没有 API error，检查结果
-        if grep -q "✅ PASS" "$LOG_FILE" 2>/dev/null; then
-            echo "    ✅ PASS  — $LOG_FILE"
+        if [[ $RUN_OK -eq 1 ]]; then
+            echo "    generation check complete — $LOG_FILE"
             echo "=== DONE ==="
             exit 0
         else

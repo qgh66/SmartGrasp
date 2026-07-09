@@ -118,6 +118,69 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
     ]
 
 
+def _jsonable_part_scores(raw_parts) -> dict[str, float]:
+    if not isinstance(raw_parts, dict):
+        return {}
+    out: dict[str, float] = {}
+    for part_id, value in raw_parts.items():
+        try:
+            out[str(int(part_id))] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _selected_graspability_fields(decision) -> dict:
+    fields = {
+        "selected_object_id": None,
+        "selected_object_graspability": None,
+        "selected_object_graspability_part_id": None,
+        "selected_object_graspability_parts": {},
+    }
+    if decision is None or getattr(decision, "grasp_id", None) is None:
+        return fields
+
+    selected_id = int(decision.grasp_id)
+    fields["selected_object_id"] = selected_id
+    details = getattr(decision, "details", None) or {}
+    selected_info = details.get(selected_id, {})
+    if not isinstance(selected_info, dict):
+        return fields
+
+    graspability = selected_info.get("graspability")
+    try:
+        fields["selected_object_graspability"] = None if graspability is None else float(graspability)
+    except (TypeError, ValueError):
+        fields["selected_object_graspability"] = None
+
+    best_part_id = selected_info.get("graspability_part_id")
+    try:
+        fields["selected_object_graspability_part_id"] = (
+            None if best_part_id is None else int(best_part_id)
+        )
+    except (TypeError, ValueError):
+        fields["selected_object_graspability_part_id"] = None
+
+    fields["selected_object_graspability_parts"] = _jsonable_part_scores(
+        selected_info.get("graspability_parts")
+    )
+    return fields
+
+
+def _selected_summary_row(row: dict) -> dict:
+    return {
+        "scene_key": row.get("scene_key"),
+        "scene_id": row.get("scene_id"),
+        "target_id": row.get("target_id"),
+        "target_label": row.get("target_label"),
+        "branch": row.get("branch"),
+        "selected_object_id": row.get("selected_object_id"),
+        "selected_object_graspability": row.get("selected_object_graspability"),
+        "selected_object_graspability_part_id": row.get("selected_object_graspability_part_id"),
+        "selected_object_graspability_parts": row.get("selected_object_graspability_parts", {}),
+    }
+
+
 def _reason_block(row: dict, decision, actions_seq=None) -> str:
     """Build one human-readable reason section for reason.txt."""
     lines = [
@@ -128,6 +191,9 @@ def _reason_block(row: dict, decision, actions_seq=None) -> str:
         f"target_label: {row.get('target_label')}",
         f"branch: {row.get('branch')}",
         f"grasp_id: {row.get('grasp_id')}",
+        f"selected_object_graspability: {row.get('selected_object_graspability')}",
+        f"selected_object_graspability_part_id: {row.get('selected_object_graspability_part_id')}",
+        f"selected_object_graspability_parts: {row.get('selected_object_graspability_parts')}",
         f"status: {row.get('status')}",
     ]
 
@@ -243,6 +309,7 @@ def main():
     details_dir = Path(args.details_dir) if args.details_dir else out_dir / "scene_details"
     details_dir.mkdir(parents=True, exist_ok=True)
     reason_path = csv_path.parent / "reason.txt"
+    summary_path = csv_path.parent / "summary.json"
 
     print(f"[CONFIG] outputs -> {out_dir}")
 
@@ -266,6 +333,7 @@ def main():
     csv_rows = []
     reason_blocks = []
     detail_json = {}
+    selected_graspability_summary = []
     branch_counter = {}
     scene_count = 0
     object_count = 0
@@ -323,8 +391,10 @@ def main():
                     "reason": "run_intent returned no target object",
                     "status": "intent_no_target",
                 }
+                row.update(_selected_graspability_fields(None))
                 csv_rows.append(row)
                 scene_detail_rows.append(row)
+                selected_graspability_summary.append(_selected_summary_row(row))
                 reason_blocks.append(_reason_block(row, None))
                 object_count += 1
                 continue
@@ -421,8 +491,10 @@ def main():
                 row["cl_reason_seq"]   = " || ".join(
                     str(getattr(a, "message", "") or "") for a in actions_seq
                 ) if actions_seq else ""
+            row.update(_selected_graspability_fields(decision))
             csv_rows.append(row)
             scene_detail_rows.append(row)
+            selected_graspability_summary.append(_selected_summary_row(row))
             reason_blocks.append(_reason_block(row, decision, actions_seq if args.closed_loop else None))
             object_count += 1
             if branch_value:
@@ -547,16 +619,34 @@ def main():
         "num_scenes": scene_count,
         "num_objects_total": object_count,
         "branch_summary": branch_counter,
+        "selected_graspability_summary": selected_graspability_summary,
         "results": detail_json,
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "model": model_name,
+                "prior_prompt": args.prior_prompt,
+                "ranking_score": args.ranking_score,
+                "root": str(root),
+                "num_scenes": scene_count,
+                "num_objects_total": object_count,
+                "branch_summary": branch_counter,
+                "selected_graspability_summary": selected_graspability_summary,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     print(f"\nDone. model={model_name}")
     print(f"  {scene_count} scenes, {object_count} objects total")
     print(f"  branch summary: {branch_counter}")
     print(f"  summary CSV  -> {csv_path}")
     print(f"  summary JSON -> {json_path}")
+    print(f"  selected graspability summary -> {summary_path}")
     print(f"  reasons      -> {reason_path}")
     print(f"  details dir  -> {details_dir}/")
 

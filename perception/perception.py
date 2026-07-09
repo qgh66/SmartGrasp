@@ -36,6 +36,35 @@ def read_dataset() -> pd.DataFrame:
     return pd.concat([pd.read_parquet(path) for path in parquet_files], ignore_index=True)
 
 
+def optional_int(value: Any, fallback: int | None = None) -> int | None:
+    if value is None or value == "":
+        return fallback
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
+    if scene_id is None:
+        return None
+    out_dir = OUT_ROOT / f"scene_{int(scene_id)}" / "perception"
+    summary_path = out_dir / "summary.json"
+    scene_image_path = out_dir / "scene_image.png"
+    depth_path = out_dir / "depth.npy"
+    # Highest-priority input path: use generated perception artifacts before
+    # falling back to parquet / npz_file.zip dataset sources.
+    if summary_path.exists() and scene_image_path.exists() and depth_path.exists():
+        summary = load_json_file(summary_path)
+        return {
+            "summary": summary,
+            "out_dir": out_dir,
+            "image_path": scene_image_path,
+            "depth_path": depth_path,
+        }
+    return None
+
+
 def select_sample(df: pd.DataFrame, scene_id: int | None, query_obj_id: int | None) -> pd.Series:
     candidates = df
     if scene_id is not None:
@@ -292,12 +321,49 @@ def display_label(label: Any) -> str:
 
 
 def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], scene_dir: Path) -> dict[str, Any]:
-    """Build the new-format summary: objects with parts + occlusion graph with edges."""
+    """Build summary fields while preserving the original matrix interface."""
     graph = graph_payload["graph"]
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
     edges = graph.get("edges", [])
     out_dir = scene_dir / "perception"
     vlm_path = out_dir / "vlm.json"
+
+    points_payload = load_json_file(points_path) if points_path.exists() else {}
+    points_by_id: dict[int, dict[str, Any]] = {}
+    for point in points_payload.get("points", []) or []:
+        object_id = optional_int(point.get("object_id"), optional_int(point.get("molmo_id")))
+        if object_id is not None:
+            points_by_id[int(object_id)] = point
+
+    object_points: list[dict[str, Any]] = []
+    node_object_ids: list[int] = []
+    for index, node in enumerate(nodes):
+        object_id = int(node.get("object_id", index + 1))
+        node_object_ids.append(object_id)
+        point = points_by_id.get(object_id, {})
+        node_point = node.get("point", {}) or {}
+        label = str(point.get("label") or node.get("label") or node.get("description") or f"object_{object_id}")
+        object_points.append({
+            "object_id": object_id,
+            "x": int(point.get("x", node_point.get("x", 0))),
+            "y": int(point.get("y", node_point.get("y", 0))),
+            "label": label,
+        })
+
+    matrix_labels = [
+        f"{point['object_id']}: {display_label(point.get('label', ''))}"
+        for point in object_points
+    ]
+    object_id_to_index = {object_id: index for index, object_id in enumerate(node_object_ids)}
+    occlusion_matrix = [[0.0 for _ in node_object_ids] for _ in node_object_ids]
+    for edge in edges:
+        source_object_id = int(edge.get("source_object_id", node_object_ids[int(edge["source"])]))
+        target_object_id = int(edge.get("target_object_id", node_object_ids[int(edge["target"])]))
+        source_index = object_id_to_index.get(source_object_id)
+        target_index = object_id_to_index.get(target_object_id)
+        if source_index is None or target_index is None:
+            continue
+        occlusion_matrix[source_index][target_index] = safe_float(edge.get("contact_ratio"), 6) or 0.0
 
     # Build sam2_id → mask_path mapping
     sam2_to_mask: dict[int, str] = {}
@@ -351,32 +417,40 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], 
                 "parts": parts,
             })
 
-    # Build occlusion graph summary
-    graph_edges = []
-    for edge in edges:
-        src_node = nodes[int(edge["source"])]
-        tgt_node = nodes[int(edge["target"])]
-        graph_edges.append({
-            "source_object_id": int(edge.get("source_object_id", src_node.get("object_id", 0))),
-            "target_object_id": int(edge.get("target_object_id", tgt_node.get("object_id", 0))),
-            "source_label": str(edge.get("source_label", src_node.get("label", ""))),
-            "target_label": str(edge.get("target_label", tgt_node.get("label", ""))),
-            "depth_gap": round(float(edge.get("depth_gap", 0)), 3),
-            "contact_pixels": int(edge.get("contact_pixels", 0)),
-            "contact_ratio": round(float(edge.get("contact_ratio", 0)), 5),
-        })
-    adj = [[0 for _ in range(len(nodes))] for _ in range(len(nodes))]
-    for edge in edges:
-        adj[int(edge["source"])][int(edge["target"])] = 1
+    object_id_to_sam2_part_ids: dict[str, list[int]] = {}
+    object_id_to_sam2_part_files: dict[str, list[str]] = {}
+    sam2_part_id_to_object_id: dict[str, int] = {}
+    sam2_part_file_to_object_id: dict[str, int] = {}
+    for obj in objects:
+        object_id = int(obj["object_id"])
+        part_ids: set[int] = set()
+        for sid in obj.get("sam2_ids", []) or []:
+            part_ids.add(int(sid))
+        for part in obj.get("parts", []) or []:
+            for sid in part.get("sam2_ids", []) or []:
+                part_ids.add(int(sid))
+
+        sorted_part_ids = sorted(part_ids)
+        object_id_to_sam2_part_ids[str(object_id)] = sorted_part_ids
+        part_files: list[str] = []
+        for sid in sorted_part_ids:
+            part_file = f"sam2_rgb_parts/part_{sid:03d}.png"
+            if (out_dir / part_file).exists():
+                part_files.append(part_file)
+                sam2_part_file_to_object_id[part_file] = object_id
+            sam2_part_id_to_object_id[str(sid)] = object_id
+        object_id_to_sam2_part_files[str(object_id)] = part_files
 
     return {
-        "objects": objects,
-        "occlusion_graph": {
-            "num_nodes": len(nodes),
-            "num_edges": len(edges),
-            "edges": graph_edges,
-            "adjacency_matrix": adj,
-        },
+        "object_points": object_points,
+        "matrix_labels": matrix_labels,
+        "occlusion_matrix_direction": "row object occludes column object",
+        "occlusion_matrix_metric": "contact_ratio",
+        "occlusion_matrix": occlusion_matrix,
+        "object_id_to_sam2_part_ids": object_id_to_sam2_part_ids,
+        "object_id_to_sam2_part_files": object_id_to_sam2_part_files,
+        "sam2_part_id_to_object_id": sam2_part_id_to_object_id,
+        "sam2_part_file_to_object_id": sam2_part_file_to_object_id,
     }
 
 
@@ -433,11 +507,34 @@ def build_gt_reference_outputs(
 
 
 def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> dict[str, Any]:
-    if df is None:
-        df = read_dataset()
-    row = select_sample(df, args.scene_id, args.query_obj_id)
-    scene_id = int(row["sceneId"])
-    query_obj_id = int(row["queryObjId"])
+    priority_inputs = load_priority_scene_inputs(args.scene_id)
+    row = None
+    source_image: Image.Image | None = None
+    instances_objects: np.ndarray | None = None
+
+    if priority_inputs is not None:
+        priority_summary = priority_inputs["summary"]
+        scene_id = optional_int(priority_summary.get("scene_id"), args.scene_id)
+        if scene_id is None:
+            raise ValueError("Priority perception inputs require a scene id.")
+        query_obj_id = optional_int(priority_summary.get("query_obj_id"), args.query_obj_id)
+        if query_obj_id is None:
+            query_obj_id = -1
+        annotation = str(priority_summary.get("annotation") or "")
+        source_image = Image.open(priority_inputs["image_path"]).convert("RGB")
+        depth = np.asarray(np.load(priority_inputs["depth_path"]), dtype=np.float32)
+        print(
+            f"[scene_{int(scene_id)}] using priority-1 perception inputs: "
+            f"{OUT_ROOT / f'scene_{int(scene_id)}' / 'perception'}",
+            flush=True,
+        )
+    else:
+        if df is None:
+            df = read_dataset()
+        row = select_sample(df, args.scene_id, args.query_obj_id)
+        scene_id = int(row["sceneId"])
+        query_obj_id = int(row["queryObjId"])
+        annotation = str(row["annotation"])
     from SmartGrasp.perception._shared import set_log_scene_id
     set_log_scene_id(scene_id)
 
@@ -453,31 +550,45 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 child.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    image_path = save_sample_image(row, out_dir)
+    if source_image is not None:
+        image_path = out_dir / "scene_image.png"
+        source_image.save(image_path)
+        (out_dir / "summary.json").write_text(
+            json.dumps(priority_inputs["summary"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    else:
+        image_path = save_sample_image(row, out_dir)
     with Image.open(image_path) as image:
         width, height = image.size
 
-    npz_source, zip_member = find_npz_source(scene_id)
-    with load_npz(npz_source, zip_member) as npz:
-        depth = np.asarray(npz["depth"], dtype=np.float32)
-        instances_objects = np.asarray(npz["instances_objects"])
+    if priority_inputs is None:
+        npz_source, zip_member = find_npz_source(scene_id)
+        with load_npz(npz_source, zip_member) as npz:
+            depth = np.asarray(npz["depth"], dtype=np.float32)
+            instances_objects = np.asarray(npz["instances_objects"])
 
     depth_path = save_depth(depth, out_dir)
     depth_image_path = save_depth_image(depth, out_dir)
     prompt = args.prompt or ""
-    annotation = str(row["annotation"])
 
-    gt_summary = build_gt_reference_outputs(
-        row=row,
-        scene_id=scene_id,
-        query_obj_id=query_obj_id,
-        annotation=annotation,
-        instances_objects=instances_objects,
-        depth=depth,
-        prompt=prompt,
-        args=args,
-        source_image_path=image_path,
-    )
+    gt_summary = None
+    if instances_objects is not None:
+        gt_summary = build_gt_reference_outputs(
+            row=row,
+            scene_id=scene_id,
+            query_obj_id=query_obj_id,
+            annotation=annotation,
+            instances_objects=instances_objects,
+            depth=depth,
+            prompt=prompt,
+            args=args,
+            source_image_path=image_path,
+        )
+
+    background_mask_source = args.mask
+    if instances_objects is None and background_mask_source == "gt":
+        background_mask_source = "depth"
 
     if args.mode == "vlm":
         from SmartGrasp.perception.occlusion_map import build_org_json
@@ -493,7 +604,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             background_mask_path = None
             try:
                 bg_mask = generate_background_exclusion_mask_from_source(
-                    mask_source=args.mask,
+                    mask_source=background_mask_source,
                     depth_map=depth,
                     image=Image.open(image_path).convert("RGB"),
                     instances_objects=instances_objects,
@@ -531,7 +642,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 "label_png": str(label_path.resolve()),
                 "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
                 "background_mask_path": background_mask_path,
-                "background_mask_source": args.mask,
+                "background_mask_source": background_mask_source,
                 "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
                 "report": report,
             }
@@ -565,8 +676,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             depth_sam2_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
             depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-            background_mask_source=args.mask,
-            gt_instances_objects=instances_objects if args.mask == "gt" else None,
+            background_mask_source=background_mask_source,
+            gt_instances_objects=instances_objects if background_mask_source == "gt" else None,
         )
         # Graph PNG already saved by build_org_json with scene-image background
         # Write a minimal points.json for summary generation
@@ -611,6 +722,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         return summary
 
+    if gt_summary is None:
+        raise ValueError("mode='gt' requires parquet/npz inputs with instances_objects.")
     return gt_summary
 
 
@@ -662,7 +775,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_arg_parser().parse_args()
     if args.serve:
-        df = read_dataset()
+        df = None
         print("SmartGrasp pipeline worker is ready. Enter scene ids, one line at a time. Enter q to quit.", flush=True)
         while True:
             try:
@@ -690,7 +803,7 @@ def main() -> None:
             except Exception as exc:
                 print(f"Failed scene_id={scene_id}: {exc}", flush=True)
     elif args.scene_ids:
-        df = read_dataset()
+        df = None
         summaries = []
         for scene_id in args.scene_ids:
             item_args = argparse.Namespace(**vars(args))
