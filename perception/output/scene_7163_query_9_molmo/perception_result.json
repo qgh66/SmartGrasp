@@ -1,0 +1,230 @@
+{
+  "scene_id": 7163,
+  "query_obj_id": 9,
+  "annotation": "the green object on the top left",
+  "point_source": "molmo",
+  "molmo_model_id": "allenai/Molmo-7B-D-0924",
+  "sam_model_id": "facebook/sam-vit-base",
+  "rgb_image": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/scene_image.png",
+  "molmo_labeled_rgb": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/molmo_label.png",
+  "objects": [
+    {
+      "id": 1,
+      "category": "plastic",
+      "center_pixel": {
+        "x": 306,
+        "y": 451
+      }
+    },
+    {
+      "id": 2,
+      "category": "drill",
+      "center_pixel": {
+        "x": 318,
+        "y": 823
+      }
+    },
+    {
+      "id": 3,
+      "category": "lotion",
+      "center_pixel": {
+        "x": 546,
+        "y": 1128
+      }
+    },
+    {
+      "id": 4,
+      "category": "box",
+      "center_pixel": {
+        "x": 600,
+        "y": 547
+      }
+    },
+    {
+      "id": 5,
+      "category": "orange",
+      "center_pixel": {
+        "x": 624,
+        "y": 367
+      }
+    },
+    {
+      "id": 6,
+      "category": "apple",
+      "center_pixel": {
+        "x": 750,
+        "y": 199
+      }
+    },
+    {
+      "id": 7,
+      "category": "bottle",
+      "center_pixel": {
+        "x": 768,
+        "y": 691
+      }
+    },
+    {
+      "id": 8,
+      "category": "tomato",
+      "center_pixel": {
+        "x": 870,
+        "y": 955
+      }
+    },
+    {
+      "id": 9,
+      "category": "box",
+      "center_pixel": {
+        "x": 894,
+        "y": 559
+      }
+    },
+    {
+      "id": 10,
+      "category": "plastic",
+      "center_pixel": {
+        "x": 894,
+        "y": 775
+      }
+    }
+  ],
+  "occlusion_adjacency_matrix": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+    ]
+  ],
+  "edges": [
+    {
+      "source": 9,
+      "target": 6,
+      "relation": "occludes",
+      "contact_pixels": 158,
+      "contact_ratio": 0.009274477576895986,
+      "source_depth_median": 75.52039337158203,
+      "target_depth_median": 75.90443420410156,
+      "depth_gap": 0.38404083251953125,
+      "source_molmo_id": 10,
+      "target_molmo_id": 7,
+      "source_label": "plastic",
+      "target_label": "bottle"
+    }
+  ]
+}

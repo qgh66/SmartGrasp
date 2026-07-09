@@ -358,47 +358,26 @@ class JakaZu3Robotiq85Gripper:
         lower_limits = [-6.28, -1.48, -3.05, -1.48, -6.28, -6.28]
         upper_limits = [6.28, 4.62, 3.05, 4.62, 6.28, 6.28]
         joint_ranges = [u - l for l, u in zip(lower_limits, upper_limits)]
-        rest_candidates = [
-            list(self.robot_joint_values),
-            list(DEFAULT_JAKA_JOINTS),
-            [0.0, 0.4, -0.2, -1.7, -1.57, 0.0],
-            [0.0, -0.3, 2.0, -0.1, 1.57, 1.2],
-            [-0.4, -0.3, 2.0, -0.1, 1.57, 1.2],
-        ]
         original = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
-        best_solution = None
-        best_error = float("inf")
-        tcp_target = np.asarray(tcp_target if tcp_target is not None else target_pos, dtype=float)
-        for rest_poses in rest_candidates:
-            for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, rest_poses):
-                p.resetJointState(self.robot_id, joint_idx, joint_value)
-            solution = p.calculateInverseKinematics(
-                self.robot_id,
-                JAKA_EE_LINK,
-                target_pos.tolist(),
-                target_orn.tolist(),
-                lowerLimits=lower_limits,
-                upperLimits=upper_limits,
-                jointRanges=joint_ranges,
-                restPoses=rest_poses,
-                maxNumIterations=2000,
-                residualThreshold=1e-6,
-            )
-            for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, solution[: len(JAKA_ARM_JOINTS)]):
-                p.resetJointState(self.robot_id, joint_idx, joint_value)
-            ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
-            tcp_pos, _ = _tip_pose_from_ee(ee_pos, ee_orn)
-            pos_error = float(np.linalg.norm(tcp_pos - tcp_target))
-            orn_error = 1.0 - abs(float(np.dot(np.asarray(ee_orn), target_orn)))
-            continuity_error = _joint_delta_norm(solution[: len(JAKA_ARM_JOINTS)], original)
-            error = pos_error + 0.02 * orn_error + IK_CONTINUITY_WEIGHT * continuity_error
-            if error < best_error:
-                best_error = error
-                best_solution = solution[: len(JAKA_ARM_JOINTS)]
-        for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, original):
-            p.resetJointState(self.robot_id, joint_idx, joint_value)
-        if best_solution is not None:
-            self._move_joints_smooth(best_solution)
+        # Keep IK solving continuous in GUI mode. The previous implementation
+        # temporarily reset the live robot into several rest poses to score IK
+        # candidates; PyBullet's GUI renders those internal probes, which looks
+        # like violent random arm twitching. Use the current joint state as the
+        # only rest pose and move smoothly to that single solution.
+        solution = p.calculateInverseKinematics(
+            self.robot_id,
+            JAKA_EE_LINK,
+            target_pos.tolist(),
+            target_orn.tolist(),
+            lowerLimits=lower_limits,
+            upperLimits=upper_limits,
+            jointRanges=joint_ranges,
+            restPoses=original,
+            maxNumIterations=2000,
+            residualThreshold=1e-6,
+        )
+        if solution:
+            self._move_joints_smooth(solution[: len(JAKA_ARM_JOINTS)])
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
 
     def _move_joints_smooth(self, target_joints):

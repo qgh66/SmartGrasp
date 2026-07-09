@@ -29,6 +29,6 @@
   },
   "execution": {
     "output": "graspnet-workspace/results/scene_0001_step_01_reveal.json",
-    "gui": false
+    "gui": true
   }
 }

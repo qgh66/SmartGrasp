@@ -1,0 +1,974 @@
+{
+  "timestamp": 1783432300.565341,
+  "expected_board_height_mm": 53.0,
+  "height_error_summary_mm": {
+    "T_base_tcp__T_tcp_camera": {
+      "count": 8,
+      "mean": -630.8138600495313,
+      "std": 1011.6316116538161,
+      "min": -3280.7180418391463,
+      "median": -311.9985594139798,
+      "max": -24.226831031870404
+    },
+    "T_base_tcp__inv_T_tcp_camera": {
+      "count": 8,
+      "mean": -421.24396447923317,
+      "std": 987.8348297969554,
+      "min": -3008.367801152385,
+      "median": -110.78966998827772,
+      "max": 175.15882924562032
+    }
+  },
+  "base_z_summary_mm": {
+    "T_base_tcp__T_tcp_camera": {
+      "count": 8,
+      "mean": -577.8138600495313,
+      "std": 1011.6316116538161,
+      "min": -3227.7180418391463,
+      "median": -258.9985594139798,
+      "max": 28.773168968129596
+    },
+    "T_base_tcp__inv_T_tcp_camera": {
+      "count": 8,
+      "mean": -368.24396447923317,
+      "std": 987.8348297969554,
+      "min": -2955.367801152385,
+      "median": -57.78966998827772,
+      "max": 228.15882924562032
+    }
+  },
+  "camera_depth_summary_m": {
+    "count": 8,
+    "mean": 0.8780000417027622,
+    "std": 0.9995446938023391,
+    "min": 0.27800001320429146,
+    "median": 0.56500002683606,
+    "max": 3.4960001660510898
+  },
+  "num_corners": 88,
+  "num_valid_depth_corners": 8,
+  "tcp_pose": [
+    -304.8914600036159,
+    127.80561678546103,
+    405.32559211946057,
+    -3.0715758721782334,
+    -0.028178163201907525,
+    -2.066116318348484
+  ],
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "tcp_camera_translation_offset_mm": [
+    0.0,
+    0.0,
+    -82.5
+  ],
+  "raw_T_tcp_camera_translation_mm": [
+    47.93686895691867,
+    12.012228155339102,
+    180.09267146430741
+  ],
+  "T_tcp_camera_translation_mm": [
+    47.93686895691867,
+    12.012228155339102,
+    97.59267146430741
+  ],
+  "camera_origin_base_mm": {
+    "T_base_tcp__T_tcp_camera": [
+      -333.518101080064,
+      85.6629995759152,
+      308.5212441303394
+    ],
+    "T_base_tcp__inv_T_tcp_camera": [
+      -356.69192833174554,
+      116.32513445117293,
+      500.98894226227907
+    ]
+  },
+  "camera_z_axis_in_base": {
+    "T_base_tcp__T_tcp_camera": [
+      0.02780171663586097,
+      -0.03076763922986825,
+      -0.9991398385252789
+    ],
+    "T_base_tcp__inv_T_tcp_camera": [
+      0.04499463584821236,
+      -0.024103178133186798,
+      -0.9986964101010708
+    ]
+  },
+  "resolution": {
+    "width": 1280,
+    "height": 720
+  },
+  "depth_scale_m": 0.0010000000474974513,
+  "intrinsics": {
+    "fx": 906.2102661132812,
+    "fy": 906.5941162109375,
+    "cx": 633.1510009765625,
+    "cy": 380.08868408203125,
+    "model": "distortion.inverse_brown_conrady",
+    "coeffs": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "selected_device": {
+    "index": 1,
+    "serial": "243122072659",
+    "name": "Intel RealSense D435I",
+    "product_line": "D400"
+  },
+  "available_devices": [
+    {
+      "index": 0,
+      "serial": "238222075705",
+      "name": "Intel RealSense D435I",
+      "product_line": "D400"
+    },
+    {
+      "index": 1,
+      "serial": "243122072659",
+      "name": "Intel RealSense D435I",
+      "product_line": "D400"
+    }
+  ],
+  "rgb_path": "/home/admin128/qiuguanhe/SmartGrasp/result/chessboard_height_check/chessboard_height_20260707_215140_rgb.png",
+  "depth_raw_path": "/home/admin128/qiuguanhe/SmartGrasp/result/chessboard_height_check/chessboard_height_20260707_215140_depth.raw",
+  "corners_overlay_path": "/home/admin128/qiuguanhe/SmartGrasp/result/chessboard_height_check/chessboard_height_20260707_215140_corners.png",
+  "corners": [
+    {
+      "corner_index": 0,
+      "pixel": [
+        1057.866943359375,
+        162.27015686035156
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 1,
+      "pixel": [
+        1052.212890625,
+        217.59764099121094
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 2,
+      "pixel": [
+        1046.369384765625,
+        272.6103820800781
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 3,
+      "pixel": [
+        1040.29345703125,
+        327.51318359375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 4,
+      "pixel": [
+        1034.36767578125,
+        381.9264221191406
+      ],
+      "valid_depth": true,
+      "depth_m": 0.5730000272160396,
+      "camera_xyz_mm": [
+        253.6907538783901,
+        1.1615164123066246,
+        573.0000272160396
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -330.04538697542534,
+        321.2895446871374,
+        -272.13136320819723
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -111.4337161845373,
+        229.57295053527764,
+        -64.44250401558742
+      ]
+    },
+    {
+      "corner_index": 5,
+      "pixel": [
+        1028.738525390625,
+        436.1432189941406
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 6,
+      "pixel": [
+        1022.7896728515625,
+        489.8761901855469
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 7,
+      "pixel": [
+        1017.3994750976562,
+        544.1033935546875
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 8,
+      "pixel": [
+        1011.7570190429688,
+        597.5469360351562
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 9,
+      "pixel": [
+        1005.6822509765625,
+        650.4951171875
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 10,
+      "pixel": [
+        999.8949584960938,
+        703.1389770507812
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 11,
+      "pixel": [
+        1002.5223999023438,
+        157.68960571289062
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 12,
+      "pixel": [
+        996.676513671875,
+        212.84764099121094
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 13,
+      "pixel": [
+        990.5980224609375,
+        268.1222229003906
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 14,
+      "pixel": [
+        984.57080078125,
+        322.70166015625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 15,
+      "pixel": [
+        978.6401977539062,
+        377.18157958984375
+      ],
+      "valid_depth": true,
+      "depth_m": 3.4960001660510898,
+      "camera_xyz_mm": [
+        1332.8366875414165,
+        -11.210350481748202,
+        3496.0001660510898
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -319.05426538216483,
+        1307.7100438694133,
+        -3227.7180418391463
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        944.9737499052613,
+        714.539972945935,
+        -2955.367801152385
+      ]
+    },
+    {
+      "corner_index": 16,
+      "pixel": [
+        973.1893310546875,
+        430.9764099121094
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 17,
+      "pixel": [
+        967.6620483398438,
+        485.1486511230469
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 18,
+      "pixel": [
+        962.3048095703125,
+        538.41943359375
+      ],
+      "valid_depth": true,
+      "depth_m": 0.27800001320429146,
+      "camera_xyz_mm": [
+        100.97520030066259,
+        48.55088916621865,
+        278.00001320429146
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -282.7470467486147,
+        180.533973752885,
+        28.773168968129596
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -232.61424747082557,
+        118.7012236053289,
+        228.15882924562032
+      ]
+    },
+    {
+      "corner_index": 19,
+      "pixel": [
+        956.661865234375,
+        592.1691284179688
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 20,
+      "pixel": [
+        951.4954223632812,
+        645.2506103515625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 21,
+      "pixel": [
+        946.1198120117188,
+        698.068359375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 22,
+      "pixel": [
+        946.8228149414062,
+        153.36817932128906
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 23,
+      "pixel": [
+        940.768310546875,
+        208.6328887939453
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 24,
+      "pixel": [
+        934.7664184570312,
+        263.503662109375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 25,
+      "pixel": [
+        928.8102416992188,
+        317.9691162109375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 26,
+      "pixel": [
+        923.1401977539062,
+        372.0902404785156
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 27,
+      "pixel": [
+        917.6541748046875,
+        425.9167175292969
+      ],
+      "valid_depth": true,
+      "depth_m": 0.5730000272160396,
+      "camera_xyz_mm": [
+        179.89238529128164,
+        28.964962316643778,
+        573.0000272160396
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -298.3315959408215,
+        249.151952179584,
+        -269.0274921248923
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -161.1102194014862,
+        168.32837304481478,
+        -65.20248192663041
+      ]
+    },
+    {
+      "corner_index": 28,
+      "pixel": [
+        912.2882080078125,
+        479.48223876953125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 29,
+      "pixel": [
+        907.1376342773438,
+        533.3145751953125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 30,
+      "pixel": [
+        902.3700561523438,
+        586.4348754882812
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 31,
+      "pixel": [
+        897.3120727539062,
+        639.7584228515625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 32,
+      "pixel": [
+        891.8201293945312,
+        692.5762939453125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 33,
+      "pixel": [
+        891.4501953125,
+        149.0658416748047
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 34,
+      "pixel": [
+        885.287841796875,
+        204.4241180419922
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 35,
+      "pixel": [
+        878.7827758789062,
+        259.3555603027344
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 36,
+      "pixel": [
+        873.54052734375,
+        313.3304443359375
+      ],
+      "valid_depth": true,
+      "depth_m": 0.7160000340081751,
+      "camera_xyz_mm": [
+        189.93264090058273,
+        -52.72359601041978,
+        716.0000340081751
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -376.4340448569821,
+        250.3186177901855,
+        -414.3597858570719
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -187.14244622291122,
+        240.43925621863832,
+        -211.30235506625365
+      ]
+    },
+    {
+      "corner_index": 37,
+      "pixel": [
+        867.9739379882812,
+        367.16455078125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 38,
+      "pixel": [
+        862.68701171875,
+        420.69781494140625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 39,
+      "pixel": [
+        857.5147094726562,
+        474.23736572265625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 40,
+      "pixel": [
+        852.4906005859375,
+        527.431396484375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 41,
+      "pixel": [
+        847.68798828125,
+        580.6966552734375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 42,
+      "pixel": [
+        842.887451171875,
+        634.03515625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 43,
+      "pixel": [
+        838.1004028320312,
+        687.1781005859375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 44,
+      "pixel": [
+        836.1434326171875,
+        145.2342987060547
+      ],
+      "valid_depth": true,
+      "depth_m": 0.28200001339428127,
+      "camera_xyz_mm": [
+        63.168417509891874,
+        -73.05247038060588,
+        282.00001339428127
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -401.98751432663755,
+        136.04778796149782,
+        22.821694773330194
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -326.28124325301224,
+        204.4522630378311,
+        217.86402390661613
+      ]
+    },
+    {
+      "corner_index": 45,
+      "pixel": [
+        830.1827392578125,
+        200.38954162597656
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 46,
+      "pixel": [
+        824.4710693359375,
+        254.8586883544922
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 47,
+      "pixel": [
+        818.8999633789062,
+        308.70538330078125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 48,
+      "pixel": [
+        813.6649780273438,
+        362.3517761230469
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 49,
+      "pixel": [
+        808.492919921875,
+        415.7283630371094
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 50,
+      "pixel": [
+        803.3971557617188,
+        468.9320373535156
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 51,
+      "pixel": [
+        798.474365234375,
+        522.0036010742188
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 52,
+      "pixel": [
+        793.5680541992188,
+        574.9573974609375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 53,
+      "pixel": [
+        788.9784545898438,
+        628.2703247070312
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 54,
+      "pixel": [
+        784.2098388671875,
+        681.2755737304688
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 55,
+      "pixel": [
+        781.181640625,
+        141.17274475097656
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 56,
+      "pixel": [
+        775.6324462890625,
+        196.19068908691406
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 57,
+      "pixel": [
+        770.2389526367188,
+        250.35147094726562
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 58,
+      "pixel": [
+        765.1256103515625,
+        304.08990478515625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 59,
+      "pixel": [
+        759.8541870117188,
+        357.5482177734375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 60,
+      "pixel": [
+        754.8381958007812,
+        410.64886474609375
+      ],
+      "valid_depth": true,
+      "depth_m": 0.5490000260761008,
+      "camera_xyz_mm": [
+        73.72049912671426,
+        18.506120524564523,
+        549.0000260761008
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -303.73968853643225,
+        143.35649926721965,
+        -241.8994344053346
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -259.0640959980641,
+        124.33704431468573,
+        -44.52259086427762
+      ]
+    },
+    {
+      "corner_index": 61,
+      "pixel": [
+        749.7831420898438,
+        463.6884765625
+      ],
+      "valid_depth": true,
+      "depth_m": 0.5570000264560804,
+      "camera_xyz_mm": [
+        71.68767350689679,
+        51.36266140570188,
+        557.0000264560804
+      ],
+      "T_base_tcp__T_tcp_camera_base_xyz_mm": [
+        -270.6117046419661,
+        142.87304428980522,
+        -248.96962670306726
+      ],
+      "T_base_tcp__inv_T_tcp_camera_base_xyz_mm": [
+        -243.91513728451554,
+        94.76602004344657,
+        -51.13683596096803
+      ]
+    },
+    {
+      "corner_index": 62,
+      "pixel": [
+        744.9212036132812,
+        516.47509765625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 63,
+      "pixel": [
+        740.1396484375,
+        569.3018798828125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 64,
+      "pixel": [
+        735.4915771484375,
+        622.298583984375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 65,
+      "pixel": [
+        730.6394653320312,
+        675.503662109375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 66,
+      "pixel": [
+        727.0068359375,
+        137.08030700683594
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 67,
+      "pixel": [
+        721.5059204101562,
+        191.822509765625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 68,
+      "pixel": [
+        716.4894409179688,
+        245.79052734375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 69,
+      "pixel": [
+        711.4476928710938,
+        299.4200439453125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 70,
+      "pixel": [
+        706.544189453125,
+        352.7231750488281
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 71,
+      "pixel": [
+        701.6155395507812,
+        405.7998352050781
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 72,
+      "pixel": [
+        696.684814453125,
+        458.53472900390625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 73,
+      "pixel": [
+        691.6820068359375,
+        511.284912109375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 74,
+      "pixel": [
+        687.1575927734375,
+        563.9097900390625
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 75,
+      "pixel": [
+        682.3950805664062,
+        616.6641845703125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 76,
+      "pixel": [
+        678.02685546875,
+        669.4110717773438
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 77,
+      "pixel": [
+        672.8999633789062,
+        132.71981811523438
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 78,
+      "pixel": [
+        668.01708984375,
+        187.3867645263672
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 79,
+      "pixel": [
+        662.956298828125,
+        241.26951599121094
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 80,
+      "pixel": [
+        658.2652587890625,
+        294.6578674316406
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 81,
+      "pixel": [
+        653.3731689453125,
+        347.934326171875
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 82,
+      "pixel": [
+        648.54833984375,
+        400.81536865234375
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 83,
+      "pixel": [
+        643.7720336914062,
+        453.6073303222656
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 84,
+      "pixel": [
+        639.0822143554688,
+        506.08642578125
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 85,
+      "pixel": [
+        634.3977661132812,
+        558.7059326171875
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 86,
+      "pixel": [
+        629.6278076171875,
+        611.1962280273438
+      ],
+      "valid_depth": false
+    },
+    {
+      "corner_index": 87,
+      "pixel": [
+        624.8946533203125,
+        664.1431884765625
+      ],
+      "valid_depth": false
+    }
+  ]
+}

@@ -21,6 +21,6 @@
     "top_k": 5,
     "device": "cuda:0",
     "output": "graspnet-workspace/results/scene_0001_step_00_grasp.json",
-    "gui": false
+    "gui": true
   }
 }

@@ -1,0 +1,53 @@
+{
+  "mode": "interactive_sam",
+  "foreground_points": [
+    {
+      "x": 768,
+      "y": 368
+    },
+    {
+      "x": 722,
+      "y": 414
+    },
+    {
+      "x": 633,
+      "y": 504
+    },
+    {
+      "x": 803,
+      "y": 280
+    },
+    {
+      "x": 852,
+      "y": 300
+    },
+    {
+      "x": 795,
+      "y": 345
+    },
+    {
+      "x": 827,
+      "y": 342
+    },
+    {
+      "x": 859,
+      "y": 509
+    },
+    {
+      "x": 848,
+      "y": 453
+    },
+    {
+      "x": 848,
+      "y": 590
+    }
+  ],
+  "background_points": [],
+  "sam_model_id": "facebook/sam-vit-base",
+  "sam_device": null,
+  "mask_clean_kernel": 3,
+  "predicted_iou": 0.8463773727416992,
+  "mask_pixels": 34542,
+  "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/result/mask.png",
+  "mask_overlay_path": "/home/admin128/qiuguanhe/SmartGrasp/result/mask_overlay.png"
+}
