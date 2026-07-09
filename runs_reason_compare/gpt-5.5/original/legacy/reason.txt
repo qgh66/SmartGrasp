@@ -1,0 +1,842 @@
+scene_key: scene_1094/perception
+scene_id: 1094
+target_source: all
+target_id: 1
+target_label: object_1
+branch: partially_occluded
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=2 (object_2)  vlm_reason=Both candidates directly cover target object_1. Object_2 is especially important because it directly occludes object_1 and also lies on top of object_3, which is another direct occluder. Object_3 also directly blocks part of object_1, so it receives a high score despite being partially covered by object_2.  candidates:    mid=2: P_s=0.960 P_g=0.0026 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=3 (object_3)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=3: P_s=1.000 P_g=0.0092 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_1094/perception
+scene_id: 1094
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_1094/perception
+scene_id: 1094
+target_source: all
+target_id: 3
+target_label: object_3
+branch: partially_occluded
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=2 (object_2)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=2: P_s=1.000 P_g=0.0125 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_1094/perception
+scene_id: 1094
+target_source: all
+target_id: 4
+target_label: object_4
+branch: partially_occluded
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=2 (object_2)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=2: P_s=1.000 P_g=0.0149 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_1094/perception
+scene_id: 1094
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 3
+target_label: object_3
+branch: fully_visible
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 4
+target_label: object_4
+branch: fully_visible
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 5
+target_label: object_5
+branch: partially_occluded
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=2 (object_2)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=2: P_s=1.000 P_g=0.0141 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_125/perception
+scene_id: 125
+target_source: all
+target_id: 6
+target_label: object_6
+branch: partially_occluded
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=2 (object_2)  vlm_reason=Object 5 directly covers/blocks target 6 and is the immediate occluder, so it receives a high score. Object 2 sits above object 5 in the chain, indirectly occluding the target by covering/pressing the direct occluder, so it receives a moderate score.  candidates:    mid=2: P_s=0.620 P_g=0.0002 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0155 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 1
+target_label: object_1
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=Objects 4 and 5 directly occlude target 1, with 5 covering a larger lower portion and also covering 4. Object 8 does not directly touch the target but is an indirect occluder through 8->5->1, so it has moderate chain importance.  candidates:    mid=8: P_s=0.620 P_g=0.0002 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=5 (object_5)  vlm_reason=Both candidates directly cover the target object 1. Object 5 is slightly more important because it directly blocks object 1 and also covers object 4, adding chain pressure over another direct occluder.  candidates:    mid=5: P_s=0.970 P_g=0.0173 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: selected mid=4 (object_4)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=4: P_s=1.000 P_g=0.0331 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 4: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 3
+target_label: object_3
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=VLM response could not be parsed; used fallback scores.  candidates:    mid=8: P_s=0.500 P_g=0.0002 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=6 (object_6)  vlm_reason=Object 7 is the immediate occluder of target 3 per the relation 7 -> 3, so it is highly important. Object 6 covers object 7, making it an indirect occluder in the chain to the target, so it has moderate importance.  candidates:    mid=6: P_s=0.600 P_g=0.0000 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: selected mid=7 (object_7)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=7: P_s=1.000 P_g=0.0061 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 4: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 4
+target_label: object_4
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=Object 5 directly covers the target object 4, making it the immediate occluder. Object 8 does not directly cover 4 but covers object 5, which is the direct occluder, so it is an indirect chain occluder with moderate importance.  candidates:    mid=8: P_s=0.620 P_g=0.0014 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0974 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 5
+target_label: object_5
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=8: P_s=1.000 P_g=0.0142 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 6
+target_label: object_6
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=8: P_s=1.000 P_g=0.0188 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 7
+target_label: object_7
+branch: partially_occluded
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=8 (object_8)  vlm_reason=Both candidates directly cover target 7 per the graph. Object 8 is the dominant front occluder, covering a large lower portion of 7 and also lying above 6, so it is maximally important. Object 6 also directly occludes 7 but appears to block a smaller side portion, so it is slightly lower but still high.  candidates:    mid=8: P_s=0.980 P_g=0.0376 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=6 (object_6)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=6: P_s=1.000 P_g=0.0067 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=7 (object_7) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 8
+target_label: object_8
+branch: fully_visible
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=8 (object_8) is fully visible, directly graspable
+
+scene_key: scene_184/perception
+scene_id: 184
+target_source: all
+target_id: 9
+target_label: object_9
+branch: fully_visible
+grasp_id: 9
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=9 (object_9) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 2
+target_label: object_2
+branch: partially_occluded
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=1 (object_1)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=1: P_s=1.000 P_g=0.0282 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 3
+target_label: object_3
+branch: partially_occluded
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=1 (object_1)  vlm_reason=Object 2 is the immediate occluder directly covering/blocking target 3. Object 1 indirectly contributes by covering object 2, which is the direct occluder, so it has moderate chain importance.  candidates:    mid=1: P_s=0.620 P_g=0.0002 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=2 (object_2)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=2: P_s=1.000 P_g=0.0087 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 4
+target_label: object_4
+branch: partially_occluded
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=6 (object_6)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=6: P_s=1.000 P_g=0.0182 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 6
+target_label: object_6
+branch: fully_visible
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_20/perception
+scene_id: 20
+target_source: all
+target_id: 7
+target_label: object_7
+branch: fully_visible
+grasp_id: 7
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=7 (object_7) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 3
+target_label: object_3
+branch: partially_occluded
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0042 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 4
+target_label: object_4
+branch: partially_occluded
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0273 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_222/perception
+scene_id: 222
+target_source: all
+target_id: 6
+target_label: object_6
+branch: fully_visible
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 2
+target_label: object_2
+branch: partially_occluded
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=3 (object_3)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=3: P_s=1.000 P_g=0.0173 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 3
+target_label: object_3
+branch: fully_visible
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 4
+target_label: object_4
+branch: partially_occluded
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=3 (object_3)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=3: P_s=1.000 P_g=0.0184 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_298/perception
+scene_id: 298
+target_source: all
+target_id: 6
+target_label: object_6
+branch: partially_occluded
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0045 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 3
+target_label: object_3
+branch: fully_visible
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 4
+target_label: object_4
+branch: fully_visible
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 5
+target_label: object_5
+branch: partially_occluded
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=3 (object_3)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=3: P_s=1.000 P_g=0.0712 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 6
+target_label: object_6
+branch: partially_occluded
+grasp_id: 7
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=7 (object_7)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=7: P_s=1.000 P_g=0.0044 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_32/perception
+scene_id: 32
+target_source: all
+target_id: 7
+target_label: object_7
+branch: fully_visible
+grasp_id: 7
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=7 (object_7) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 2
+target_label: object_2
+branch: partially_occluded
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=4 (object_4)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=4: P_s=1.000 P_g=0.3169 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 3
+target_label: object_3
+branch: fully_visible
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 4
+target_label: object_4
+branch: fully_visible
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 6
+target_label: object_6
+branch: fully_visible
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 7
+target_label: object_7
+branch: partially_occluded
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=4 (object_4)  vlm_reason=Object 2 directly covers/blocks the target 7, making it the immediate occluder. Object 4 is an indirect occluder because it covers object 2, which in turn covers the target, so it has moderate chain relevance.  candidates:    mid=4: P_s=0.620 P_g=0.0356 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=2 (object_2)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=2: P_s=1.000 P_g=0.1124 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=7 (object_7) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 8
+target_label: object_8
+branch: fully_visible
+grasp_id: 8
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=8 (object_8) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 9
+target_label: object_9
+branch: fully_visible
+grasp_id: 9
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=9 (object_9) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 10
+target_label: object_10
+branch: fully_visible
+grasp_id: 10
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=10 (object_10) is fully visible, directly graspable
+
+scene_key: scene_345/perception
+scene_id: 345
+target_source: all
+target_id: 11
+target_label: object_11
+branch: fully_visible
+grasp_id: 11
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=11 (object_11) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 1
+target_label: object_1
+branch: partially_occluded
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=4 (object_4)  vlm_reason=Both candidates are listed as direct occluders of target 1. Object 6 visibly overlaps/blocks the right side of the target area slightly more, while object 4 also directly covers part of the target from the left/upper-left chain.  candidates:    mid=4: P_s=0.920 P_g=0.0513 P=0.7134 IG=0.8644 G=1.000 best_part=None cost=0 score=0.6166 <-- selected    mid=6: P_s=0.960 P_g=0.0197 P=0.2866 IG=0.8644 G=1.000 best_part=None cost=0 score=0.2478
+  step 2: selected mid=6 (object_6)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=6: P_s=1.000 P_g=0.0197 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 3
+target_label: object_3
+branch: fully_visible
+grasp_id: 3
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 4
+target_label: object_4
+branch: fully_visible
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 6
+target_label: object_6
+branch: fully_visible
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=6 (object_6) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 7
+target_label: object_7
+branch: partially_occluded
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=6 (object_6)  vlm_reason=object_9 directly covers/blocks the target object_7, making it the immediate occluder. object_6 is an indirect occluder because it covers object_9, which in turn covers object_7, so it is important in the occlusion chain but less direct.  candidates:    mid=6: P_s=0.650 P_g=0.0044 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: selected mid=9 (object_9)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=9: P_s=1.000 P_g=0.0939 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 3: target molmo_id=7 (object_7) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 8
+target_label: object_8
+branch: partially_occluded
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0590 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=8 (object_8) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 9
+target_label: object_9
+branch: partially_occluded
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=6 (object_6)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=6: P_s=1.000 P_g=0.0466 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=9 (object_9) is fully visible, directly graspable
+
+scene_key: scene_348/perception
+scene_id: 348
+target_source: all
+target_id: 10
+target_label: object_10
+branch: fully_visible
+grasp_id: 10
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=10 (object_10) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 1
+target_label: object_1
+branch: fully_visible
+grasp_id: 1
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=1 (object_1) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 2
+target_label: object_2
+branch: fully_visible
+grasp_id: 2
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=2 (object_2) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 3
+target_label: object_3
+branch: partially_occluded
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: selected mid=5 (object_5)  vlm_reason=single ancestor; assigned deterministic prior  candidates:    mid=5: P_s=1.000 P_g=0.0286 P=1.0000 IG=0.0000 G=1.000 best_part=None cost=0 score=0.0000 <-- selected
+  step 2: target molmo_id=3 (object_3) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 4
+target_label: object_4
+branch: fully_visible
+grasp_id: 4
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=4 (object_4) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 5
+target_label: object_5
+branch: fully_visible
+grasp_id: 5
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=5 (object_5) is fully visible, directly graspable
+
+scene_key: scene_365/perception
+scene_id: 365
+target_source: all
+target_id: 6
+target_label: object_6
+branch: fully_visible
+grasp_id: 6
+status: ok
+downstream_reason_seq:
+  step 1: target molmo_id=6 (object_6) is fully visible, directly graspable

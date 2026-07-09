@@ -1,0 +1,10 @@
+| model | reason_algorithm | branch | num_targets | success_rate | avg_closed_loop_steps |
+| --- | --- | --- | --- | --- | --- |
+| gpt-4o | legacy | fully_visible | 45 | 1.0 | 1.0 |
+| gpt-4o | legacy | partially_occluded | 28 | 1.0 | 2.4285714285714284 |
+| gpt-4o | theory | fully_visible | 45 | 1.0 | 1.0 |
+| gpt-4o | theory | partially_occluded | 28 | 1.0 | 2.4285714285714284 |
+| gpt-5.5 | legacy | fully_visible | 45 | 1.0 | 1.0 |
+| gpt-5.5 | legacy | partially_occluded | 28 | 1.0 | 2.4285714285714284 |
+| gpt-5.5 | theory | fully_visible | 45 | 1.0 | 1.0 |
+| gpt-5.5 | theory | partially_occluded | 28 | 1.0 | 2.4285714285714284 |
