@@ -454,6 +454,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
   --top-k 20 \
+  --trial-name ring_horizontal_01 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 10 \
@@ -466,6 +467,44 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 /home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.png
 /home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates_3d.html
 /home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.json
+```
+
+拍照并成功生成目标掩码后，脚本会默认保存一份轻量试验日志到：
+
+```text
+graspnet-workspace/log/single_object_grasp/YYYYMMDD_HHMMSS[_trial_name]/
+```
+
+其中包含 `rgb.png`、`depth.raw`、`camera_meta.json`、`grasp_candidates.json`、`grasp_candidates.png`、`scene_grasps.ply`、`mask_overlay.png`、`run_info.json` 和可手动填写成功/失败的 `manual_result.json`。
+
+如果上一把急停后机器人未解锁，导致本次在回默认拍照位姿或打开夹爪阶段失败，本次不会创建试验日志；只有完成拍照并成功生成掩码后，才视为一次需要记录的试验。
+
+所有试验日志都固定放在 `graspnet-workspace/log/` 下。如果希望当前单物体试验日志放到 `graspnet-workspace/log/single_object/` 下，运行时指定：
+
+```bash
+--trial-log-subdir single_object
+```
+
+例如：
+
+```bash
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 20 \
+  --trial-log-subdir single_object \
+  --trial-name ring_horizontal_01 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 10 \
+  --acceleration 10
+```
+
+如果本次不想保存试验日志，添加：
+
+```bash
+--no-trial-log
 ```
 
 确认 `grasp_candidates.json` 中：
@@ -482,6 +521,8 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --reuse-capture \
   --camera-serial 243122072659 \
+  --trial-log-subdir single_object \
+  --trial-name ring_horizontal_01_exec \
   --execute \
   --candidate-index 0 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
@@ -541,6 +582,8 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
   --top-k 20 \
+  --trial-log-subdir single_object \
+  --trial-name capture_only \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 10 \
@@ -552,6 +595,8 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
   --top-k 20 \
+  --trial-log-subdir single_object \
+  --trial-name grasp_execute \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 40 \

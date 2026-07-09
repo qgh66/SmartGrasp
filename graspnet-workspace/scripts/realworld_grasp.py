@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -55,6 +56,8 @@ from utils.collision_detector import ModelFreeCollisionDetector  # noqa: E402
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 720
 DEFAULT_OUTPUT_DIR = SMARTGRASP_ROOT / "result"
+DEFAULT_TRIAL_LOG_ROOT = WORKSPACE_ROOT / "log"
+DEFAULT_TRIAL_LOG_SUBDIR = "single_object_grasp"
 DEFAULT_CHECKPOINT = WORKSPACE_ROOT / "checkpoints" / "checkpoint-rs.tar"
 DEFAULT_HAND_EYE_CALIBRATION = WORKSPACE_ROOT / "calibration" / "hand_eye_tcp_camera.json"
 DEFAULT_TCP_CAMERA_TRANSLATION_OFFSET_MM = [0.0, 0.0, -82.5]
@@ -1775,9 +1778,197 @@ def save_outputs(
     return records
 
 
+def _run_git_command(args: list[str]) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=SMARTGRASP_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    return result.stdout.strip()
+
+
+def collect_git_info() -> dict[str, Any]:
+    status = _run_git_command(["status", "--short"])
+    return {
+        "branch": _run_git_command(["branch", "--show-current"]),
+        "commit": _run_git_command(["rev-parse", "HEAD"]),
+        "dirty": bool(status),
+        "status_short": status,
+    }
+
+
+def sanitize_trial_name(name: str | None) -> str:
+    if not name:
+        return ""
+    safe_chars = []
+    for char in name.strip():
+        if char.isalnum() or char in {"-", "_"}:
+            safe_chars.append(char)
+        elif char.isspace():
+            safe_chars.append("_")
+    return "".join(safe_chars).strip("_")
+
+
+def resolve_trial_root(args: argparse.Namespace) -> tuple[Path, str]:
+    trial_subdir = sanitize_trial_name(args.trial_log_subdir) or DEFAULT_TRIAL_LOG_SUBDIR
+    trial_root = Path(args.trial_log_dir).expanduser() if args.trial_log_dir else DEFAULT_TRIAL_LOG_ROOT / trial_subdir
+    if not trial_root.is_absolute():
+        trial_root = WORKSPACE_ROOT / trial_root
+    return trial_root, trial_subdir
+
+
+def write_manual_result_template(trial_dir: Path) -> None:
+    manual_result_path = trial_dir / "manual_result.json"
+    if manual_result_path.exists():
+        return
+    manual_result = {
+        "status": "unreviewed",
+        "success": None,
+        "failure_reason": "",
+        "notes": "",
+        "reviewed_by": "",
+        "reviewed_at": "",
+    }
+    manual_result_path.write_text(json.dumps(manual_result, indent=2), encoding="utf-8")
+
+
+def write_trial_run_info(
+    trial_dir: Path,
+    args: argparse.Namespace,
+    output_dir: Path,
+    summary: dict[str, Any],
+    copied_files: list[str] | None = None,
+    missing_files: list[str] | None = None,
+    stale_files: list[str] | None = None,
+) -> None:
+    run_info = {
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at_epoch": getattr(args, "_trial_started_at_epoch", None),
+        "trial_name": args.trial_name,
+        "trial_log_subdir": sanitize_trial_name(args.trial_log_subdir) or DEFAULT_TRIAL_LOG_SUBDIR,
+        "trial_dir": str(trial_dir),
+        "argv": sys.argv,
+        "output_dir": str(output_dir),
+        "executed": bool(args.execute),
+        "num_candidates": summary.get("num_candidates"),
+        "camera_serial": args.camera_serial,
+        "calibration_mode": args.calibration_mode,
+        "hand_eye_calibration": str(Path(args.hand_eye_calibration).expanduser().resolve()),
+        "copied_files": copied_files or [],
+        "missing_files": missing_files or [],
+        "stale_files": stale_files or [],
+        "git": collect_git_info(),
+        "summary": summary,
+    }
+    (trial_dir / "run_info.json").write_text(json.dumps(_json_safe(run_info), indent=2), encoding="utf-8")
+
+
+def create_trial_log_dir(args: argparse.Namespace, output_dir: Path) -> Path | None:
+    if args.no_trial_log:
+        return None
+
+    args._trial_started_at_epoch = time.time()
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    trial_name = sanitize_trial_name(args.trial_name)
+    trial_dir_name = f"{timestamp}_{trial_name}" if trial_name else timestamp
+    trial_root, _ = resolve_trial_root(args)
+    trial_dir = trial_root / trial_dir_name
+    trial_dir.mkdir(parents=True, exist_ok=False)
+    initial_summary = {
+        "output_dir": str(output_dir),
+        "execution_status": "initializing",
+        "trial_log_dir": str(trial_dir),
+    }
+    write_manual_result_template(trial_dir)
+    write_trial_run_info(trial_dir, args, output_dir, initial_summary)
+    print(f"[trial-log] initialized lightweight trial log: {trial_dir}")
+    return trial_dir
+
+
+def save_trial_log_files(
+    trial_dir: Path | None,
+    output_dir: Path,
+    args: argparse.Namespace,
+    summary: dict[str, Any],
+) -> None:
+    if trial_dir is None:
+        return
+    copied_files: list[str] = []
+    missing_files: list[str] = []
+    stale_files: list[str] = []
+    file_map = {
+        "rgb.png": "rgb.png",
+        "depth.raw": "depth.raw",
+        "camera_meta.json": "camera_meta.json",
+        "grasp_candidates.json": "grasp_candidates.json",
+        "grasp_candidates.png": "grasp_candidates.png",
+        "grasp_candidates.ply": "scene_grasps.ply",
+        "mask_overlay.png": "mask_overlay.png",
+    }
+    for source_name, target_name in file_map.items():
+        source_path = output_dir / source_name
+        if source_path.exists():
+            started_at = getattr(args, "_trial_started_at_epoch", None)
+            if started_at is not None and not args.reuse_capture and source_path.stat().st_mtime < started_at - 1.0:
+                stale_files.append(source_name)
+                continue
+            shutil.copy2(source_path, trial_dir / target_name)
+            copied_files.append(target_name)
+        else:
+            missing_files.append(source_name)
+
+    write_manual_result_template(trial_dir)
+    write_trial_run_info(trial_dir, args, output_dir, summary, copied_files, missing_files, stale_files)
+    print(f"[trial-log] saved lightweight trial files: {trial_dir}")
+    if missing_files:
+        print(f"[trial-log] missing optional files: {', '.join(missing_files)}")
+    if stale_files:
+        print(f"[trial-log] skipped stale files from a previous run: {', '.join(stale_files)}")
+
+
+def update_trial_run_info(
+    trial_dir: Path | None,
+    args: argparse.Namespace,
+    output_dir: Path,
+    summary: dict[str, Any],
+) -> None:
+    if trial_dir is None:
+        return
+    run_info_path = trial_dir / "run_info.json"
+    try:
+        run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+    except Exception:
+        run_info = {}
+    run_info["summary"] = _json_safe(summary)
+    run_info["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    run_info["executed"] = bool(args.execute)
+    run_info["output_dir"] = str(output_dir)
+    run_info_path.write_text(json.dumps(_json_safe(run_info), indent=2), encoding="utf-8")
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Capture real RGB-D, run GraspNet, and optionally move JAKA.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Directory for rgb.png, depth.raw, and results.")
+    parser.add_argument(
+        "--trial-log-dir",
+        default=None,
+        help=(
+            "Advanced override for timestamped trial log root. "
+            "By default logs are saved under graspnet-workspace/log/<trial-log-subdir>."
+        ),
+    )
+    parser.add_argument(
+        "--trial-log-subdir",
+        default=DEFAULT_TRIAL_LOG_SUBDIR,
+        help="Subdirectory under graspnet-workspace/log for timestamped trial logs.",
+    )
+    parser.add_argument("--trial-name", default="", help="Optional suffix for the timestamped trial log directory.")
+    parser.add_argument("--no-trial-log", action="store_true", help="Disable timestamped lightweight trial log saving.")
     parser.add_argument("--reuse-capture", action="store_true", help="Use existing output-dir/rgb.png + depth.raw.")
     parser.add_argument("--warmup-frames", type=int, default=30, help="RealSense warmup frames before capture.")
     parser.add_argument("--camera-index", type=int, default=DEFAULT_CAMERA_INDEX, help="Fallback RealSense device index if --camera-serial is empty.")
@@ -2023,93 +2214,121 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_arg_parser().parse_args()
     output_dir = Path(args.output_dir).expanduser().resolve()
+    trial_dir: Path | None = None
     checkpoint_path = Path(args.ckpt).expanduser().resolve()
     camera_coordinates_dir = Path(args.camera_coordinates_dir).expanduser().resolve()
-    if args.calibration_mode == "hand_eye":
-        calibration = load_hand_eye_calibration(
-            Path(args.hand_eye_calibration).expanduser().resolve(),
-            args.tcp_camera_translation_offset_mm,
+    try:
+        if args.calibration_mode == "hand_eye":
+            calibration = load_hand_eye_calibration(
+                Path(args.hand_eye_calibration).expanduser().resolve(),
+                args.tcp_camera_translation_offset_mm,
+            )
+        else:
+            calibration = load_legacy_plate_calibration(camera_coordinates_dir)
+
+        capture_was_reused = bool(args.reuse_capture)
+        if not capture_was_reused:
+            prepare_robot(args)
+        frame = (
+            load_captured_frame(output_dir)
+            if capture_was_reused
+            else capture_realsense(output_dir, args.warmup_frames, args.camera_serial, args.camera_index)
         )
-    else:
-        calibration = load_legacy_plate_calibration(camera_coordinates_dir)
+        if calibration["mode"] == "hand_eye":
+            capture_tcp_pose = resolve_capture_tcp_pose(output_dir, args, capture_was_reused)
+            calibration["capture_tcp_pose"] = capture_tcp_pose
+            calibration["base_from_tcp_capture"] = jaka_pose_to_transform(capture_tcp_pose)
+        full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, point_cloud_info = build_grasp_point_cloud(
+            frame,
+            output_dir,
+            args,
+        )
+        if point_cloud_info.get("mask_path") is not None:
+            trial_dir = create_trial_log_dir(args, output_dir)
+        cloud_sampled = sample_points(grasp_cloud, args.num_points)
+        np.save(output_dir / "point_cloud_camera.npy", full_cloud.astype(np.float32, copy=False))
+        np.save(output_dir / "point_cloud_camera_rgb.npy", full_cloud_rgb.astype(np.uint8, copy=False))
 
-    capture_was_reused = bool(args.reuse_capture)
-    if not capture_was_reused:
-        prepare_robot(args)
-    frame = (
-        load_captured_frame(output_dir)
-        if capture_was_reused
-        else capture_realsense(output_dir, args.warmup_frames, args.camera_serial, args.camera_index)
-    )
-    if calibration["mode"] == "hand_eye":
-        capture_tcp_pose = resolve_capture_tcp_pose(output_dir, args, capture_was_reused)
-        calibration["capture_tcp_pose"] = capture_tcp_pose
-        calibration["base_from_tcp_capture"] = jaka_pose_to_transform(capture_tcp_pose)
-    full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, point_cloud_info = build_grasp_point_cloud(
-        frame,
-        output_dir,
-        args,
-    )
-    cloud_sampled = sample_points(grasp_cloud, args.num_points)
-    np.save(output_dir / "point_cloud_camera.npy", full_cloud.astype(np.float32, copy=False))
-    np.save(output_dir / "point_cloud_camera_rgb.npy", full_cloud_rgb.astype(np.uint8, copy=False))
+        grasps = run_graspnet(cloud_sampled, checkpoint_path, args.device)
+        records = save_outputs(
+            output_dir,
+            grasp_cloud,
+            grasp_cloud_rgb,
+            grasps,
+            args.top_k,
+            calibration,
+            args,
+            point_cloud_info,
+            ply_cloud=full_cloud,
+            ply_cloud_rgb=full_cloud_rgb,
+            obstacle_cloud=obstacle_cloud,
+        )
 
-    grasps = run_graspnet(cloud_sampled, checkpoint_path, args.device)
-    records = save_outputs(
-        output_dir,
-        grasp_cloud,
-        grasp_cloud_rgb,
-        grasps,
-        args.top_k,
-        calibration,
-        args,
-        point_cloud_info,
-        ply_cloud=full_cloud,
-        ply_cloud_rgb=full_cloud_rgb,
-        obstacle_cloud=obstacle_cloud,
-    )
+        summary = {
+            "output_dir": str(output_dir),
+            "rgb": str(output_dir / "rgb.png"),
+            "depth_raw": str(output_dir / "depth.raw"),
+            "point_cloud": str(output_dir / "point_cloud_camera.npy"),
+            "grasp_point_cloud_source": point_cloud_info.get("grasp_point_cloud_source"),
+            "mask_png": point_cloud_info.get("mask_path"),
+            "mask_overlay_png": point_cloud_info.get("mask_overlay_path"),
+            "grasp_crop_overlay_png": point_cloud_info.get("grasp_crop_overlay_path"),
+            "object_point_cloud": point_cloud_info.get("object_point_cloud_path"),
+            "grasp_input_point_cloud": point_cloud_info.get("grasp_input_point_cloud_path"),
+            "obstacle_point_cloud": point_cloud_info.get("obstacle_point_cloud_path"),
+            "num_grasp_input_points": point_cloud_info.get("num_grasp_input_points"),
+            "num_object_points": point_cloud_info.get("num_object_points"),
+            "num_obstacle_points": point_cloud_info.get("num_obstacle_points"),
+            "grasp_candidates_png": str(output_dir / "grasp_candidates.png"),
+            "grasp_candidates_ply": str(output_dir / "grasp_candidates.ply"),
+            "grasp_candidates_3d_html": str(output_dir / "grasp_candidates_3d.html"),
+            "grasp_candidates_json": str(output_dir / "grasp_candidates.json"),
+            "num_candidates": len(records),
+            "calibration_mode": args.calibration_mode,
+            "camera_coordinates_dir": str(camera_coordinates_dir),
+            "hand_eye_calibration": str(Path(args.hand_eye_calibration).expanduser().resolve()),
+            "tcp_camera_translation_offset_mm": (
+                calibration.get("translation_offset_mm")
+                if calibration is not None and calibration["mode"] == "hand_eye"
+                else None
+            ),
+            "capture_tcp_pose": calibration.get("capture_tcp_pose"),
+            "camera_index": args.camera_index,
+            "camera_serial": args.camera_serial,
+            "ready_pose": args.ready_pose,
+            "capture_joint_pose_deg": args.capture_joint_pose_deg,
+            "executed": bool(args.execute),
+            "execution_status": "not_requested",
+            "trial_log_dir": str(trial_dir) if trial_dir is not None else None,
+        }
+        save_trial_log_files(trial_dir, output_dir, args, summary)
 
-    if args.execute:
-        if args.candidate_index < 0 or args.candidate_index >= len(records):
-            raise ValueError(f"--candidate-index out of range: {args.candidate_index}")
-        execute_grasp_sequence(records[args.candidate_index], args)
+        if args.execute:
+            if args.candidate_index < 0 or args.candidate_index >= len(records):
+                summary["execution_status"] = "invalid_candidate_index"
+                update_trial_run_info(trial_dir, args, output_dir, summary)
+                raise ValueError(f"--candidate-index out of range: {args.candidate_index}")
+            summary["execution_status"] = "started"
+            summary["executed_candidate_index"] = args.candidate_index
+            update_trial_run_info(trial_dir, args, output_dir, summary)
+            execute_grasp_sequence(records[args.candidate_index], args)
+            summary["execution_status"] = "completed"
+            update_trial_run_info(trial_dir, args, output_dir, summary)
 
-    summary = {
-        "output_dir": str(output_dir),
-        "rgb": str(output_dir / "rgb.png"),
-        "depth_raw": str(output_dir / "depth.raw"),
-        "point_cloud": str(output_dir / "point_cloud_camera.npy"),
-        "grasp_point_cloud_source": point_cloud_info.get("grasp_point_cloud_source"),
-        "mask_png": point_cloud_info.get("mask_path"),
-        "mask_overlay_png": point_cloud_info.get("mask_overlay_path"),
-        "grasp_crop_overlay_png": point_cloud_info.get("grasp_crop_overlay_path"),
-        "object_point_cloud": point_cloud_info.get("object_point_cloud_path"),
-        "grasp_input_point_cloud": point_cloud_info.get("grasp_input_point_cloud_path"),
-        "obstacle_point_cloud": point_cloud_info.get("obstacle_point_cloud_path"),
-        "num_grasp_input_points": point_cloud_info.get("num_grasp_input_points"),
-        "num_object_points": point_cloud_info.get("num_object_points"),
-        "num_obstacle_points": point_cloud_info.get("num_obstacle_points"),
-        "grasp_candidates_png": str(output_dir / "grasp_candidates.png"),
-        "grasp_candidates_ply": str(output_dir / "grasp_candidates.ply"),
-        "grasp_candidates_3d_html": str(output_dir / "grasp_candidates_3d.html"),
-        "grasp_candidates_json": str(output_dir / "grasp_candidates.json"),
-        "num_candidates": len(records),
-        "calibration_mode": args.calibration_mode,
-        "camera_coordinates_dir": str(camera_coordinates_dir),
-        "hand_eye_calibration": str(Path(args.hand_eye_calibration).expanduser().resolve()),
-        "tcp_camera_translation_offset_mm": (
-            calibration.get("translation_offset_mm")
-            if calibration is not None and calibration["mode"] == "hand_eye"
-            else None
-        ),
-        "capture_tcp_pose": calibration.get("capture_tcp_pose"),
-        "camera_index": args.camera_index,
-        "camera_serial": args.camera_serial,
-        "ready_pose": args.ready_pose,
-        "capture_joint_pose_deg": args.capture_joint_pose_deg,
-        "executed": bool(args.execute),
-    }
-    print(json.dumps(summary, indent=2))
+        print(json.dumps(summary, indent=2))
+    except BaseException as exc:
+        if trial_dir is None:
+            raise
+        failure_summary = {
+            "output_dir": str(output_dir),
+            "trial_log_dir": str(trial_dir) if trial_dir is not None else None,
+            "executed": bool(args.execute),
+            "execution_status": "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
+            "error": repr(exc),
+        }
+        update_trial_run_info(trial_dir, args, output_dir, failure_summary)
+        save_trial_log_files(trial_dir, output_dir, args, failure_summary)
+        raise
 
 
 if __name__ == "__main__":
