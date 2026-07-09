@@ -200,9 +200,21 @@ def main():
     )
     parser.add_argument(
         "--ranking-score",
-        choices=["legacy", "ig", "ig_graspability"],
+        choices=["legacy", "ig", "ig_graspability", "theory"],
         default="legacy",
-        help="Candidate ranking score. Use ig vs ig_graspability for the requested comparison.",
+        help=(
+            "Candidate ranking score. legacy keeps the original algorithm; "
+            "theory uses the normalized utility from reason/theory.md."
+        ),
+    )
+    parser.add_argument(
+        "--reason-algorithm",
+        choices=["legacy", "theory"],
+        default=None,
+        help=(
+            "Convenience switch for old vs new reasoning. "
+            "Equivalent to --ranking-score legacy/theory when set."
+        ),
     )
     parser.add_argument("--closed-loop", action="store_true",
                         help="Closed-loop mode: full action sequence per target")
@@ -211,6 +223,9 @@ def main():
     parser.add_argument("--limit", type=int, default=None,
                         help="Only run the first N scenes (debug)")
     args = parser.parse_args()
+
+    if args.reason_algorithm is not None:
+        args.ranking_score = args.reason_algorithm
 
     if args.model:
         vlm_config.VLM_MODEL = args.model
@@ -438,6 +453,7 @@ def main():
                             "P_g": info["P_g"],
                             "P":   info["P"],
                             "IG":  info["IG"],
+                            "IG_normalized": info.get("IG_normalized"),
                             "graspability": info.get("graspability"),
                             "graspability_part_id": info.get("graspability_part_id"),
                             "graspability_parts": info.get("graspability_parts"),
@@ -445,6 +461,7 @@ def main():
                             "score_legacy": info.get("score_legacy"),
                             "score_ig": info.get("score_ig"),
                             "score_ig_graspability": info.get("score_ig_graspability"),
+                            "score_theory": info.get("score_theory"),
                             "score": info.get("score"),
                             "vlm_reason": info.get("vlm_reason"),
                             "selected": (cand_mid == action.grasp_id),
@@ -469,6 +486,7 @@ def main():
                         "P_g": info["P_g"],
                         "P":   info["P"],
                         "IG":  info["IG"],
+                        "IG_normalized": info.get("IG_normalized"),
                         "graspability": info.get("graspability"),
                         "graspability_part_id": info.get("graspability_part_id"),
                         "graspability_parts": info.get("graspability_parts"),
@@ -476,6 +494,7 @@ def main():
                         "score_legacy": info.get("score_legacy"),
                         "score_ig": info.get("score_ig"),
                         "score_ig_graspability": info.get("score_ig_graspability"),
+                        "score_theory": info.get("score_theory"),
                         "score": info.get("score"),
                         "vlm_reason": info.get("vlm_reason"),
                         "selected": (cand_mid == decision.grasp_id),

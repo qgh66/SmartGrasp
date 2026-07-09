@@ -238,6 +238,9 @@ Important files:
 
 ## Score Semantics
 
+For the probability and entropy derivations behind these fields, see
+[`THEORY.md`](THEORY.md). 中文版本见 [`THEORY.zh.md`](THEORY.zh.md)。
+
 For partially visible targets, the score is computed over visible occluder
 candidates:
 

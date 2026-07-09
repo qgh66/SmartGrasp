@@ -48,19 +48,22 @@ def _build_user_text_partial(
     if prompt_mode == "graspability":
         lines.append("")
         lines.append(
-            "Also estimate graspability for each candidate by scoring each listed "
-            "SAM2 part id in [0, 1]. Assume the robot will grasp the visible "
-            "exposed part of the candidate object. Use the labeled scene image and "
-            "the SAM2 part contact sheet when available. High graspability means "
-            "a part is exposed, stable, reachable, and suitable for a parallel "
-            "gripper; low graspability means the visible parts are tiny, thin, "
-            "buried, slippery-looking, merged with neighbors, or hard to approach. "
-            "For each candidate, the object graspability is the maximum score over "
-            "its part ids. Mention the best part id in the reason."
+            "Also estimate one integrated graspability score for each candidate "
+            "object in [0, 1] for the next removal grasp. Use the labeled scene "
+            "image and the SAM2 part contact sheet when available to identify the "
+            "best feasible visible part or region, but return only one object-level "
+            "graspability score. Assume the robot uses a parallel gripper. A high "
+            "score means there is an exposed, reachable, stable, sufficiently thick "
+            "part/region with enough clearance, and grasping it can move and remove "
+            "the whole object safely. A low score means the visible parts are tiny, "
+            "thin, buried, slippery-looking, merged with neighbors, occluded, hard "
+            "to approach, likely to collide, or unlikely to move the whole object "
+            "stably. Mention the best graspable part/region and any object-level "
+            "penalty in the reason."
         )
         lines.append(
             f'Reply as JSON: {{"scores": {{"<mid>": <0..1>, ...}}, '
-            f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
+            f'"graspability": {{"<mid>": <0..1>, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
             f'Mids must be exactly: {mids}.'
         )
@@ -93,19 +96,23 @@ def _build_user_text_invisible(
     mids = [o["mid"] for o in occluders]
     if prompt_mode == "graspability":
         lines.append(
-            "Also estimate graspability for each candidate by scoring each listed "
-            "SAM2 part id in [0, 1]. Assume the robot will remove the top-layer "
-            "visible candidate by grasping one of its exposed SAM2 parts. High "
-            "graspability means a part is large enough, exposed, stable, and "
-            "reachable for a parallel gripper. Low graspability means the exposed "
-            "parts are small, thin, hidden, unstable, or hard to approach. For each "
-            "candidate, the object graspability is the maximum score over its part ids. "
-            "Mention the best part id in the reason."
+            "Also estimate one integrated graspability score for each visible "
+            "top-layer candidate in [0, 1] for the next removal grasp. Use the "
+            "labeled scene image and the SAM2 part contact sheet when available to "
+            "identify the best feasible visible part or region, but return only one "
+            "object-level graspability score. Assume the robot uses a parallel "
+            "gripper. A high score means there is an exposed, reachable, stable, "
+            "sufficiently thick part/region with enough clearance, and grasping it "
+            "can move and remove the whole object safely. A low score means the "
+            "visible parts are small, thin, hidden, unstable, slippery-looking, "
+            "merged with neighbors, hard to approach, likely to collide, or "
+            "unlikely to move the whole object stably. Mention the best graspable "
+            "part/region and any object-level penalty in the reason."
         )
         lines.append("")
         lines.append(
             f'Reply ONLY with JSON: {{"scores": {{"<mid>": <0..1>, ...}}, '
-            f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
+            f'"graspability": {{"<mid>": <0..1>, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
             f'Mids must be exactly: {mids}. '
             f'The scores represent mutually-exclusive hypotheses and should roughly sum to 1.0. '
@@ -179,8 +186,10 @@ def _parse_score_payload_independent(
         data = json.loads(_clean_json_text(text))
         return {
             "scores": _parse_value_map(data.get("scores", {}), occluder_mids, 0.5),
-            "graspability": _parse_graspability_parts(
-                data.get("graspability_parts", {}), occluder_mids
+            "graspability": _parse_object_graspability(
+                data.get("graspability", {}),
+                data.get("graspability_parts", {}),
+                occluder_mids,
             ),
             "graspability_part_id": _parse_graspability_part_id(
                 data.get("graspability_parts", {}), occluder_mids
@@ -218,8 +227,10 @@ def _parse_score_payload_normalized(
             scores = {mid: value / total for mid, value in raw_scores.items()}
         return {
             "scores": scores,
-            "graspability": _parse_graspability_parts(
-                data.get("graspability_parts", {}), occluder_mids
+            "graspability": _parse_object_graspability(
+                data.get("graspability", {}),
+                data.get("graspability_parts", {}),
+                occluder_mids,
             ),
             "graspability_part_id": _parse_graspability_part_id(
                 data.get("graspability_parts", {}), occluder_mids
@@ -284,6 +295,27 @@ def _parse_graspability_parts(
     for mid in mids:
         part_scores = parts.get(mid, {})
         out[mid] = max(part_scores.values()) if part_scores else 1.0
+    return out
+
+
+def _parse_object_graspability(
+    raw_object_values: Any,
+    raw_part_values: Any,
+    mids: list[int],
+) -> dict[int, float]:
+    """Parse object-level graspability, falling back to max part score."""
+    fallback = _parse_graspability_parts(raw_part_values, mids)
+    raw_object_values = raw_object_values if isinstance(raw_object_values, dict) else {}
+    out: dict[int, float] = {}
+    for mid in mids:
+        if str(mid) in raw_object_values or mid in raw_object_values:
+            value = raw_object_values.get(str(mid), raw_object_values.get(mid))
+            try:
+                out[mid] = min(1.0, max(0.0, float(value)))
+            except (TypeError, ValueError):
+                out[mid] = fallback[mid]
+        else:
+            out[mid] = fallback[mid]
     return out
 
 

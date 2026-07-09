@@ -1,0 +1,74 @@
+{
+  "root": "runs_reason_compare",
+  "out_dir": "runs_reason_compare/analysis",
+  "num_result_rows": 292,
+  "num_detail_rows": 164,
+  "closed_loop_summary": [
+    {
+      "model": "gpt-4o",
+      "reason_algorithm": "legacy",
+      "branch": "fully_visible",
+      "num_targets": 45,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 1.0
+    },
+    {
+      "model": "gpt-4o",
+      "reason_algorithm": "legacy",
+      "branch": "partially_occluded",
+      "num_targets": 28,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 2.4285714285714284
+    },
+    {
+      "model": "gpt-4o",
+      "reason_algorithm": "theory",
+      "branch": "fully_visible",
+      "num_targets": 45,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 1.0
+    },
+    {
+      "model": "gpt-4o",
+      "reason_algorithm": "theory",
+      "branch": "partially_occluded",
+      "num_targets": 28,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 2.4285714285714284
+    },
+    {
+      "model": "gpt-5.5",
+      "reason_algorithm": "legacy",
+      "branch": "fully_visible",
+      "num_targets": 45,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 1.0
+    },
+    {
+      "model": "gpt-5.5",
+      "reason_algorithm": "legacy",
+      "branch": "partially_occluded",
+      "num_targets": 28,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 2.4285714285714284
+    },
+    {
+      "model": "gpt-5.5",
+      "reason_algorithm": "theory",
+      "branch": "fully_visible",
+      "num_targets": 45,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 1.0
+    },
+    {
+      "model": "gpt-5.5",
+      "reason_algorithm": "theory",
+      "branch": "partially_occluded",
+      "num_targets": 28,
+      "success_rate": 1.0,
+      "avg_closed_loop_steps": 2.4285714285714284
+    }
+  ],
+  "information_gain_summary_rows": 36,
+  "reason_param_summary_rows": 4
+}

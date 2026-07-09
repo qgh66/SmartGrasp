@@ -70,14 +70,31 @@ Include exactly the requested mids."""
 
 _SYSTEM_PROMPT_PARTIAL_GRASPABILITY = _SYSTEM_PROMPT_PARTIAL + """
 
-In addition to occlusion-chain importance, estimate how easy it is to grasp each
-candidate object by its visible exposed parts. This is a graspability coefficient
-in [0, 1], not a second semantic relevance score. Use object shape, visible
-exposure, likely stable contact area, and SAM2 part cutouts if provided.
+In addition to occlusion-chain importance, estimate ONE integrated
+graspability coefficient in [0, 1] for each candidate object.
+
+This is NOT a second semantic relevance score. It should measure whether a
+parallel gripper can safely and stably remove the candidate now.
+
+The single graspability score must jointly consider:
+- The best feasible visible part or region to grasp.
+- Exposed and reachable surface area of that part/region.
+- Stable antipodal/contact geometry for a parallel gripper.
+- Enough thickness/width for the gripper to close without slipping.
+- Clearance from neighboring objects and low collision risk.
+- Whether grasping that part/region can actually move the whole object.
+- Whether lifting/removing the whole object would be stable.
+- Prefer handles, rims, flat broad surfaces, stems, or rigid protrusions when
+  they are exposed and reachable.
+- Penalize tiny, thin, buried, merged, slippery-looking, occluded, or unstable
+  parts, and also penalize whole-object collision or removal instability.
+
+Mention the best graspable part/region and any whole-object penalty in the
+reason, but output only one graspability score per candidate.
 
 Output strictly as JSON, no prose, no markdown:
-{"scores": {"<mid>": <0..1>, ...}, "graspability_parts": {"<mid>": {"<part_id>": <0..1>, ...}, ...}, "reason": "<brief reason for the scores and graspability>"}
-Include exactly the requested mids in scores and graspability_parts."""
+{"scores": {"<mid>": <0..1>, ...}, "graspability": {"<mid>": <0..1>, ...}, "reason": "<brief reason for the scores and graspability>"}
+Include exactly the requested mids in scores and graspability."""
 
 
 _SYSTEM_PROMPT_INVISIBLE = """You are a vision/spatial reasoning expert helping a robot
@@ -116,14 +133,31 @@ Include exactly the requested mids."""
 
 _SYSTEM_PROMPT_INVISIBLE_GRASPABILITY = _SYSTEM_PROMPT_INVISIBLE + """
 
-In addition to hidden-target probability, estimate how easy it is to grasp each
-visible top-layer candidate by its exposed parts. This is a graspability
-coefficient in [0, 1]. Use object shape, visible exposure, likely stable contact
-area, and SAM2 part cutouts if provided.
+In addition to hidden-target probability, estimate ONE integrated graspability
+coefficient in [0, 1] for each visible top-layer candidate.
+
+This is NOT another hidden-target probability. It should measure whether a
+parallel gripper can safely and stably remove the candidate now.
+
+The single graspability score must jointly consider:
+- The best feasible visible part or region to grasp.
+- Exposed and reachable surface area of that part/region.
+- Stable antipodal/contact geometry for a parallel gripper.
+- Enough thickness/width for the gripper to close without slipping.
+- Clearance from neighboring objects and low collision risk.
+- Whether grasping that part/region can actually move the whole object.
+- Whether lifting/removing the whole object would be stable.
+- Prefer handles, rims, flat broad surfaces, stems, or rigid protrusions when
+  they are exposed and reachable.
+- Penalize tiny, thin, buried, merged, slippery-looking, occluded, or unstable
+  parts, and also penalize whole-object collision or removal instability.
+
+Mention the best graspable part/region and any whole-object penalty in the
+reason, but output only one graspability score per candidate.
 
 Output strictly as JSON, no prose, no markdown, no code fences:
-{"scores": {"<mid>": <0..1>, ...}, "graspability_parts": {"<mid>": {"<part_id>": <0..1>, ...}, ...}, "reason": "<brief reason for the scores and graspability>"}
-Include exactly the requested mids in scores and graspability_parts."""
+{"scores": {"<mid>": <0..1>, ...}, "graspability": {"<mid>": <0..1>, ...}, "reason": "<brief reason for the scores and graspability>"}
+Include exactly the requested mids in scores and graspability."""
 
 
 

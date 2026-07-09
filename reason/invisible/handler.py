@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from ..schemas import PerceptionOutput, GraspDecision, Branch
 from .geometry import compute_geometric_prior, precompute_geometry_cache
 from .prior import compute_semantic_prior_payload
@@ -51,25 +53,34 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
     # Expected IG measures how much a miss would simplify the next step.
     details: dict[int, dict] = {}
     ranking_score = getattr(perception, "ranking_score", "legacy")
+    norm = math.log2(max(2, len(candidate_mids)))
     for mid in candidate_mids:
         ig_value = expected_information_gain(mid, P, perception, geom_cache)
+        score_legacy = ig_value
         score_ig = ig_value
         score_ig_graspability = ig_value * graspability.get(mid, 1.0)
+        ig_normalized = max(0.0, ig_value) / norm
+        score_theory = ig_normalized * graspability.get(mid, 1.0)
         score = _select_score(
             ranking_score,
+            legacy=score_legacy,
             ig=score_ig,
             ig_graspability=score_ig_graspability,
+            theory=score_theory,
         )
         details[mid] = {
             "P_s": P_s[mid],
             "P_g": P_g[mid],
             "P": P[mid],
             "IG": ig_value,
+            "IG_normalized": ig_normalized,
             "graspability": graspability.get(mid, 1.0),
             "graspability_part_id": graspability_part_id.get(mid),
             "graspability_parts": graspability_parts.get(mid, {}),
+            "score_legacy": score_legacy,
             "score_ig": score_ig,
             "score_ig_graspability": score_ig_graspability,
+            "score_theory": score_theory,
             "score": score,
             "vlm_reason": vlm_reason,
         }
@@ -113,9 +124,17 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
 def _select_score(
     ranking_score: str,
     *,
+    legacy: float,
     ig: float,
     ig_graspability: float,
+    theory: float,
 ) -> float:
+    if ranking_score == "legacy":
+        return legacy
+    if ranking_score == "ig":
+        return ig
     if ranking_score == "ig_graspability":
         return ig_graspability
-    return ig
+    if ranking_score == "theory":
+        return theory
+    return legacy

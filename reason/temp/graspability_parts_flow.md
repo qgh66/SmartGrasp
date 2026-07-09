@@ -32,35 +32,44 @@ object id -> part ids / part files -> parts sheet image
 - labeled scene image
 - `sam2_rgb_parts_sheet`
 
-如果是 `prompt_mode=graspability`，prompt 会要求 VLM 对每个候选物体的
-SAM2 part 分别打分：
+如果是 `prompt_mode=graspability`，prompt 会要求 VLM 返回一个综合
+graspability：
 
 - `scores`：原来的语义/遮挡分数
-- `graspability_parts`：每个 object id 下面，每个 part id 的抓取难度
+- `graspability`：综合考虑最佳可行 part/region 和整体物体移除难度后的抓取分数
 
 例如：
 
 ```json
 {
-  "graspability_parts": {
-    "5": {
-      "12": 0.3,
-      "18": 0.8
-    }
+  "graspability": {
+    "5": 0.65
   }
 }
 ```
 
-这里 object `5` 的 part `18` 分数最高，所以：
+这里 VLM 会先观察可见 part/region，比如 handle、rim、flat surface 等，再综合判断：
+
+- 最佳可抓部件是否暴露、可达、稳定
+- 夹爪是否有足够接触面积和厚度
+- 抓这个部件能否带动整个物体
+- 移除时是否可能碰撞、滑移或不稳定
+
+最后只返回一个综合分数：
 
 ```text
-graspability = 0.8
-graspability_part_id = 18
+graspability = 0.65
 ```
 
 ## 最后怎么落到输出
 
-VLM 返回后，代码先把每个物体的 part 分数压成一个物体级分数：
+VLM 返回后，代码使用 VLM 显式返回的综合 `graspability`：
+
+```text
+graspability(object) = graspability[object]
+```
+
+如果旧 prompt 或异常返回里没有 `graspability`，代码仍兼容旧格式，会退回到旧逻辑：
 
 ```text
 graspability(object) = max(graspability_parts[object].values())
@@ -75,24 +84,14 @@ score_ig_graspability = IG * graspability
 其中：
 
 - `IG` 是原来的信息增益
-- `graspability` 是该物体所有 SAM2 parts 里的最大抓取分数
-- `graspability_part_id` 是这个最大分数对应的 part id
+- `graspability` 是 VLM 判断的综合抓取分数，缺失时退回到最大 part 分数
 
 最后在 `scene_details/scene_<id>.csv` 里输出：
 
 - `graspability`
-- `graspability_part_id`
-- `graspability_parts`
 - `score_ig`
 - `score_ig_graspability`
 - `selected`
 
-`reason.txt` 的 downstream reason 里也会出现类似：
-
-```text
-G=0.800 best_part=18
-```
-
-也就是说，部件信息没有单独变成一个新模块，而是作为 perception 到 VLM 的辅助上下文，
-帮助 VLM 判断“这个 top-layer 物体哪个露出部件最好抓”，最后取最高 part 分数作为
-这个物体的 graspability。
+也就是说，部件信息没有单独变成一个新模块，而是作为 perception 到 VLM 的辅助上下文。
+VLM 会利用可见部件来判断最佳抓取区域，但最终只输出一个综合 graspability。

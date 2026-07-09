@@ -86,7 +86,7 @@ python test.py \
 
 ```text
 scores: 原来的语义/遮挡 prior
-graspability: 当前 top-layer 候选物露出部件的抓取难易程度，范围 0.0-1.0
+graspability: 综合最佳可行 part/region、碰撞风险、整体移除稳定性的抓取难易程度
 ```
 
 最终排序分数是：
@@ -122,7 +122,7 @@ scene_details/scene_<id>.csv
 
 - `candidate_id`：候选要移除/抓取的 top-layer object id。
 - `IG`：information gain。
-- `graspability`：VLM 判断的露出部件抓取难易程度。
+- `graspability`：VLM 判断的综合抓取难易程度。
 - `score_ig`：只用 information gain 的分数。
 - `score_ig_graspability`：`IG * graspability`。
 - `score`：当前 `--ranking-score` 实际采用的排序分数。
