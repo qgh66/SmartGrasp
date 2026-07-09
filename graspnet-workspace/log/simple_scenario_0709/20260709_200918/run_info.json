@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-07-09 20:09:41",
+  "created_at_epoch": 1783598958.1385791,
+  "trial_name": "",
+  "trial_log_subdir": "single_object",
+  "trial_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_200918",
+  "argv": [
+    "scripts/realworld_grasp.py",
+    "--calibration-mode",
+    "hand_eye",
+    "--hand-eye-calibration",
+    "calibration/hand_eye_tcp_camera.json",
+    "--camera-serial",
+    "243122072659",
+    "--top-k",
+    "20",
+    "--trial-log-subdir",
+    "single_object",
+    "--jaka-python",
+    "/home/admin128/anaconda3/envs/smartgrasp310/bin/python",
+    "--jkrc-dir",
+    "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc",
+    "--velocity",
+    "20",
+    "--acceleration",
+    "10",
+    "--execute"
+  ],
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+  "executed": true,
+  "num_candidates": null,
+  "camera_serial": "243122072659",
+  "calibration_mode": "hand_eye",
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "copied_files": [
+    "grasp_candidates.json",
+    "grasp_candidates.png",
+    "scene_grasps.ply",
+    "mask_overlay.png"
+  ],
+  "missing_files": [],
+  "stale_files": [
+    "rgb.png",
+    "depth.raw",
+    "camera_meta.json"
+  ],
+  "git": {
+    "branch": "feat/grasp_realworld",
+    "commit": "942ecf56de3ad70e6429072d6645f66b05f6800b",
+    "dirty": true,
+    "status_short": "M README.md\n M graspnet-workspace/scripts/realworld_grasp.py\n?? graspnet-workspace/log/"
+  },
+  "summary": {
+    "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+    "trial_log_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_200918",
+    "executed": true,
+    "execution_status": "failed",
+    "error": "CalledProcessError(1, ['/home/admin128/anaconda3/envs/smartgrasp310/bin/python', '/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/scripts/jaka_motion_worker.py', '--sequence-json', '[{\"type\": \"move\", \"pose\": [-252.58917835832509, 98.2626320221156, 285.2963400046833, -2.953753414339306, 0.0731060006005515, 1.2215448355923604]}, {\"type\": \"move\", \"pose\": [-268.5905930926948, 97.98072118414962, 206.9134627346681, -2.953753414339306, 0.0731060006005515, 1.2215448355923604]}, {\"type\": \"gripper\", \"command\": \"close\"}, {\"type\": \"move\", \"pose\": [-268.5905930926948, 97.98072118414962, 326.9134627346681, -2.953753414339306, 0.0731060006005515, 1.2215448355923604]}]', '--jaka-ip', '192.168.1.199', '--robotiq-port', '/dev/ttyUSB0', '--velocity', '20.0', '--acceleration', '10.0', '--joint-velocity-rad-s', '0.5', '--jkrc-dir', '/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc'])"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": true,
+  "failure_reason": "",
+  "notes": "抓取物体为电动螺丝刀，抓取成功.然而抓取位置偏末端,抓取角度比较斜,不算是一个比较稳妥的抓取",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}

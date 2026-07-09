@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": false,
+  "failure_reason": "抓取位置不是螺丝刀的手柄部分",
+  "notes": "抓取物体为螺丝刀",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}

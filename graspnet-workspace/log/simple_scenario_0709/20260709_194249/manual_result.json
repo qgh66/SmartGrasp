@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": true,
+  "failure_reason": "",
+  "notes": "试验物体为卷尺.虽然试验成功了,但是机械爪的抓取位置比较偏,物体有可能会从抓取位置滑落",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}

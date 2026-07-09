@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-07-09 20:31:34",
+  "created_at_epoch": 1783600293.8483465,
+  "trial_name": "",
+  "trial_log_subdir": "single_object",
+  "trial_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_203133",
+  "argv": [
+    "scripts/realworld_grasp.py",
+    "--calibration-mode",
+    "hand_eye",
+    "--hand-eye-calibration",
+    "calibration/hand_eye_tcp_camera.json",
+    "--camera-serial",
+    "243122072659",
+    "--top-k",
+    "20",
+    "--trial-log-subdir",
+    "single_object",
+    "--jaka-python",
+    "/home/admin128/anaconda3/envs/smartgrasp310/bin/python",
+    "--jkrc-dir",
+    "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc",
+    "--velocity",
+    "20",
+    "--acceleration",
+    "10",
+    "--execute"
+  ],
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+  "executed": true,
+  "num_candidates": null,
+  "camera_serial": "243122072659",
+  "calibration_mode": "hand_eye",
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "copied_files": [
+    "grasp_candidates.json",
+    "grasp_candidates.png",
+    "scene_grasps.ply",
+    "mask_overlay.png"
+  ],
+  "missing_files": [],
+  "stale_files": [
+    "rgb.png",
+    "depth.raw",
+    "camera_meta.json"
+  ],
+  "git": {
+    "branch": "feat/grasp_realworld",
+    "commit": "942ecf56de3ad70e6429072d6645f66b05f6800b",
+    "dirty": true,
+    "status_short": "M README.md\n M graspnet-workspace/scripts/realworld_grasp.py\n?? graspnet-workspace/log/"
+  },
+  "summary": {
+    "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+    "trial_log_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_203133",
+    "executed": true,
+    "execution_status": "failed",
+    "error": "ValueError('--candidate-index out of range: 0')"
+  }
+}

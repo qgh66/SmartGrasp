@@ -1,0 +1,113 @@
+{
+  "created_at": "2026-07-09 20:27:10",
+  "created_at_epoch": 1783600028.281785,
+  "trial_name": "",
+  "trial_log_subdir": "single_object",
+  "trial_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_202708",
+  "argv": [
+    "scripts/realworld_grasp.py",
+    "--calibration-mode",
+    "hand_eye",
+    "--hand-eye-calibration",
+    "calibration/hand_eye_tcp_camera.json",
+    "--camera-serial",
+    "243122072659",
+    "--top-k",
+    "20",
+    "--trial-log-subdir",
+    "single_object",
+    "--jaka-python",
+    "/home/admin128/anaconda3/envs/smartgrasp310/bin/python",
+    "--jkrc-dir",
+    "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc",
+    "--velocity",
+    "20",
+    "--acceleration",
+    "10",
+    "--execute"
+  ],
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+  "executed": true,
+  "num_candidates": 14,
+  "camera_serial": "243122072659",
+  "calibration_mode": "hand_eye",
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "copied_files": [
+    "grasp_candidates.json",
+    "grasp_candidates.png",
+    "scene_grasps.ply",
+    "mask_overlay.png"
+  ],
+  "missing_files": [],
+  "stale_files": [
+    "rgb.png",
+    "depth.raw",
+    "camera_meta.json"
+  ],
+  "git": {
+    "branch": "feat/grasp_realworld",
+    "commit": "942ecf56de3ad70e6429072d6645f66b05f6800b",
+    "dirty": true,
+    "status_short": "M README.md\n M graspnet-workspace/scripts/realworld_grasp.py\n?? graspnet-workspace/log/"
+  },
+  "summary": {
+    "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/result",
+    "rgb": "/home/admin128/qiuguanhe/SmartGrasp/result/rgb.png",
+    "depth_raw": "/home/admin128/qiuguanhe/SmartGrasp/result/depth.raw",
+    "point_cloud": "/home/admin128/qiuguanhe/SmartGrasp/result/point_cloud_camera.npy",
+    "grasp_point_cloud_source": "valid_depth_inside_expanded_object_bbox",
+    "mask_png": "/home/admin128/qiuguanhe/SmartGrasp/result/mask.png",
+    "mask_overlay_png": "/home/admin128/qiuguanhe/SmartGrasp/result/mask_overlay.png",
+    "grasp_crop_overlay_png": "/home/admin128/qiuguanhe/SmartGrasp/result/grasp_crop_overlay.png",
+    "object_point_cloud": "/home/admin128/qiuguanhe/SmartGrasp/result/point_cloud_object_camera.npy",
+    "grasp_input_point_cloud": "/home/admin128/qiuguanhe/SmartGrasp/result/point_cloud_grasp_input_camera.npy",
+    "obstacle_point_cloud": "/home/admin128/qiuguanhe/SmartGrasp/result/point_cloud_obstacles_camera.npy",
+    "num_grasp_input_points": 151306,
+    "num_object_points": 30829,
+    "num_obstacle_points": 878811,
+    "grasp_candidates_png": "/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.png",
+    "grasp_candidates_ply": "/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.ply",
+    "grasp_candidates_3d_html": "/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates_3d.html",
+    "grasp_candidates_json": "/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.json",
+    "num_candidates": 14,
+    "calibration_mode": "hand_eye",
+    "camera_coordinates_dir": "/home/admin128/ChengyuanWang/high_low_comm/scripts/human_playdata_process/hand_object_detector/camera_coordinates/camera_coordinates - \u526f\u672c",
+    "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+    "tcp_camera_translation_offset_mm": [
+      0.0,
+      0.0,
+      -82.5
+    ],
+    "capture_tcp_pose": [
+      -279.0667437324797,
+      113.84629821777344,
+      452.5747393379485,
+      3.141592653589793,
+      -0.0,
+      -2.0420352248333655
+    ],
+    "camera_index": 1,
+    "camera_serial": "243122072659",
+    "ready_pose": [
+      300.0,
+      0.0,
+      350.0,
+      3.141592653589793,
+      0.0,
+      0.0
+    ],
+    "capture_joint_pose_deg": [
+      0.0,
+      90.0,
+      45.0,
+      135.0,
+      270.0,
+      72.0
+    ],
+    "executed": true,
+    "execution_status": "completed",
+    "trial_log_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object/20260709_202708",
+    "executed_candidate_index": 0
+  },
+  "updated_at": "2026-07-09 20:27:44"
+}

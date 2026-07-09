@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": false,
+  "failure_reason": "抓取方案生成依旧失败,可能是因为物体放置的位置超出了相机的深度识别范围",
+  "notes": "螺丝刀",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}

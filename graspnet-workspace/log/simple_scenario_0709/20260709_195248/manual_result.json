@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": false,
+  "failure_reason": "夹住与物体边缘相碰撞",
+  "notes": "试验物体为卷尺.失败原因有可能是mask生成时不完整,物体边缘的黑色区域没有被包含在mask中,导致夹爪与物体边缘相碰撞",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}

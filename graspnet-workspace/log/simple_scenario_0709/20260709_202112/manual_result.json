@@ -1,0 +1,8 @@
+{
+  "status": "reviewed",
+  "success": false,
+  "failure_reason": "夹爪与物体边缘相碰撞",
+  "notes": "试验物体为卷尺.这次mask正确生成了,但是夹爪在抓取时与物体边缘相碰撞,导致抓取失败.建议在抓取前对mask进行膨胀处理,以避免夹爪与物体边缘碰撞.",
+  "reviewed_by": "",
+  "reviewed_at": ""
+}
