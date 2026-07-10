@@ -14,10 +14,9 @@ try:
 except ImportError:
     load_dotenv = None
 
-ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = ROOT.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from reason.intent_handle import resolve_intent
 
@@ -101,7 +100,7 @@ def _resolve_from_summary(
 
 def _write_sample_intent_id(summary_path: Path, selected_id: int | None) -> Path:
     scene_dir = summary_path.parent.parent
-    output_dir = scene_dir / "intent_id"
+    output_dir = scene_dir / "intent"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "id.txt"
     output_path.write_text(f"{selected_id if selected_id is not None else 'none'}\n", encoding="utf-8")
@@ -205,7 +204,7 @@ def main() -> int:
     parser.add_argument("--scene-id", type=int, default=None)
     parser.add_argument("--summary", type=Path, default=None, help="Perception summary.json. Defaults to data/, then sample_data/.")
     parser.add_argument("--instruction", default=None, help="Override FreeGrasp annotation.")
-    parser.add_argument("--use-sample", action="store_true", help="Run all sample_data/scene_*/perception summaries and write scene_<id>/intent_id/id.txt.")
+    parser.add_argument("--use-sample", action="store_true", help="Run all sample_data/scene_*/perception summaries and write scene_<id>/intent/id.txt.")
     parser.add_argument("--use", choices=["sample"], default=None, help="Alias for --use-sample when set to sample.")
     parser.add_argument("--api-key-env", default=RUN_INTENT_API_KEY_ENV)
     parser.add_argument("--base-url", default=RUN_INTENT_BASE_URL)
@@ -221,7 +220,7 @@ def main() -> int:
 
     if not os.environ.get(args.api_key_env) and not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError(
-            f"Missing API key. Export {args.api_key_env}=... before running run_intent.py."
+            f"Missing API key. Export {args.api_key_env}=... before running python -m intent.run_intent."
         )
 
     if args.use_sample or args.use == "sample" or args.mode == "sample":

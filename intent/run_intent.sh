@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+ROOT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT_DIR"
 
 PYTHON="${PYTHON:-/home/qiuguanhe/miniconda3/envs/smartgrasp/bin/python}"
@@ -30,7 +30,7 @@ case "$MODE" in
     export SCENE_ID="${SCENE_ID:-1094}"
     export POINT_SOURCE="${POINT_SOURCE:-molmo}"
     export SEGMENTATION_BACKEND="${SEGMENTATION_BACKEND:-sam2-molmo-langsam}"
-    bash run_perception.sh "$@"
+    bash perception/run_perception.sh "$@"
     export_scene "$SCENE_ID"
     ;;
 
@@ -38,7 +38,7 @@ case "$MODE" in
     export SCENE_ID="${SCENE_ID:-1094}"
     export POINT_SOURCE="${POINT_SOURCE:-molmo}"
     export SEGMENTATION_BACKEND="${SEGMENTATION_BACKEND:-sam2-molmo-langsam}"
-    bash run_perception.sh "$@"
+    bash perception/run_perception.sh "$@"
     export_scene "$SCENE_ID"
     ;;
 
@@ -111,7 +111,7 @@ PY
       SCENE_ID="$scene_id" \
       POINT_SOURCE="${POINT_SOURCE:-molmo}" \
       SEGMENTATION_BACKEND="${SEGMENTATION_BACKEND:-sam2-molmo-langsam}" \
-      bash run_perception.sh
+      bash perception/run_perception.sh
       export_scene "$scene_id"
     done
     ;;
@@ -134,17 +134,17 @@ PY
       SCENE_ID="$scene_id" \
       POINT_SOURCE="${POINT_SOURCE:-molmo}" \
       SEGMENTATION_BACKEND="${SEGMENTATION_BACKEND:-sam2-molmo-langsam}" \
-      bash run_perception.sh
+      bash perception/run_perception.sh
       export_scene "$scene_id"
     done
     ;;
 
   *)
     echo "Usage:"
-    echo "  bash run_intent.sh single"
-    echo "  bash run_intent.sh single-scp"
-    echo "  bash run_intent.sh batch"
-    echo "  bash run_intent.sh range"
+    echo "  bash intent/run_intent.sh single"
+    echo "  bash intent/run_intent.sh single-scp"
+    echo "  bash intent/run_intent.sh batch"
+    echo "  bash intent/run_intent.sh range"
     echo ""
     echo "single mode env:"
     echo "  SCENE_ID, POINT_SOURCE, SEGMENTATION_BACKEND"

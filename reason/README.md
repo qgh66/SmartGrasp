@@ -7,9 +7,9 @@ case, and returns the next grasp action.
 
 The reason stage can be run in two ways:
 
-- Perception plus reason: run `run_perception.sh`; it generates perception
+- Perception plus reason: run `perception/run_perception.sh`; it generates perception
   outputs and then automatically runs one-shot reason on the same scene ids.
-- Reason only: run `test.py` directly, or use `run_reason.sh` for comparison
+- Reason only: run `reason/run_reason.py` directly, or use `reason/run_reason.sh` for comparison
   batches over several ranking modes.
 
 ## What Reason Does
@@ -36,22 +36,22 @@ until the target becomes directly graspable.
 
 ## Repository Structure
 
-The main entrypoints live at the project root:
+The main entrypoints are grouped by stage:
 
-- `run_perception.sh`
+- `perception/run_perception.sh`
   Runs perception first and then, by default, runs reason for the same scene ids.
   This is the recommended entrypoint for current perception-to-reason tests.
 
-- `test.py`
+- `reason/run_reason.py`
   Main reason entrypoint. It finds perception summaries, resolves targets,
   classifies branches, runs the handlers, and writes all reason outputs.
 
-- `run_reason.sh`
+- `reason/run_reason.sh`
   Batch comparison wrapper for reason only. It loops over `MODELS` and
-  `ALGORITHMS`, runs `test.py --closed-loop`, and then runs
+  `ALGORITHMS`, runs `python -m reason.run_reason --closed-loop`, and then runs
   `analyze_reason_experiment.py`.
 
-- `run_intent.py`
+- `intent/run_intent.py`
   Standalone target-intent resolver. It maps a natural-language instruction or
   `summary.json["annotation"]` to a perception object id.
 
@@ -372,10 +372,10 @@ Select the ranking mode with:
 --ranking-score theory
 ```
 
-The same value can be passed through `run_perception.sh`:
+The same value can be passed through `perception/run_perception.sh`:
 
 ```bash
-REASON_RANKING_SCORE=ig_graspability bash run_perception.sh 59
+REASON_RANKING_SCORE=ig_graspability bash perception/run_perception.sh 59
 ```
 
 ### `legacy`
@@ -450,25 +450,25 @@ Run from the project root on the remote machine:
 ```bash
 cd /home/admin128/hanhuang/SmartGrasp
 conda activate smartgrasp
-bash run_perception.sh 59
+bash perception/run_perception.sh 59
 ```
 
 Multiple scenes:
 
 ```bash
-bash run_perception.sh 59 242 691
+bash perception/run_perception.sh 59 242 691
 ```
 
 All scenes configured in the script:
 
 ```bash
-bash run_perception.sh
+bash perception/run_perception.sh
 ```
 
-By default, `run_perception.sh` runs perception and then one-shot reason for the
+By default, `perception/run_perception.sh` runs perception and then one-shot reason for the
 same scene ids. It does not pass `--closed-loop`.
 
-The reason defaults used by `run_perception.sh` are:
+The reason defaults used by `perception/run_perception.sh` are:
 
 ```bash
 RUN_REASON_AFTER_PERCEPTION=1
@@ -483,7 +483,7 @@ REASON_TARGET_SOURCE=auto
 Equivalent direct reason command for one scene:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 59 \
   --target-source auto \
@@ -496,7 +496,7 @@ python test.py \
 Disable the automatic reason step and run perception only:
 
 ```bash
-RUN_REASON_AFTER_PERCEPTION=0 bash run_perception.sh 59
+RUN_REASON_AFTER_PERCEPTION=0 bash perception/run_perception.sh 59
 ```
 
 Override the reason model or ranking mode:
@@ -505,13 +505,13 @@ Override the reason model or ranking mode:
 REASON_MODEL=gpt-5.5 \
 REASON_PRIOR_PROMPT=graspability \
 REASON_RANKING_SCORE=theory \
-bash run_perception.sh 59
+bash perception/run_perception.sh 59
 ```
 
 Force a fixed target id:
 
 ```bash
-REASON_TARGET_ID=3 bash run_perception.sh 59
+REASON_TARGET_ID=3 bash perception/run_perception.sh 59
 ```
 
 Use a custom intent instruction:
@@ -519,7 +519,7 @@ Use a custom intent instruction:
 ```bash
 REASON_TARGET_SOURCE=intent \
 REASON_INSTRUCTION="the pear under the other pear" \
-bash run_perception.sh 242
+bash perception/run_perception.sh 242
 ```
 
 Perception itself searches inputs with this priority:
@@ -537,14 +537,14 @@ are not discoverable in the environment.
 Reason only assumes perception outputs already exist under `data/` or
 `sample_data/`.
 
-### One-shot reason with `test.py`
+### One-shot reason with `reason/run_reason.py`
 
 Run one scene with annotation-based target resolution:
 
 ```bash
 cd /home/admin128/hanhuang/SmartGrasp
 conda activate smartgrasp
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 59 \
   --target-source auto \
@@ -557,7 +557,7 @@ python test.py \
 Run multiple scenes:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-ids 59 242 691 \
   --target-source auto \
@@ -570,7 +570,7 @@ python test.py \
 Run all discovered perception summaries:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --target-source auto \
   --model gpt-5.5 \
@@ -581,7 +581,7 @@ python test.py \
 Run all graph objects in one scene instead of using annotation:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 59 \
   --target-source all \
@@ -592,7 +592,7 @@ python test.py \
 Run one fixed target id:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 59 \
   --target-source id \
@@ -604,7 +604,7 @@ python test.py \
 Run intent with a custom instruction:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 242 \
   --target-source intent \
@@ -616,7 +616,7 @@ python test.py \
 Run closed-loop simulation:
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 242 \
   --target-source auto \
@@ -626,10 +626,10 @@ python test.py \
   --max-steps 20
 ```
 
-### Reason comparison with `run_reason.sh`
+### Reason comparison with `reason/run_reason.sh`
 
-`run_reason.sh` is a bash wrapper for comparison experiments. It runs
-`test.py --closed-loop` for each model and algorithm, then runs
+`reason/run_reason.sh` is a bash wrapper for comparison experiments. It runs
+`python -m reason.run_reason --closed-loop` for each model and algorithm, then runs
 `analyze_reason_experiment.py`.
 
 Example:
@@ -644,7 +644,7 @@ OUT_ROOT=runs_reason_compare \
 PRIOR_PROMPT=graspability \
 MODELS="gpt-5.5" \
 ALGORITHMS="legacy ig ig_graspability theory" \
-bash run_reason.sh
+bash reason/run_reason.sh
 ```
 
 Run only one algorithm:
@@ -655,10 +655,10 @@ DATA_ROOT=data \
 LIMIT=1 \
 PRIOR_PROMPT=graspability \
 ALGORITHMS="ig_graspability" \
-bash run_reason.sh
+bash reason/run_reason.sh
 ```
 
-`run_reason.sh` environment variables:
+`reason/run_reason.sh` environment variables:
 
 - `PYTHON_BIN`: Python executable. Recommended: `$(which python)` after
   `conda activate smartgrasp`.
@@ -670,7 +670,7 @@ bash run_reason.sh
 - `ALGORITHMS`: space-separated ranking modes.
 - `USE_PROXY`: set to `1` if proxy variables should be kept.
 
-## `test.py` Arguments
+## `reason/run_reason.py` Arguments
 
 - `--root`
   Root directory containing `scene_<id>/perception/summary.json`. Default:
@@ -786,7 +786,7 @@ cd /home/admin128/hanhuang/SmartGrasp
 conda activate smartgrasp
 ```
 
-Use `PYTHON_BIN="$(which python)"` with `run_reason.sh` if the script's default
+Use `PYTHON_BIN="$(which python)"` with `reason/run_reason.sh` if the script's default
 Python path does not match the current machine.
 
 ## Practical Checks

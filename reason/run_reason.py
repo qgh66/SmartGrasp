@@ -10,8 +10,8 @@ Outputs (default under runs/<model>/):
                              (P_s / P_g / P / IG / cost / score)
 
 Usage:
-    python test.py --root sample_data
-    python test.py --root sample_data --model gpt-4o --closed-loop
+    python -m reason.run_reason --root sample_data
+    python -m reason.run_reason --root sample_data --model gpt-4o --closed-loop
 """
 try:
     from dotenv import load_dotenv
@@ -29,6 +29,8 @@ _pre.add_argument("--model", default=None)
 _pre_args, _ = _pre.parse_known_args()
 
 import json
+import os
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -43,7 +45,7 @@ from reason.invisible import handle as handle_fully_occluded
 from reason.closed_loop import run_closed_loop
 from reason.vlm import config as vlm_config
 from reason.intent_handle import resolve_intent
-from run_intent import (
+from intent.run_intent import (
     RUN_INTENT_API_KEY_ENV,
     RUN_INTENT_BASE_URL,
     RUN_INTENT_MODEL,
@@ -116,6 +118,28 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
         timeout=args.intent_timeout,
     )
     selected_id = result.target_object.object_id if result.target_object else None
+
+    # ── 落地 Intent 结果到 data/scene_<id>/intent/ ──
+    try:
+        intent_dir = summary_path.parent.parent / "intent"
+        intent_dir.mkdir(parents=True, exist_ok=True)
+        intent_result = {
+            "scene_id": perception.scene_id,
+            "instruction": instruction,
+            "selected_object_id": selected_id,
+            "candidate_object_ids": [obj.object_id for obj in result.candidates],
+            "reason": result.reason,
+            "vlm_decision": result.vlm_decision,
+        }
+        (intent_dir / "intent_result.json").write_text(
+            json.dumps(intent_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (intent_dir / "id.txt").write_text(
+            f"{selected_id if selected_id is not None else 'none'}\n", encoding="utf-8"
+        )
+        print(f"[INTENT] wrote scene_id={perception.scene_id} -> {intent_dir}", flush=True)
+    except Exception as e:
+        print(f"[INTENT] failed to write intent output: {e}", flush=True)
     return [
         {
             "target_id": selected_id,
@@ -236,6 +260,98 @@ def _selected_summary_row(row: dict) -> dict:
     }
 
 
+def _summary_object_labels(summary_path: Path) -> dict[int, str]:
+    try:
+        with open(summary_path, "r", encoding="utf-8") as f:
+            summary = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    labels: dict[int, str] = {}
+    for item in summary.get("object_points", []) or summary.get("molmo_points", []):
+        try:
+            object_id = int(item.get("object_id", item.get("molmo_id")))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        label = item.get("label")
+        if label:
+            labels[object_id] = str(label)
+    return labels
+
+
+def _object_label(perception, object_id, object_labels: dict[int, str] | None = None):
+    if object_id is None:
+        return None
+    try:
+        object_id = int(object_id)
+    except (TypeError, ValueError):
+        return None
+    if object_labels and object_id in object_labels:
+        return object_labels[object_id]
+    node_id = perception.molmo_to_node.get(object_id)
+    if node_id is None:
+        return f"object_{object_id}"
+    return perception.node_info[node_id].get("label") or f"object_{object_id}"
+
+
+def _part_mask_path(perception, reason_dir: Path, part_id):
+    if part_id is None:
+        return None
+    try:
+        part_id = int(part_id)
+    except (TypeError, ValueError):
+        return None
+
+    for files in (perception.object_id_to_sam2_part_files or {}).values():
+        for part_file in files:
+            try:
+                stem = Path(part_file).stem
+                if int(stem.rsplit("_", 1)[-1]) != part_id:
+                    continue
+            except (IndexError, TypeError, ValueError):
+                continue
+
+            if perception.output_dir is None:
+                return str(part_file)
+            mask_path = perception.output_dir / part_file
+            try:
+                return str(mask_path.resolve().relative_to(reason_dir.resolve()))
+            except ValueError:
+                return os.path.relpath(mask_path.resolve(), reason_dir.resolve())
+
+    return None
+
+
+def _scene_reason_summary(
+    row: dict,
+    perception,
+    summary_path: Path,
+    reason_dir: Path,
+) -> dict:
+    target_id = row.get("target_id")
+    grasp_object_id = row.get("selected_object_id")
+    part_id = row.get("selected_object_graspability_part_id")
+    object_labels = _summary_object_labels(summary_path)
+    return {
+        "scene_id": row.get("scene_id"),
+        "instruction": row.get("intent_instruction") or perception.annotation,
+        "target_object": {
+            "id": target_id,
+            "label": _object_label(perception, target_id, object_labels),
+        },
+        "branch": row.get("branch"),
+        "grasp_object": {
+            "id": grasp_object_id,
+            "label": _object_label(perception, grasp_object_id, object_labels),
+        },
+        "grasp_part_mask": {
+            "part_id": part_id,
+            "path": _part_mask_path(perception, reason_dir, part_id),
+        },
+        "graspability": row.get("selected_object_graspability"),
+    }
+
+
 def _reason_block(row: dict, decision, actions_seq=None) -> str:
     """Build one human-readable reason section for reason.txt."""
     lines = [
@@ -324,6 +440,8 @@ def main():
                         help="Override summary json path")
     parser.add_argument("--details-dir", default=None,
                         help="Override scene_details dir")
+    parser.add_argument("--scene-root", default=None,
+                        help="Per-scene output root (e.g. data). Writes data/scene_<id>/reason/ with per-scene CSV+JSON.")
     parser.add_argument("--threshold", type=float, default=0.0,
                         help="Occlusion edge threshold")
     parser.add_argument(
@@ -356,6 +474,8 @@ def main():
                         help="Max steps in closed-loop (safety cap)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Only run the first N scenes (debug)")
+    parser.add_argument("--quiet", action="store_true",
+                        help="Reduce console output (for pipeline mode)")
     args = parser.parse_args()
 
     if args.reason_algorithm is not None:
@@ -369,7 +489,8 @@ def main():
     model_name = vlm_config.VLM_MODEL
     model_safe = _sanitize_model_name(model_name)
     print(f"[CONFIG] using VLM_MODEL = {model_name}")
-    print(f"[CONFIG] prior_prompt = {args.prior_prompt}, ranking_score = {args.ranking_score}")
+    if not args.quiet:
+        print(f"[CONFIG] prior_prompt = {args.prior_prompt}, ranking_score = {args.ranking_score}")
 
     # Per-model output dirs.
     out_dir = Path(args.out_root) / model_safe / args.prior_prompt / args.ranking_score
@@ -429,13 +550,17 @@ def main():
             print(f"[LIMIT] reached {args.limit} scenes, stopping")
             break
 
+        t_scene_start = time.time()
         try:
+            t0 = time.time()
             perception = load_sample(path, occlusion_threshold=args.threshold)
             perception = replace(
                 perception,
                 prior_prompt_mode=args.prior_prompt,
                 ranking_score=args.ranking_score,
             )
+            t_load = time.time() - t0
+            print(f"[TIMING] {scene_key}: load_sample = {t_load:.2f}s", flush=True)
         except Exception as e:
             print(f"  [ERROR] {scene_key}: load failed: {e}")
             continue
@@ -447,7 +572,10 @@ def main():
         scene_candidate_rows = []
 
         try:
+            t0 = time.time()
             targets = _target_entries(args, path, perception)
+            t_intent = time.time() - t0
+            print(f"[TIMING] {scene_key}: intent_resolve = {t_intent:.2f}s ({len(targets)} targets)", flush=True)
         except Exception as e:
             print(f"  [ERROR] {scene_key}: target resolution failed: {e}")
             continue
@@ -489,9 +617,13 @@ def main():
 
             # 1) Branch classification.
             try:
+                t0 = time.time()
                 branch, reason = classify_branch(p)
+                t_classify = time.time() - t0
                 branch_value = branch.value
                 status = "ok"
+                if branch_value is not None:
+                    print(f"[TIMING] {scene_key} target={mid}: classify_branch = {t_classify:.2f}s -> {branch_value}", flush=True)
             except Exception as e:
                 branch = None
                 branch_value = None
@@ -524,6 +656,7 @@ def main():
                     status = f"closed_loop_error: {e}"
             else:
                 # Single-step mode.
+                t0 = time.time()
                 if branch == Branch.FULLY_VISIBLE:
                     try:
                         decision = handle_fully_visible(p)
@@ -539,6 +672,8 @@ def main():
                         decision = handle_fully_occluded(p)
                     except Exception as e:
                         status = f"handler_error: {e}"
+                t_handler = time.time() - t0
+                print(f"[TIMING] {scene_key} target={mid}: handler = {t_handler:.2f}s", flush=True)
 
             if mid in perception.molmo_to_node:
                 label = perception.node_info[perception.molmo_to_node[mid]]["label"]
@@ -665,6 +800,27 @@ def main():
             "per_object": scene_detail_rows,
         }
 
+        # ── 落盘 per-scene reason 到 data/scene_<id>/reason/ ──
+        if args.scene_root:
+            scene_id = perception.scene_id
+            if scene_id is not None:
+                reason_dir = Path(args.scene_root) / f"scene_{scene_id}" / "reason"
+                reason_dir.mkdir(parents=True, exist_ok=True)
+                reason_df = pd.DataFrame(scene_detail_rows)
+                reason_df.to_csv(reason_dir / "results.csv", index=False)
+                with open(reason_dir / "reason.txt", "w") as f:
+                    f.write(_reason_block(scene_detail_rows[0], decision, actions_seq))
+                scene_summary = _scene_reason_summary(
+                    scene_detail_rows[0],
+                    perception,
+                    path,
+                    reason_dir,
+                )
+                with open(reason_dir / "summary.json", "w") as f:
+                    json.dump(scene_summary, f, ensure_ascii=False, indent=2)
+                if not args.quiet:
+                    print(f"  [scene-out] scene_id={scene_id} -> {reason_dir}", flush=True)
+
         # Write per-scene scene_<id>.csv.
         if scene_candidate_rows:
             scene_id = perception.scene_id
@@ -674,22 +830,24 @@ def main():
                   f"{len(scene_candidate_rows)} candidate rows -> {out_path}")
 
         # Print scene summary to screen.
+        t_scene_total = time.time() - t_scene_start
         print(f"\n=== {scene_key} (scene_id={perception.scene_id}, "
-              f"query_obj_id={query_target_id}) ===")
-        for row in scene_detail_rows:
-            mark = " *" if row["is_query_target"] else "  "
-            label_disp = str(row['target_label'])[:30]
-            if args.closed_loop:
-                seq = row.get("cl_action_seq", "")
-                ok = "✓" if row.get("cl_success") else "✗"
-                steps = row.get("cl_num_steps", "-")
-                info = f" {ok} {steps} steps [{seq}]"
-            else:
-                info = (f" => grasp_id={row['grasp_id']}"
-                        if row['grasp_id'] is not None else "")
-            target_disp = str(row["target_id"]) if row["target_id"] is not None else "None"
-            print(f" {mark} target_id={target_disp:>4} "
-                  f"({label_disp:<30}) -> {row['branch']}{info}")
+              f"query_obj_id={query_target_id}) [{t_scene_total:.1f}s total] ===")
+        if not args.quiet:
+            for row in scene_detail_rows:
+                mark = " *" if row["is_query_target"] else "  "
+                label_disp = str(row['target_label'])[:30]
+                if args.closed_loop:
+                    seq = row.get("cl_action_seq", "")
+                    ok = "✓" if row.get("cl_success") else "✗"
+                    steps = row.get("cl_num_steps", "-")
+                    info = f" {ok} {steps} steps [{seq}]"
+                else:
+                    info = (f" => grasp_id={row['grasp_id']}"
+                            if row['grasp_id'] is not None else "")
+                target_disp = str(row["target_id"]) if row["target_id"] is not None else "None"
+                print(f" {mark} target_id={target_disp:>4} "
+                      f"({label_disp:<30}) -> {row['branch']}{info}")
 
     pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
     with open(reason_path, "w", encoding="utf-8") as f:

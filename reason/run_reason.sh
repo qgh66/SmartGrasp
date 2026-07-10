@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 mkdir -p logs
 
 if [[ -f .env ]]; then
@@ -47,7 +47,7 @@ for model in "${MODEL_LIST[@]}"; do
   for algorithm in "${ALGORITHM_LIST[@]}"; do
     echo
     echo "===== run reason: model=$model algorithm=$algorithm ====="
-    "$PYTHON_BIN" test.py \
+    "$PYTHON_BIN" -m reason.run_reason \
       --root "$DATA_ROOT" \
       --limit "$LIMIT" \
       --closed-loop \

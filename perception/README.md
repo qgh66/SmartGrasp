@@ -27,12 +27,13 @@ export SMARTGRASP_DATA_DIR=/path/to/data
 
 ## 运行
 
-bash run_perception.sh           # 全部场景（API error 自动恢复）
-bash run_perception.sh 59        # 单个
-bash run_perception.sh 59 242    # 多个
-MODE=gt bash run_perception.sh 59 # GT 模式
+bash perception/run_perception.sh           # 全部场景（默认 perception + reason）
+bash perception/run_perception.sh 59        # 单个（默认 perception + reason）
+bash perception/run_perception.sh 59 242    # 多个（默认 perception + reason）
+RUN_REASON_AFTER_PERCEPTION=0 bash perception/run_perception.sh 59 # 只跑 perception
+MODE=gt bash perception/run_perception.sh 59 # GT 模式
 
-输出: data/scene_{id}/perception/ ; 日志: logs/
+输出: data/scene_{id}/perception/ 和 data/scene_{id}/reason/ ; 日志: logs/
 
 ## 参数速查
 

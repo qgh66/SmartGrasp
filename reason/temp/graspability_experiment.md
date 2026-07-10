@@ -55,7 +55,7 @@ conda activate smartgrasp
 ### 原始 information gain 实验
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-id 11 \
@@ -73,7 +73,7 @@ score = IG
 ### 新的 graspability 加权实验
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-id 11 \

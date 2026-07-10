@@ -24,6 +24,7 @@ build/
 dist/
 *.egg-info/
 devel/
+graspnet-workspace/
 
 # --- Data and generated scene artifacts ---
 /data/

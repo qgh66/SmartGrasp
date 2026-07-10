@@ -3,15 +3,15 @@
 # SmartGrasp Perception Pipeline — Linux + 批量 + API 错误自动恢复
 # ============================================================================
 # 用法：
-#   bash run_perception.sh              → 跑全部场景
-#   bash run_perception.sh 59           → 跑单个场景
-#   bash run_perception.sh 59 242 691   → 跑指定多个场景
-# 默认 perception 成功后会继续跑当次 reason（非 closed-loop）。
-#   RUN_REASON_AFTER_PERCEPTION=0 bash run_perception.sh 59  → 只跑 perception
+#   bash perception/run_perception.sh              → 跑全部场景
+#   bash perception/run_perception.sh 59           → 跑单个场景
+#   bash perception/run_perception.sh 59 242 691   → 跑指定多个场景
+# 默认跑 perception + reason。如需只跑 perception:
+#   RUN_REASON_AFTER_PERCEPTION=0 bash perception/run_perception.sh 59
 # ============================================================================
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 mkdir -p logs
 
@@ -142,7 +142,7 @@ run_reason_for_scenes() {
     echo "  Closed loop:     disabled"
     echo "========================================="
 
-    "$REASON_PYTHON" -u test.py \
+    "$REASON_PYTHON" -u -m reason.run_reason \
         --root "$REASON_DATA_ROOT" \
         "${scene_args[@]}" \
         "${target_args[@]}" \
@@ -193,7 +193,7 @@ run_once() {
         echo ""
 
         START_TIME=$(date +%s)
-        if "$PYTHON" -u perception/perception.py \
+        if "$PYTHON" -u -m perception.run_perception \
             "${scene_args[@]}" --mode "$MODE" \
             --review-model-id "${REVIEW_MODEL_ID:-gpt-5.5}" \
             --review-api-key-env OPENAI_API_KEY \
@@ -254,7 +254,10 @@ run_once() {
 }
 
 # ---- 执行 ----
-if [[ ${#SCENES[@]} -eq 1 ]]; then
+if [[ "${PIPELINE_MODE:-0}" == "1" ]]; then
+    # 被 run_pipeline.sh 调用，不单独写 log，输出到 stdout 由 pipeline 统一收集
+    run_once "/dev/stdout" "${SCENES[@]}" || exit $?
+elif [[ ${#SCENES[@]} -eq 1 ]]; then
     # 单场景
     LOG_NUM=$(find logs -maxdepth 1 -name '*.log' 2>/dev/null | wc -l | tr -d ' ')
     LOG_NUM=$((LOG_NUM + 1))

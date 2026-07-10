@@ -1,11 +1,11 @@
-# test.py Intent Integration Notes
+# reason/run_reason.py Intent Integration Notes
 
-这个说明对应当前 `test.py` 的整合逻辑：把 `run_intent` 风格的目标物体
+这个说明对应当前 `reason/run_reason.py` 的整合逻辑：把 `run_intent` 风格的目标物体
 解析，接到后面的 `classify_branch` 和三种 handler 分析流程里。
 
 ## 目标
 
-现在 `test.py` 有两种 target 来源：
+现在 `reason/run_reason.py` 有两种 target 来源：
 
 - 直接给定目标物体 id。
 - 通过 intent VLM 根据自然语言指令和 `perception/summary.json` 解析目标物体 id。
@@ -30,7 +30,7 @@ target id
 source /home/qiuguanhe/miniconda3/etc/profile.d/conda.sh
 conda activate smartgrasp
 
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-source id \
@@ -51,7 +51,7 @@ python test.py \
 source /home/qiuguanhe/miniconda3/etc/profile.d/conda.sh
 conda activate smartgrasp
 
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-source intent \
@@ -61,7 +61,7 @@ python test.py \
 ```
 
 这里 `--target-source intent` 会调用 `reason.intent_handle.resolve_intent(...)`。
-它使用的配置默认来自 `run_intent.py`：
+它使用的配置默认来自 `intent/run_intent.py`：
 
 ```text
 RUN_INTENT_API_KEY_ENV
@@ -70,7 +70,7 @@ RUN_INTENT_MODEL
 ```
 
 API key 仍然从 `.env` 对应环境变量读取；base url 和 model 名称写在
-`run_intent.py` 里。
+`intent/run_intent.py` 里。
 
 intent API timeout 默认是 `300` 秒，可以用下面参数覆盖：
 
@@ -79,7 +79,7 @@ intent API timeout 默认是 `300` 秒，可以用下面参数覆盖：
 ```
 
 `reason/vlm/config.py` 里的 VLM prior API timeout 也默认是 `300` 秒，但它和
-`run_intent.py` 的 intent timeout 是独立配置。
+`intent/run_intent.py` 的 intent timeout 是独立配置。
 
 如果不传 `--instruction`，代码会直接使用 `summary.json` 里的 `annotation`
 作为 intent 指令。例如当前数据里可能是：
@@ -102,7 +102,7 @@ intent API timeout 默认是 `300` 秒，可以用下面参数覆盖：
 target_object = None
 ```
 
-`test.py` 现在不会给它编造一个新 id，也不会继续跑
+`reason/run_reason.py` 现在不会给它编造一个新 id，也不会继续跑
 `classify_branch` 或 handler。它会在输出里写一行：
 
 ```text
@@ -122,7 +122,7 @@ reason = run_intent returned no target object
 原始 information gain 实验：
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-source id \
@@ -135,7 +135,7 @@ python test.py \
 新的 `information_gain * graspability` 实验：
 
 ```bash
-python test.py \
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-source id \
@@ -223,9 +223,9 @@ Step 3. Spatial reasoning
 已经在 `smartgrasp` 环境里跑过：
 
 ```bash
-python -m py_compile test.py
-python test.py --help
-python test.py \
+python -m py_compile reason/run_reason.py
+python -m reason.run_reason --help
+python -m reason.run_reason \
   --root data \
   --scene-id 1094 \
   --target-source id \
