@@ -226,6 +226,13 @@ def main():
         help="Only run a specific scene_id, for example 564",
     )
     parser.add_argument(
+        "--scene-ids",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Only run the listed scene_ids, for example 59 242 691",
+    )
+    parser.add_argument(
         "--target-id",
         type=int,
         default=None,
@@ -292,6 +299,8 @@ def main():
 
     if args.reason_algorithm is not None:
         args.ranking_score = args.reason_algorithm
+    if args.scene_id is not None and args.scene_ids:
+        parser.error("--scene-id and --scene-ids are mutually exclusive")
 
     if args.model:
         vlm_config.VLM_MODEL = args.model
@@ -328,6 +337,22 @@ def main():
         ]
         if not summaries:
             print(f"[WARN] scene_id={args.scene_id} not found under {root}")
+            return
+    elif args.scene_ids:
+        target_suffixes = {f"scene_{scene_id}/perception" for scene_id in args.scene_ids}
+        summaries = [
+            (scene_key, path)
+            for scene_key, path in summaries
+            if scene_key in target_suffixes
+        ]
+        found_scene_ids = {
+            int(scene_key.split("/", 1)[0].removeprefix("scene_"))
+            for scene_key, _ in summaries
+        }
+        missing_scene_ids = sorted(set(args.scene_ids) - found_scene_ids)
+        if missing_scene_ids:
+            print(f"[WARN] scene_ids not found under {root}: {missing_scene_ids}")
+        if not summaries:
             return
 
     csv_rows = []

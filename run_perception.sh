@@ -6,6 +6,8 @@
 #   bash run_perception.sh              → 跑全部场景
 #   bash run_perception.sh 59           → 跑单个场景
 #   bash run_perception.sh 59 242 691   → 跑指定多个场景
+# 默认 perception 成功后会继续跑当次 reason（非 closed-loop）。
+#   RUN_REASON_AFTER_PERCEPTION=0 bash run_perception.sh 59  → 只跑 perception
 # ============================================================================
 set -euo pipefail
 
@@ -58,6 +60,16 @@ D_CNL="${DEPTH_SAM2_CROP_N_LAYERS:-0}"
 D_PIT="${DEPTH_SAM2_PRED_IOU_THRESH:-0.58}"
 D_SST="${DEPTH_SAM2_STABILITY_SCORE_THRESH:-0.73}"
 
+# ---- reason-after-perception 配置：当次场景，单步非 closed-loop ----
+RUN_REASON_AFTER_PERCEPTION="${RUN_REASON_AFTER_PERCEPTION:-1}"
+REASON_PYTHON="${REASON_PYTHON:-$PYTHON}"
+REASON_DATA_ROOT="${REASON_DATA_ROOT:-data}"
+REASON_OUT_ROOT="${REASON_OUT_ROOT:-runs_reason_current}"
+REASON_MODEL="${REASON_MODEL:-${REVIEW_MODEL_ID:-gpt-5.5}}"
+REASON_PRIOR_PROMPT="${REASON_PRIOR_PROMPT:-graspability}"
+REASON_RANKING_SCORE="${REASON_RANKING_SCORE:-ig_graspability}"
+REASON_TARGET_SOURCE="${REASON_TARGET_SOURCE:-auto}"
+
 check_source_inputs() {
     local ok=0
     compgen -G "$SMARTGRASP_DATA_DIR/*.parquet" >/dev/null || {
@@ -92,6 +104,54 @@ check_scene_outputs() {
     return "$ok"
 }
 
+run_reason_for_scenes() {
+    local scenes=("$@")
+    if [[ "$RUN_REASON_AFTER_PERCEPTION" != "1" ]]; then
+        echo ""
+        echo "Reason after perception: skipped (RUN_REASON_AFTER_PERCEPTION=$RUN_REASON_AFTER_PERCEPTION)"
+        return 0
+    fi
+
+    local -a scene_args
+    if [[ ${#scenes[@]} -eq 1 ]]; then
+        scene_args=(--scene-id "${scenes[0]}")
+    else
+        scene_args=(--scene-ids "${scenes[@]}")
+    fi
+
+    local -a target_args=(--target-source "$REASON_TARGET_SOURCE")
+    if [[ -n "${REASON_TARGET_ID:-}" ]]; then
+        target_args=(--target-source id --target-id "$REASON_TARGET_ID")
+    fi
+    if [[ -n "${REASON_INSTRUCTION:-}" ]]; then
+        target_args+=(--instruction "$REASON_INSTRUCTION")
+    fi
+
+    echo ""
+    echo "========================================="
+    echo " SmartGrasp Reason (current perception run)"
+    echo "========================================="
+    echo "  Python:          $REASON_PYTHON"
+    echo "  Scenes:          ${scenes[*]}"
+    echo "  Data root:       $REASON_DATA_ROOT"
+    echo "  Out root:        $REASON_OUT_ROOT"
+    echo "  Model:           $REASON_MODEL"
+    echo "  Prior prompt:    $REASON_PRIOR_PROMPT"
+    echo "  Ranking score:   $REASON_RANKING_SCORE"
+    echo "  Target source:   ${target_args[*]}"
+    echo "  Closed loop:     disabled"
+    echo "========================================="
+
+    "$REASON_PYTHON" -u test.py \
+        --root "$REASON_DATA_ROOT" \
+        "${scene_args[@]}" \
+        "${target_args[@]}" \
+        --model "$REASON_MODEL" \
+        --prior-prompt "$REASON_PRIOR_PROMPT" \
+        --ranking-score "$REASON_RANKING_SCORE" \
+        --out-root "$REASON_OUT_ROOT"
+}
+
 # ---- 解析场景 ----
 if [[ $# -eq 0 ]] || [[ "$1" == "--all" ]]; then
     SCENES=("${ALL_SCENES[@]}")
@@ -104,7 +164,7 @@ fi
 run_once() {
     local log_file="$1"; shift
     local scenes=("$@")
-    local scene_args
+    local -a scene_args
     if [[ ${#scenes[@]} -eq 1 ]]; then
         scene_args=(--scene-id "${scenes[0]}")
     else
@@ -164,6 +224,9 @@ run_once() {
             if ! check_scene_outputs "${scenes[@]}"; then
                 EXIT_CODE=1
             fi
+        fi
+        if [[ $EXIT_CODE -eq 0 ]]; then
+            run_reason_for_scenes "${scenes[@]}" || EXIT_CODE=$?
         fi
         if [[ $EXIT_CODE -ne 0 ]]; then
             echo ""

@@ -1,35 +1,80 @@
-# new branch
-# 排除数据和模型
-data/
-models/*.pth
-models/*.onnx
-*.weights
+# Keep source code, scripts, configs, and docs tracked.
+# Ignore datasets, downloaded models/repos, generated outputs, caches, and local env files.
 
-sample_data/
-scene_details/
-runs/
-runs_detail/
-analysis_report/
-*data*/
+# --- Local environment / editor files ---
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/
+.idea/
+.codex/
+.agents/
+AGENTS.md
 
-# 排除 Python 缓存
+# --- Python / build caches ---
 __pycache__/
 *.py[cod]
-
-# 排除环境和日志
-.venv/
-.conda/
-.env
-logs/
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
 build/
-.codex/
-.vscode/
-.agents/
+dist/
+*.egg-info/
 devel/
 
-sample_data/
+# --- Data and generated scene artifacts ---
+/data/
+/data copy/
+/sample_data/
+/scene_details/
+/outputs/
+*.parquet
+*.npz
+*.npy
+*.zip
 
-# 排除 AI 助手指令文件（本地开发约定，不提交）
-AGENTS.md
-.codex/
-.vscode/
+# --- Experiment outputs / logs / reports ---
+/logs/
+/runs/
+/runs_detail/
+/runs_reason_compare/
+/runs_reason_current/
+/analysis_report/
+results.csv
+branch_results.json
+reason.txt
+
+# --- Downloaded models, checkpoints, and external repos ---
+/models/
+/weights/
+/checkpoints/
+/sam2/
+/sam2_repo/
+/Grounded-SAM-2/
+/Gsam2/
+/segment-anything*/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+*.weights
+
+# --- Large media / debug dumps ---
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.bag
+*.pkl
+*.pickle
+
+# --- Temporary files ---
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
