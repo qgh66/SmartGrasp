@@ -1,0 +1,101 @@
+{
+  "request_id": "scene_0001_step_01",
+  "status": "finished",
+  "success": false,
+  "branch": "partially_occluded",
+  "action_type": "reveal",
+  "object": {
+    "id": 6,
+    "name": "adjustable_wrench",
+    "category": "wrench",
+    "role": "occluder"
+  },
+  "result": {
+    "total": 1,
+    "success_count": 0,
+    "best_index": 0,
+    "failure_reason": "push_displacement_below_threshold",
+    "executed_pose": {
+      "translation": [
+        0.22077341377735138,
+        0.11718335747718811,
+        0.007525185588747263
+      ],
+      "rotation": [
+        [
+          0.0,
+          -0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "width": 0.012
+    },
+    "push_direction": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "requested_distance": 0.05,
+    "actual_displacement": [
+      -4.868600062268857e-07,
+      -8.937393581875952e-07,
+      -8.222589276130066e-16
+    ],
+    "signed_displacement": -4.868600062268857e-07,
+    "start_position": [
+      0.21735137962744644,
+      0.12084731089399728,
+      0.002980778722752325
+    ],
+    "final_position": [
+      0.2173508927674402,
+      0.12084641715463909,
+      0.0029807787227515026
+    ],
+    "frame_log": "available in raw result grasps[0].frame_log"
+  },
+  "artifacts": {
+    "result_json": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal.json",
+    "viz_data_pkl": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal_viz_data.pkl"
+  },
+  "request_reloop": true,
+  "diagnostics": {
+    "physical_simulation": "pybullet_jaka_push",
+    "signed_displacement": -4.868600062268857e-07,
+    "success_threshold": 0.01,
+    "object_point_counts_before": {
+      "1": 2550,
+      "2": 4169,
+      "3": 4850,
+      "4": 19494,
+      "5": 15258,
+      "6": 2192,
+      "7": 8623,
+      "8": 6290,
+      "9": 2279,
+      "10": 2533
+    },
+    "object_point_counts_after": {
+      "1": 1641,
+      "2": 4317,
+      "3": 0,
+      "4": 19558,
+      "5": 11674,
+      "6": 2244,
+      "7": 8040,
+      "8": 6319,
+      "9": 725,
+      "10": 2245
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "model_id": "allenai/Molmo-7B-D-0924",
+  "prompt": "Point out all graspable objects. The requested target is: the green object on the top left.",
+  "image": {
+    "path": "data/integrated_runs/scene_7163_query_9_molmo/scene_image.png",
+    "width": 1200,
+    "height": 1200
+  },
+  "parse_mode": "point_markup",
+  "raw_model_output": " <point x=\"25.5\" y=\"37.6\" alt=\"plastic\">plastic</point>\n<point x=\"26.5\" y=\"68.6\" alt=\"drill\">drill</point>\n<point x=\"45.5\" y=\"94.0\" alt=\"lotion\">lotion</point>\n<point x=\"50.0\" y=\"45.6\" alt=\"box\">box</point>\n<point x=\"52.0\" y=\"30.6\" alt=\"orange\">orange</point>\n<point x=\"62.5\" y=\"16.6\" alt=\"apple\">apple</point>\n<point x=\"64.0\" y=\"57.6\" alt=\"bottle\">bottle</point>\n<point x=\"72.5\" y=\"79.6\" alt=\"tomato\">tomato</point>\n<point x=\"74.5\" y=\"46.6\" alt=\"box\">box</point>\n<point x=\"74.5\" y=\"64.6\" alt=\"plastic\">plastic</",
+  "points": [
+    {
+      "molmo_id": 1,
+      "x": 306,
+      "y": 451,
+      "label": "plastic"
+    },
+    {
+      "molmo_id": 2,
+      "x": 318,
+      "y": 823,
+      "label": "drill"
+    },
+    {
+      "molmo_id": 3,
+      "x": 546,
+      "y": 1128,
+      "label": "lotion"
+    },
+    {
+      "molmo_id": 4,
+      "x": 600,
+      "y": 547,
+      "label": "box"
+    },
+    {
+      "molmo_id": 5,
+      "x": 624,
+      "y": 367,
+      "label": "orange"
+    },
+    {
+      "molmo_id": 6,
+      "x": 750,
+      "y": 199,
+      "label": "apple"
+    },
+    {
+      "molmo_id": 7,
+      "x": 768,
+      "y": 691,
+      "label": "bottle"
+    },
+    {
+      "molmo_id": 8,
+      "x": 870,
+      "y": 955,
+      "label": "tomato"
+    },
+    {
+      "molmo_id": 9,
+      "x": 894,
+      "y": 559,
+      "label": "box"
+    },
+    {
+      "molmo_id": 10,
+      "x": 894,
+      "y": 775,
+      "label": "plastic"
+    }
+  ]
+}

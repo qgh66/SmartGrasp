@@ -1,0 +1,15 @@
+{
+  "scene_id": 7163,
+  "query_obj_id": 9,
+  "annotation": "the green object on the top left",
+  "point_source": "molmo",
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo",
+  "image_path": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/scene_image.png",
+  "depth_path": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/depth.npy",
+  "points_json": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/molmo_points.json",
+  "graph_json": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/occlusion_graph.json",
+  "graph_png": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/occlusion_graph.png",
+  "num_nodes": 10,
+  "num_edges": 1,
+  "result_json": "/home/admin128/qiuguanhe/SmartGrasp/perception/output/scene_7163_query_9_molmo/perception_result.json"
+}

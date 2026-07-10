@@ -1,0 +1,561 @@
+{
+  "image": {
+    "path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/scene_image.png",
+    "width": 1200,
+    "height": 1200
+  },
+  "depth_map": {
+    "path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/depth.npy",
+    "shape": [
+      1200,
+      1200
+    ]
+  },
+  "points_source": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/molmo_points.json",
+  "molmo_points": [
+    {
+      "molmo_id": 1,
+      "x": 306,
+      "y": 451,
+      "label": "plastic"
+    },
+    {
+      "molmo_id": 2,
+      "x": 318,
+      "y": 823,
+      "label": "drill"
+    },
+    {
+      "molmo_id": 3,
+      "x": 546,
+      "y": 1128,
+      "label": "lotion"
+    },
+    {
+      "molmo_id": 4,
+      "x": 600,
+      "y": 547,
+      "label": "box"
+    },
+    {
+      "molmo_id": 5,
+      "x": 624,
+      "y": 367,
+      "label": "orange"
+    },
+    {
+      "molmo_id": 6,
+      "x": 750,
+      "y": 199,
+      "label": "apple"
+    },
+    {
+      "molmo_id": 7,
+      "x": 768,
+      "y": 691,
+      "label": "bottle"
+    },
+    {
+      "molmo_id": 8,
+      "x": 870,
+      "y": 955,
+      "label": "tomato"
+    },
+    {
+      "molmo_id": 9,
+      "x": 894,
+      "y": 559,
+      "label": "box"
+    },
+    {
+      "molmo_id": 10,
+      "x": 894,
+      "y": 775,
+      "label": "plastic"
+    }
+  ],
+  "sam_model_id": "facebook/sam-vit-base",
+  "graph": {
+    "graph_type": "occlusion_relationship_graph",
+    "adjacency_matrix": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    ],
+    "nodes": [
+      {
+        "node_id": 0,
+        "molmo_id": 1,
+        "label": "plastic",
+        "point": {
+          "x": 306,
+          "y": 451
+        },
+        "sam_positive_points": [
+          {
+            "x": 306,
+            "y": 451
+          },
+          {
+            "x": 316,
+            "y": 451
+          },
+          {
+            "x": 296,
+            "y": 451
+          },
+          {
+            "x": 306,
+            "y": 461
+          },
+          {
+            "x": 306,
+            "y": 441
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_001_plastic.png",
+        "mask_area": 3720,
+        "predicted_iou": 0.9648628234863281
+      },
+      {
+        "node_id": 1,
+        "molmo_id": 2,
+        "label": "drill",
+        "point": {
+          "x": 318,
+          "y": 823
+        },
+        "sam_positive_points": [
+          {
+            "x": 318,
+            "y": 823
+          },
+          {
+            "x": 328,
+            "y": 823
+          },
+          {
+            "x": 308,
+            "y": 823
+          },
+          {
+            "x": 318,
+            "y": 833
+          },
+          {
+            "x": 318,
+            "y": 813
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_002_drill.png",
+        "mask_area": 5402,
+        "predicted_iou": 0.946168065071106
+      },
+      {
+        "node_id": 2,
+        "molmo_id": 3,
+        "label": "lotion",
+        "point": {
+          "x": 546,
+          "y": 1128
+        },
+        "sam_positive_points": [
+          {
+            "x": 546,
+            "y": 1128
+          },
+          {
+            "x": 556,
+            "y": 1128
+          },
+          {
+            "x": 536,
+            "y": 1128
+          },
+          {
+            "x": 546,
+            "y": 1138
+          },
+          {
+            "x": 546,
+            "y": 1118
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_003_lotion.png",
+        "mask_area": 15659,
+        "predicted_iou": 0.9932020902633667
+      },
+      {
+        "node_id": 3,
+        "molmo_id": 4,
+        "label": "box",
+        "point": {
+          "x": 600,
+          "y": 547
+        },
+        "sam_positive_points": [
+          {
+            "x": 600,
+            "y": 547
+          },
+          {
+            "x": 610,
+            "y": 547
+          },
+          {
+            "x": 590,
+            "y": 547
+          },
+          {
+            "x": 600,
+            "y": 557
+          },
+          {
+            "x": 600,
+            "y": 537
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_004_box.png",
+        "mask_area": 20625,
+        "predicted_iou": 0.9229840040206909
+      },
+      {
+        "node_id": 4,
+        "molmo_id": 5,
+        "label": "orange",
+        "point": {
+          "x": 624,
+          "y": 367
+        },
+        "sam_positive_points": [
+          {
+            "x": 624,
+            "y": 367
+          },
+          {
+            "x": 634,
+            "y": 367
+          },
+          {
+            "x": 614,
+            "y": 367
+          },
+          {
+            "x": 624,
+            "y": 377
+          },
+          {
+            "x": 624,
+            "y": 357
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_005_orange.png",
+        "mask_area": 13252,
+        "predicted_iou": 0.9970495700836182
+      },
+      {
+        "node_id": 5,
+        "molmo_id": 6,
+        "label": "apple",
+        "point": {
+          "x": 750,
+          "y": 199
+        },
+        "sam_positive_points": [
+          {
+            "x": 750,
+            "y": 199
+          },
+          {
+            "x": 760,
+            "y": 199
+          },
+          {
+            "x": 740,
+            "y": 199
+          },
+          {
+            "x": 750,
+            "y": 209
+          },
+          {
+            "x": 750,
+            "y": 189
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_006_apple.png",
+        "mask_area": 13010,
+        "predicted_iou": 0.9891136884689331
+      },
+      {
+        "node_id": 6,
+        "molmo_id": 7,
+        "label": "bottle",
+        "point": {
+          "x": 768,
+          "y": 691
+        },
+        "sam_positive_points": [
+          {
+            "x": 768,
+            "y": 691
+          },
+          {
+            "x": 778,
+            "y": 691
+          },
+          {
+            "x": 758,
+            "y": 691
+          },
+          {
+            "x": 768,
+            "y": 701
+          },
+          {
+            "x": 768,
+            "y": 681
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_007_bottle.png",
+        "mask_area": 23137,
+        "predicted_iou": 0.9869133234024048
+      },
+      {
+        "node_id": 7,
+        "molmo_id": 8,
+        "label": "tomato",
+        "point": {
+          "x": 870,
+          "y": 955
+        },
+        "sam_positive_points": [
+          {
+            "x": 870,
+            "y": 955
+          },
+          {
+            "x": 880,
+            "y": 955
+          },
+          {
+            "x": 860,
+            "y": 955
+          },
+          {
+            "x": 870,
+            "y": 965
+          },
+          {
+            "x": 870,
+            "y": 945
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_008_tomato.png",
+        "mask_area": 35594,
+        "predicted_iou": 0.9977571964263916
+      },
+      {
+        "node_id": 8,
+        "molmo_id": 9,
+        "label": "box",
+        "point": {
+          "x": 894,
+          "y": 559
+        },
+        "sam_positive_points": [
+          {
+            "x": 894,
+            "y": 559
+          },
+          {
+            "x": 904,
+            "y": 559
+          },
+          {
+            "x": 884,
+            "y": 559
+          },
+          {
+            "x": 894,
+            "y": 569
+          },
+          {
+            "x": 894,
+            "y": 549
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_009_box.png",
+        "mask_area": 15986,
+        "predicted_iou": 0.9507314562797546
+      },
+      {
+        "node_id": 9,
+        "molmo_id": 10,
+        "label": "plastic",
+        "point": {
+          "x": 894,
+          "y": 775
+        },
+        "sam_positive_points": [
+          {
+            "x": 894,
+            "y": 775
+          },
+          {
+            "x": 904,
+            "y": 775
+          },
+          {
+            "x": 884,
+            "y": 775
+          },
+          {
+            "x": 894,
+            "y": 785
+          },
+          {
+            "x": 894,
+            "y": 765
+          }
+        ],
+        "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data/integrated_runs/scene_7163_query_9_molmo/mask/mask_010_plastic.png",
+        "mask_area": 17036,
+        "predicted_iou": 0.9250547885894775
+      }
+    ],
+    "edges": [
+      {
+        "source": 9,
+        "target": 6,
+        "relation": "occludes",
+        "contact_pixels": 158,
+        "contact_ratio": 0.009274477576895986,
+        "source_depth_median": 75.52039337158203,
+        "target_depth_median": 75.90443420410156,
+        "depth_gap": 0.38404083251953125,
+        "source_molmo_id": 10,
+        "target_molmo_id": 7,
+        "source_label": "plastic",
+        "target_label": "bottle"
+      }
+    ]
+  }
+}
