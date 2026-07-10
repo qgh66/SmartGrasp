@@ -137,6 +137,48 @@ def _build_user_text_invisible(
     return "\n".join(lines)
 
 
+def _build_user_text_graspability(
+    objects: list[dict[str, Any]],
+) -> str:
+    """Build the user prompt for object/part graspability only."""
+    lines = [
+        "Estimate graspability for the current robot grasp decision.",
+        "",
+        "Objects to score:",
+    ]
+    for obj in objects:
+        part_ids = obj.get("part_ids") or []
+        lines.append(
+            f"  - mid={obj['mid']}, label={obj['label']}, "
+            f"sam2_part_ids={part_ids}"
+        )
+    mids = [obj["mid"] for obj in objects]
+    lines.append("")
+    lines.append(
+        "For each object, return one integrated object-level graspability "
+        "score in [0, 1] and part-level graspability scores for every listed "
+        "sam2_part_id. Use the labeled scene image and SAM2 part contact "
+        "sheet when available. Assume a parallel gripper. Object-level "
+        "graspability should reflect whether grasping the best feasible "
+        "visible part/region can move and remove the whole object safely. "
+        "Part-level graspability should score whether that exact SAM2 part is "
+        "exposed, reachable, stable, thick enough, has clearance, and is useful "
+        "as a grasp contact/region. Penalize tiny, thin, buried, merged, "
+        "occluded, collision-prone, or unstable parts. If an object has no "
+        "listed sam2_part_ids, return an empty object for it in "
+        "graspability_parts."
+    )
+    lines.append("")
+    lines.append(
+        f'Reply ONLY with JSON: {{"graspability": {{"<mid>": <0..1>, ...}}, '
+        f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
+        f'"reason": "<brief reason for the object and part scores>"}}. '
+        f'Mids must be exactly: {mids}. Include every listed sam2_part_id for '
+        f'each mid in graspability_parts. NO markdown, NO code fences, NO prose.'
+    )
+    return "\n".join(lines)
+
+
 def _encode_image_b64(image: np.ndarray) -> str:
     """Encode an RGB numpy image as base64 JPEG."""
     if image.dtype != np.uint8:
@@ -257,6 +299,36 @@ def _parse_score_payload_normalized(
             "graspability_part_id": {mid: None for mid in occluder_mids},
             "graspability_parts": {mid: {} for mid in occluder_mids},
             "reason": "VLM response could not be parsed; used fallback scores.",
+        }
+
+
+def _parse_graspability_payload(
+    text: str,
+    mids: list[int],
+) -> dict[str, Any]:
+    """Parse object-level and part-level graspability only."""
+    try:
+        data = json.loads(_clean_json_text(text))
+        return {
+            "graspability": _parse_object_graspability(
+                data.get("graspability", {}),
+                data.get("graspability_parts", {}),
+                mids,
+            ),
+            "graspability_part_id": _parse_graspability_part_id(
+                data.get("graspability_parts", {}), mids
+            ),
+            "graspability_parts": _normalize_graspability_parts(
+                data.get("graspability_parts", {}), mids
+            ),
+            "reason": _parse_reason(data),
+        }
+    except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+        return {
+            "graspability": {mid: 1.0 for mid in mids},
+            "graspability_part_id": {mid: None for mid in mids},
+            "graspability_parts": {mid: {} for mid in mids},
+            "reason": "VLM response could not be parsed; used fallback graspability.",
         }
 
 

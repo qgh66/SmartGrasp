@@ -12,7 +12,9 @@ from . import config as vlm_config
 from .helper import (
     _build_user_text_partial,
     _build_user_text_invisible,
+    _build_user_text_graspability,
     _encode_image_b64,
+    _parse_graspability_payload,
     _parse_score_payload_independent,
     _parse_score_payload_normalized,
     _parse_scores_independent,
@@ -178,6 +180,30 @@ Output strictly as JSON, no prose, no markdown, no code fences:
 Include exactly the requested mids in scores, graspability, and graspability_parts."""
 
 
+_SYSTEM_PROMPT_GRASPABILITY = """You are a robot graspability evaluator.
+
+You will see:
+- A labeled scene image where objects are outlined and tagged with ids.
+- Optionally, a SAM2 part contact sheet showing candidate part ids.
+- A list of current object ids that the robot may grasp now.
+
+For EACH listed object, estimate:
+1. ONE integrated object-level graspability coefficient in [0, 1].
+2. A part-level graspability coefficient in [0, 1] for every listed SAM2
+   part id of that object.
+
+The object-level score should measure whether a parallel gripper can grasp the
+best feasible visible part/region and remove the whole object safely. Consider
+exposed area, stable antipodal/contact geometry, thickness, clearance from
+neighbors, collision risk, and whether the grasped part can move the whole
+object. Part-level scores should judge that exact SAM2 part as a visible grasp
+contact/region.
+
+Output strictly as JSON, no prose, no markdown, no code fences:
+{"graspability": {"<mid>": <0..1>, ...}, "graspability_parts": {"<mid>": {"<part_id>": <0..1>, ...}, ...}, "reason": "<brief reason>"}
+Include exactly the requested mids and every listed part id."""
+
+
 
 def _parse_scores_normalized(
     text: str,
@@ -238,6 +264,16 @@ class VLMClient(ABC):
         prompt_mode: str = "original",
     ) -> dict[str, Any]:
         """Return hidden-target probabilities and optional graspability."""
+        ...
+
+    @abstractmethod
+    def score_graspability_objects(
+        self,
+        objects: list[dict[str, Any]],
+        labeled_rgb: np.ndarray,
+        parts_sheet_rgb: np.ndarray | None = None,
+    ) -> dict[str, Any]:
+        """Return object-level and part-level graspability for objects."""
         ...
 
 
@@ -472,6 +508,69 @@ class OpenAIVisionClient(VLMClient):
                 "graspability_part_id": {mid: None for mid in mids},
                 "graspability_parts": {mid: {} for mid in mids},
                 "reason": f"VLM request failed with {type(e).__name__}; used fallback scores.",
+            }
+
+
+    def score_graspability_objects(
+        self,
+        objects: list[dict[str, Any]],
+        labeled_rgb: np.ndarray,
+        parts_sheet_rgb: np.ndarray | None = None,
+    ) -> dict[str, Any]:
+        mids = [obj["mid"] for obj in objects]
+        print(f"[VLM-GRASP] calling {self.model}, objects={mids}")
+
+        user_text = _build_user_text_graspability(objects)
+        b64 = _encode_image_b64(labeled_rgb)
+        content: list[dict[str, Any]] = [
+            {"type": "text", "text": user_text},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{b64}",
+                    "detail": "high",
+                },
+            },
+        ]
+        if parts_sheet_rgb is not None:
+            parts_b64 = _encode_image_b64(parts_sheet_rgb)
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{parts_b64}",
+                        "detail": "high",
+                    },
+                }
+            )
+
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT_GRASPABILITY},
+                    {"role": "user", "content": content},
+                ],
+                temperature=self.temperature,
+                response_format={"type": "json_object"},
+            )
+            text = resp.choices[0].message.content or ""
+            payload = _parse_graspability_payload(text, mids)
+            print(
+                f"[VLM-GRASP] got graspability: {payload['graspability']}; "
+                f"reason: {payload.get('reason', '')}"
+            )
+            return payload
+        except Exception as e:
+            import traceback
+            print(f"[VLM-GRASP] failed with {type(e).__name__}: {e}")
+            traceback.print_exc()
+            print("[VLM-GRASP] fallback to graspability=1.0")
+            return {
+                "graspability": {mid: 1.0 for mid in mids},
+                "graspability_part_id": {mid: None for mid in mids},
+                "graspability_parts": {mid: {} for mid in mids},
+                "reason": f"VLM request failed with {type(e).__name__}; used fallback graspability.",
             }
 
 

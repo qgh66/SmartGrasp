@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -17,7 +21,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from reason.intent_handle import resolve_intent
 
-load_dotenv()
+if load_dotenv is not None:
+    load_dotenv()
 
 RUN_INTENT_MODEL = "gpt-5.5"
 RUN_INTENT_BASE_URL = "https://www.highland-api.top/v1"

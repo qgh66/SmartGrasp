@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..graspability import score_current_objects
 from ..schemas import PerceptionOutput, GraspDecision, Branch
 
 
@@ -19,6 +20,11 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         )
 
     target_label = perception.node_info[target_node].get("label", "")
+    graspability_payload = score_current_objects([target_mid], perception)
+    graspability = graspability_payload.get("graspability", {}).get(target_mid, 1.0)
+    graspability_part_id = graspability_payload.get("graspability_part_id", {}).get(target_mid)
+    graspability_parts = graspability_payload.get("graspability_parts", {}).get(target_mid, {})
+    vlm_reason = str(graspability_payload.get("reason") or "")
 
     return GraspDecision(
         branch=Branch.FULLY_VISIBLE,
@@ -28,5 +34,15 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         is_terminal=True,
         success=True,
         message=f"target molmo_id={target_mid} ({target_label}) is fully visible, "
-                f"directly graspable",
+                f"directly graspable; G={graspability:.3f} "
+                f"best_part={graspability_part_id}; vlm_reason={vlm_reason}",
+        details={
+            target_mid: {
+                "graspability": graspability,
+                "graspability_part_id": graspability_part_id,
+                "graspability_parts": graspability_parts,
+                "score": graspability,
+                "vlm_reason": vlm_reason,
+            }
+        },
     )

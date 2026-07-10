@@ -13,8 +13,13 @@ Usage:
     python test.py --root sample_data
     python test.py --root sample_data --model gpt-4o --closed-loop
 """
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
 
 # Parse --model early for backward-compatible CLI shape. The actual default
 # model now lives in reason/vlm/config.py.
@@ -64,7 +69,12 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
     """Resolve the target ids to evaluate for one scene."""
     source = args.target_source
     if source == "auto":
-        source = "id" if args.target_id is not None else "all"
+        if args.target_id is not None:
+            source = "id"
+        elif str(perception.annotation or "").strip():
+            source = "intent"
+        else:
+            source = "all"
 
     if source == "all":
         return [
@@ -130,18 +140,36 @@ def _jsonable_part_scores(raw_parts) -> dict[str, float]:
     return out
 
 
+def _jsonable_scalar(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _selected_graspability_fields(decision) -> dict:
     fields = {
         "selected_object_id": None,
+        "selected_object_label": None,
+        "selected_object_score": None,
         "selected_object_graspability": None,
         "selected_object_graspability_part_id": None,
         "selected_object_graspability_parts": {},
+        "selected_object_vlm_result": {},
+        "selected_occluder_id": None,
+        "selected_occluder_label": None,
+        "selected_occluder_category": None,
+        "selected_occluder_score": None,
+        "selected_occluder_vlm_result": {},
     }
     if decision is None or getattr(decision, "grasp_id", None) is None:
         return fields
 
     selected_id = int(decision.grasp_id)
     fields["selected_object_id"] = selected_id
+    fields["selected_object_label"] = getattr(decision, "grasp_label", None)
     details = getattr(decision, "details", None) or {}
     selected_info = details.get(selected_id, {})
     if not isinstance(selected_info, dict):
@@ -164,6 +192,25 @@ def _selected_graspability_fields(decision) -> dict:
     fields["selected_object_graspability_parts"] = _jsonable_part_scores(
         selected_info.get("graspability_parts")
     )
+    fields["selected_object_score"] = _jsonable_scalar(selected_info.get("score"))
+    fields["selected_object_vlm_result"] = {
+        "P_s": _jsonable_scalar(selected_info.get("P_s")),
+        "P_g": _jsonable_scalar(selected_info.get("P_g")),
+        "P": _jsonable_scalar(selected_info.get("P")),
+        "IG": _jsonable_scalar(selected_info.get("IG")),
+        "IG_normalized": _jsonable_scalar(selected_info.get("IG_normalized")),
+        "score": _jsonable_scalar(selected_info.get("score")),
+        "graspability": fields["selected_object_graspability"],
+        "graspability_part_id": fields["selected_object_graspability_part_id"],
+        "graspability_parts": fields["selected_object_graspability_parts"],
+        "vlm_reason": selected_info.get("vlm_reason"),
+    }
+    if getattr(decision, "branch", None) != Branch.FULLY_VISIBLE:
+        fields["selected_occluder_id"] = selected_id
+        fields["selected_occluder_label"] = getattr(decision, "grasp_label", None)
+        fields["selected_occluder_category"] = getattr(decision, "grasp_label", None)
+        fields["selected_occluder_score"] = fields["selected_object_score"]
+        fields["selected_occluder_vlm_result"] = fields["selected_object_vlm_result"]
     return fields
 
 
@@ -175,9 +222,17 @@ def _selected_summary_row(row: dict) -> dict:
         "target_label": row.get("target_label"),
         "branch": row.get("branch"),
         "selected_object_id": row.get("selected_object_id"),
+        "selected_object_label": row.get("selected_object_label"),
+        "selected_object_score": row.get("selected_object_score"),
         "selected_object_graspability": row.get("selected_object_graspability"),
         "selected_object_graspability_part_id": row.get("selected_object_graspability_part_id"),
         "selected_object_graspability_parts": row.get("selected_object_graspability_parts", {}),
+        "selected_object_vlm_result": row.get("selected_object_vlm_result", {}),
+        "selected_occluder_id": row.get("selected_occluder_id"),
+        "selected_occluder_label": row.get("selected_occluder_label"),
+        "selected_occluder_category": row.get("selected_occluder_category"),
+        "selected_occluder_score": row.get("selected_occluder_score"),
+        "selected_occluder_vlm_result": row.get("selected_occluder_vlm_result", {}),
     }
 
 
@@ -191,6 +246,12 @@ def _reason_block(row: dict, decision, actions_seq=None) -> str:
         f"target_label: {row.get('target_label')}",
         f"branch: {row.get('branch')}",
         f"grasp_id: {row.get('grasp_id')}",
+        f"selected_object_id: {row.get('selected_object_id')}",
+        f"selected_object_label: {row.get('selected_object_label')}",
+        f"selected_object_score: {row.get('selected_object_score')}",
+        f"selected_occluder_id: {row.get('selected_occluder_id')}",
+        f"selected_occluder_label: {row.get('selected_occluder_label')}",
+        f"selected_occluder_score: {row.get('selected_occluder_score')}",
         f"selected_object_graspability: {row.get('selected_object_graspability')}",
         f"selected_object_graspability_part_id: {row.get('selected_object_graspability_part_id')}",
         f"selected_object_graspability_parts: {row.get('selected_object_graspability_parts')}",
@@ -563,10 +624,9 @@ def main():
                             "vlm_reason": info.get("vlm_reason"),
                             "selected": (cand_mid == action.grasp_id),
                         })
-            elif (decision is not None
-                    and branch in {Branch.PARTIALLY_OCCLUDED, Branch.FULLY_OCCLUDED}
-                    and decision.details):
-                # Single-step mode (no step column).
+            elif decision is not None and decision.details:
+                # Single-step mode (no step column). Includes fully_visible so
+                # the current target object's part graspability is available.
                 for cand_mid, info in decision.details.items():
                     cand_node = perception.molmo_to_node[cand_mid]
                     cand_label = perception.node_info[cand_node]["label"]
@@ -579,10 +639,10 @@ def main():
                         "target_label": label,
                         "candidate_id": cand_mid,
                         "candidate_label": cand_label,
-                        "P_s": info["P_s"],
-                        "P_g": info["P_g"],
-                        "P":   info["P"],
-                        "IG":  info["IG"],
+                        "P_s": info.get("P_s"),
+                        "P_g": info.get("P_g"),
+                        "P":   info.get("P"),
+                        "IG":  info.get("IG"),
                         "IG_normalized": info.get("IG_normalized"),
                         "graspability": info.get("graspability"),
                         "graspability_part_id": info.get("graspability_part_id"),

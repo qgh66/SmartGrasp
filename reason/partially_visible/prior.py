@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 from typing import Any
 
+from ..graspability import score_current_objects
 from ..vlm import VLMClient, get_default_client
 
 
@@ -48,9 +49,26 @@ def compute_semantic_prior_all_ancestors(
     if not ancestor_mids:
         return {"scores": {}, "graspability": {}, "reason": "target has no ancestors"}
     if len(ancestor_mids)<=1:
+        prompt_mode = getattr(perception, "prior_prompt_mode", "original")
+        if prompt_mode == "graspability":
+            graspability_payload = score_current_objects(
+                ancestor_mids, perception, client=client
+            )
+            return {
+                "scores": {mid: 1.0 for mid in ancestor_mids},
+                "graspability": graspability_payload.get("graspability", {}),
+                "graspability_part_id": graspability_payload.get("graspability_part_id", {}),
+                "graspability_parts": graspability_payload.get("graspability_parts", {}),
+                "reason": (
+                    "single ancestor; assigned deterministic prior. "
+                    + str(graspability_payload.get("reason") or "")
+                ).strip(),
+            }
         return {
             "scores": {mid: 1.0 for mid in ancestor_mids},
             "graspability": {mid: 1.0 for mid in ancestor_mids},
+            "graspability_part_id": {mid: None for mid in ancestor_mids},
+            "graspability_parts": {mid: {} for mid in ancestor_mids},
             "reason": "single ancestor; assigned deterministic prior",
         }
 
