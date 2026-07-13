@@ -1,0 +1,45 @@
+image:
+  width: 1280
+  height: 720
+
+paths:
+  output_dir: ../result
+  trial_log_root: log
+  trial_log_subdir: single_object_grasp
+  checkpoint: checkpoints/checkpoint-rs.tar
+  hand_eye_calibration: calibration/hand_eye_tcp_camera.json
+  camera_coordinates_dir: /home/admin128/ChengyuanWang/high_low_comm/scripts/human_playdata_process/hand_object_detector/camera_coordinates/camera_coordinates - 副本
+  jaka_python: /home/admin128/anaconda3/envs/smartgrasp310/bin/python
+  jkrc_dir: jkrc
+  jaka_worker: scripts/jaka_motion_worker.py
+
+calibration:
+  tcp_camera_translation_offset_mm: [0.0, 0.0, -82.5]
+  grasp_center_to_tcp_offset_mm: 174.0
+  gripper_opening_axis_base: [0.0, 1.0, 0.0]
+  gripper_roll_offset_deg: 120.0
+  plate_to_robot_mm:
+    - [1.0, 0.0, 0.0, -550.0]
+    - [0.0, -1.0, 0.0, 67.0]
+    - [0.0, 0.0, -1.0, 0.0]
+    - [0.0, 0.0, 0.0, 1.0]
+  tcp_target_translation_offset_mm: [-23.0, -25.0, 10.0]
+
+robot:
+  jaka_ip: 192.168.1.199
+  ready_pose: [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0]
+  capture_joint_pose_deg: [0.0, 90.0, 45.0, 135.0, 270.0, 72.0]
+  place_target_joint_pose_deg: [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0]
+  joint_velocity_rad_s: 0.5
+
+gripper:
+  robotiq_port: /dev/ttyUSB0
+  open_force: 30
+  close_force: 200
+
+camera:
+  default_index: 1
+  default_serial_suffix: "72508"
+
+filters:
+  target_mask_center_tolerance_px: 25.0

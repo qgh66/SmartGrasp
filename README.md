@@ -589,16 +589,20 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --velocity 10 \
   --acceleration 10
 
-## 拍照,抓取:
+## 拍照,抓取(循环):
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
-  --top-k 20 \
+  --top-k 100 \
   --trial-log-subdir single_object \
   --trial-name grasp_execute \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 40 \
   --acceleration 20 \
-  --execute 
+  --loop \
+  --execute \
+  --grasp-crop-margin-px 20 \
+  --grasp-crop-margin-ratio 0.2 \
+  --target-mask-center-tolerance-px 90 

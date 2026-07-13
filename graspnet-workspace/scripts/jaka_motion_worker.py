@@ -20,6 +20,10 @@ from typing import Any
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_JKRC_DIR = WORKSPACE_ROOT / "jkrc"
 VENDOR_DIR = WORKSPACE_ROOT / "vendor"
+DEFAULT_GRIPPER_OPEN_FORCE = 30
+DEFAULT_GRIPPER_CLOSE_FORCE = 100
+SERVER_READY_PREFIX = "__JAKA_READY__ "
+SERVER_RESPONSE_PREFIX = "__JAKA_RESPONSE__ "
 
 
 def import_jkrc_backend(jkrc_dir: Path, quiet: bool = False):
@@ -191,11 +195,20 @@ def connect_gripper(comport: str, slave_address: int = 9, activate: bool = True)
     return backend, gripper
 
 
-def move_gripper(gripper: Any, backend: str, command: str, velocity: int = 30, force: int = 30) -> None:
+def move_gripper(
+    gripper: Any,
+    backend: str,
+    command: str,
+    velocity: int = 30,
+    open_force: int = DEFAULT_GRIPPER_OPEN_FORCE,
+    close_force: int = DEFAULT_GRIPPER_CLOSE_FORCE,
+) -> None:
     if command == "open":
         position = 0
+        force = open_force
     elif command == "close":
         position = 255
+        force = close_force
     else:
         raise ValueError(f"Unsupported gripper command: {command}")
 
@@ -217,80 +230,160 @@ def shutdown_gripper(gripper: Any, backend: str) -> None:
         pass
 
 
-def execute_sequence(args: argparse.Namespace) -> None:
-    sequence = json.loads(args.sequence_json)
+def decode_sequence(sequence_json: str) -> list[dict[str, Any]]:
+    sequence = json.loads(sequence_json)
     if not isinstance(sequence, list):
         raise ValueError("--sequence-json must decode to a list")
+    return sequence
 
+
+def sequence_needs_gripper(sequence: list[dict[str, Any]]) -> bool:
+    return any(isinstance(step, dict) and step.get("type") == "gripper" for step in sequence)
+
+
+def execute_steps(
+    sequence: list[dict[str, Any]],
+    args: argparse.Namespace,
+    robot: Any,
+    gripper_backend: str | None,
+    gripper: Any | None,
+) -> None:
+    for index, step in enumerate(sequence):
+        if not isinstance(step, dict):
+            raise ValueError(f"Step {index} is not an object: {step!r}")
+        step_type = step.get("type")
+        print(f"[jkrc-worker] step {index}: {step}")
+        if step_type == "move":
+            pose = step.get("pose")
+            if not isinstance(pose, list) or len(pose) != 6:
+                raise ValueError(f"Move step {index} must provide a 6D pose")
+            target_pose = [float(value) for value in pose]
+            if args.tcp_monitor:
+                print(f"[tcp-base] step={index} target: {format_tcp_pose(target_pose)}", flush=True)
+                print_tcp_pose(robot, f"step={index} before_move")
+            monitor = TcpPoseMonitor(robot, f"step={index} moving", args.tcp_monitor_interval) if args.tcp_monitor else None
+            if monitor is not None:
+                monitor.start()
+            try:
+                ret = robot.linear_move_extend(
+                    target_pose,
+                    0,
+                    True,
+                    float(args.velocity),
+                    float(args.acceleration),
+                    1,
+                )
+            finally:
+                if monitor is not None:
+                    monitor.stop()
+            check_call("linear_move_extend", ret)
+            if args.tcp_monitor:
+                print_tcp_pose(robot, f"step={index} after_move")
+        elif step_type == "joint_move":
+            joints = step.get("joints_rad")
+            if not isinstance(joints, list) or len(joints) != 6:
+                raise ValueError(f"Joint move step {index} must provide 6 joint values in radians")
+            target_joints = [float(value) for value in joints]
+            print(f"[joint-base] step={index} target_rad={target_joints}", flush=True)
+            ret = robot.joint_move(target_joints, 0, True, float(args.joint_velocity_rad_s))
+            check_call("joint_move", ret)
+            if args.tcp_monitor:
+                print_tcp_pose(robot, f"step={index} after_joint_move")
+        elif step_type == "gripper":
+            if args.tcp_monitor:
+                print_tcp_pose(robot, f"step={index} before_gripper")
+            if gripper is None or gripper_backend is None:
+                raise RuntimeError("Gripper step reached before the gripper was connected.")
+            move_gripper(
+                gripper,
+                gripper_backend,
+                str(step.get("command")),
+                open_force=int(args.gripper_open_force),
+                close_force=int(args.gripper_close_force),
+            )
+            if args.tcp_monitor:
+                print_tcp_pose(robot, f"step={index} after_gripper")
+        else:
+            raise ValueError(f"Unsupported step type at {index}: {step_type!r}")
+
+
+def open_robot(args: argparse.Namespace) -> tuple[Any, bool]:
     jkrc = import_jkrc_backend(Path(args.jkrc_dir))
     robot = jkrc.RC(args.jaka_ip)
+    print_sdk_info(robot)
+    check_call("login", robot.login())
+    check_call("power_on", robot.power_on())
+    check_call("enable_robot", robot.enable_robot())
+    if args.tcp_monitor:
+        print_tcp_pose(robot, "after_enable")
+    return robot, True
+
+
+def execute_sequence(args: argparse.Namespace) -> None:
+    sequence = decode_sequence(args.sequence_json)
+
+    robot = None
     gripper = None
     gripper_backend = None
     logged_in = False
     try:
-        print_sdk_info(robot)
-        check_call("login", robot.login())
+        robot, logged_in = open_robot(args)
         logged_in = True
-        check_call("power_on", robot.power_on())
-        check_call("enable_robot", robot.enable_robot())
-        if args.tcp_monitor:
-            print_tcp_pose(robot, "after_enable")
-
-        for index, step in enumerate(sequence):
-            if not isinstance(step, dict):
-                raise ValueError(f"Step {index} is not an object: {step!r}")
-            step_type = step.get("type")
-            print(f"[jkrc-worker] step {index}: {step}")
-            if step_type == "move":
-                pose = step.get("pose")
-                if not isinstance(pose, list) or len(pose) != 6:
-                    raise ValueError(f"Move step {index} must provide a 6D pose")
-                target_pose = [float(value) for value in pose]
-                if args.tcp_monitor:
-                    print(f"[tcp-base] step={index} target: {format_tcp_pose(target_pose)}", flush=True)
-                    print_tcp_pose(robot, f"step={index} before_move")
-                monitor = TcpPoseMonitor(robot, f"step={index} moving", args.tcp_monitor_interval) if args.tcp_monitor else None
-                if monitor is not None:
-                    monitor.start()
-                try:
-                    ret = robot.linear_move_extend(
-                        target_pose,
-                        0,
-                        True,
-                        float(args.velocity),
-                        float(args.acceleration),
-                        1,
-                    )
-                finally:
-                    if monitor is not None:
-                        monitor.stop()
-                check_call("linear_move_extend", ret)
-                if args.tcp_monitor:
-                    print_tcp_pose(robot, f"step={index} after_move")
-            elif step_type == "joint_move":
-                joints = step.get("joints_rad")
-                if not isinstance(joints, list) or len(joints) != 6:
-                    raise ValueError(f"Joint move step {index} must provide 6 joint values in radians")
-                target_joints = [float(value) for value in joints]
-                print(f"[joint-base] step={index} target_rad={target_joints}", flush=True)
-                ret = robot.joint_move(target_joints, 0, True, float(args.joint_velocity_rad_s))
-                check_call("joint_move", ret)
-                if args.tcp_monitor:
-                    print_tcp_pose(robot, f"step={index} after_joint_move")
-            elif step_type == "gripper":
-                if args.tcp_monitor:
-                    print_tcp_pose(robot, f"step={index} before_gripper")
-                if gripper is None:
-                    gripper_backend, gripper = connect_gripper(args.robotiq_port)
-                move_gripper(gripper, gripper_backend, str(step.get("command")))
-                if args.tcp_monitor:
-                    print_tcp_pose(robot, f"step={index} after_gripper")
-            else:
-                raise ValueError(f"Unsupported step type at {index}: {step_type!r}")
+        if sequence_needs_gripper(sequence):
+            gripper_backend, gripper = connect_gripper(args.robotiq_port)
+        execute_steps(sequence, args, robot, gripper_backend, gripper)
     finally:
         if gripper is not None and gripper_backend is not None:
             shutdown_gripper(gripper, gripper_backend)
-        if logged_in:
+        if logged_in and robot is not None:
+            robot.logout()
+
+
+def print_server_message(prefix: str, payload: dict[str, Any]) -> None:
+    print(prefix + json.dumps(payload), flush=True)
+
+
+def serve_stdio(args: argparse.Namespace) -> None:
+    robot = None
+    gripper = None
+    gripper_backend = None
+    logged_in = False
+    try:
+        robot, logged_in = open_robot(args)
+        gripper_backend, gripper = connect_gripper(args.robotiq_port)
+        print_server_message(SERVER_READY_PREFIX, {"ok": True})
+        for raw_line in sys.stdin:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                request = json.loads(raw_line)
+                command = request.get("command")
+                if command == "shutdown":
+                    print_server_message(SERVER_RESPONSE_PREFIX, {"ok": True, "command": command})
+                    break
+                if command == "execute_sequence":
+                    sequence = request.get("sequence")
+                    if not isinstance(sequence, list):
+                        raise ValueError("execute_sequence request must provide a sequence list")
+                    label = request.get("label", "sequence")
+                    print(f"[jkrc-worker] executing persistent sequence: {label}", flush=True)
+                    execute_steps(sequence, args, robot, gripper_backend, gripper)
+                    print_server_message(SERVER_RESPONSE_PREFIX, {"ok": True, "command": command, "label": label})
+                elif command == "read_tcp_pose":
+                    pose = parse_tcp_position(robot.get_tcp_position())
+                    print_server_message(SERVER_RESPONSE_PREFIX, {"ok": True, "command": command, "tcp_pose": pose})
+                else:
+                    raise ValueError(f"Unsupported stdio command: {command!r}")
+            except Exception as exc:
+                print_server_message(
+                    SERVER_RESPONSE_PREFIX,
+                    {"ok": False, "error": repr(exc), "command": request.get("command") if isinstance(request, dict) else None},
+                )
+    finally:
+        if gripper is not None and gripper_backend is not None:
+            shutdown_gripper(gripper, gripper_backend)
+        if logged_in and robot is not None:
             robot.logout()
 
 
@@ -298,12 +391,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Execute JAKA/Robotiq actions in a jkrc-compatible Python.")
     parser.add_argument("--sequence-json", help="JSON list of move/gripper steps.")
     parser.add_argument("--print-tcp-pose", action="store_true", help="Read current JAKA TCP pose and print it as JSON.")
+    parser.add_argument("--stdio-server", action="store_true", help="Keep one JAKA/Robotiq session alive and execute JSON-line requests from stdin.")
     parser.add_argument("--json-only", action="store_true", help="Suppress informational logs for machine-readable output.")
     parser.add_argument("--jaka-ip", default="192.168.1.199", help="JAKA controller IP.")
     parser.add_argument("--robotiq-port", default="/dev/ttyUSB0", help="Robotiq serial port.")
     parser.add_argument("--velocity", type=float, default=60.0, help="JAKA linear_move_extend velocity.")
     parser.add_argument("--acceleration", type=float, default=60.0, help="JAKA linear_move_extend acceleration.")
     parser.add_argument("--joint-velocity-rad-s", type=float, default=0.5, help="JAKA joint_move velocity in rad/s.")
+    parser.add_argument("--gripper-open-force", type=int, default=DEFAULT_GRIPPER_OPEN_FORCE, help="Robotiq force used when opening.")
+    parser.add_argument("--gripper-close-force", type=int, default=DEFAULT_GRIPPER_CLOSE_FORCE, help="Robotiq force used when closing.")
     parser.add_argument("--no-tcp-monitor", dest="tcp_monitor", action="store_false", help="Disable live TCP pose printing during execution.")
     parser.add_argument("--tcp-monitor-interval", type=float, default=0.25, help="Seconds between live TCP pose prints.")
     parser.add_argument("--jkrc-dir", default=str(DEFAULT_JKRC_DIR), help="Directory containing jkrc.so and libjakaAPI.so.")
@@ -313,6 +409,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_arg_parser().parse_args()
+    if args.stdio_server:
+        serve_stdio(args)
+        return
     if args.print_tcp_pose:
         print(json.dumps({"tcp_pose": read_tcp_pose(args)}))
         return
