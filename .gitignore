@@ -16,14 +16,12 @@ build/
 devel/
 
 # 排除本地标定数据和运行结果
-graspnet-workspace/calibration/
 graspnet-workspace/results/
 graspnet-workspace/record_log.jsonl
 perception/output/
 result/
 
 # 排除仿真大文件
-checkpoints/
 results_phase3_*/
 results_viz_data.pkl
 simulation_demo.log
