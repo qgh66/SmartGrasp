@@ -28,6 +28,7 @@ from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_
 
 
 OUT_ROOT = SMARTGRASP_ROOT / "data"
+INPUT_ROOT = SMARTGRASP_ROOT / "input"
 
 def read_dataset() -> pd.DataFrame:
     parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
@@ -45,20 +46,56 @@ def optional_int(value: Any, fallback: int | None = None) -> int | None:
         return fallback
 
 
+def read_text_file(path: Path) -> str:
+    return path.read_text(encoding="utf-8").strip()
+
+
+def scene_input_instruction(scene_dir: Path) -> tuple[str | None, Path | None]:
+    for name in ("input.txt", "instruction.txt"):
+        path = scene_dir / name
+        if path.exists():
+            text = read_text_file(path)
+            if text:
+                return text, path
+    return None, None
+
+
+def summary_instruction(summary: dict[str, Any]) -> str:
+    return str(summary.get("instruction") or summary.get("annotation") or "")
+
+
 def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
     if scene_id is None:
         return None
-    out_dir = OUT_ROOT / f"scene_{int(scene_id)}" / "perception"
-    summary_path = out_dir / "summary.json"
-    scene_image_path = out_dir / "scene_image.png"
-    depth_path = out_dir / "depth.npy"
-    # Highest-priority input path: use generated perception artifacts before
-    # falling back to parquet / npz_file.zip dataset sources.
-    if summary_path.exists() and scene_image_path.exists() and depth_path.exists():
-        summary = load_json_file(summary_path)
+    scene_name = f"scene_{int(scene_id)}"
+    candidates = [
+        (INPUT_ROOT / scene_name, INPUT_ROOT / scene_name),
+        (OUT_ROOT / scene_name / "perception", OUT_ROOT / scene_name / "perception"),
+    ]
+    # Highest-priority input path: use user-provided RGB/depth artifacts before
+    # falling back to generated perception artifacts and finally parquet / npz.
+    for input_dir, summary_dir in candidates:
+        summary_path = summary_dir / "summary.json"
+        depth_path = input_dir / "depth.npy"
+        scene_image_path = input_dir / "scene_image.png"
+        if not scene_image_path.exists():
+            scene_image_path = input_dir / "rgb.png"
+        if not (scene_image_path.exists() and depth_path.exists()):
+            continue
+        summary = load_json_file(summary_path) if summary_path.exists() else {}
+        instruction, instruction_path = scene_input_instruction(input_dir)
+        annotation = instruction if instruction is not None else summary_instruction(summary)
+        summary = {
+            **summary,
+            "scene_id": optional_int(summary.get("scene_id"), scene_id),
+            "annotation": annotation,
+            "instruction": annotation,
+        }
         return {
             "summary": summary,
-            "out_dir": out_dir,
+            "input_dir": input_dir,
+            "summary_path": summary_path if summary_path.exists() else None,
+            "instruction_path": instruction_path,
             "image_path": scene_image_path,
             "depth_path": depth_path,
         }
@@ -520,12 +557,15 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         query_obj_id = optional_int(priority_summary.get("query_obj_id"), args.query_obj_id)
         if query_obj_id is None:
             query_obj_id = -1
-        annotation = str(priority_summary.get("annotation") or "")
+        annotation = str(priority_summary.get("instruction") or priority_summary.get("annotation") or "")
         source_image = Image.open(priority_inputs["image_path"]).convert("RGB")
         depth = np.asarray(np.load(priority_inputs["depth_path"]), dtype=np.float32)
+        input_dir = Path(priority_inputs["input_dir"])
+        instruction_path = priority_inputs.get("instruction_path")
+        input_note = f", instruction={instruction_path}" if instruction_path else ""
         print(
             f"[scene_{int(scene_id)}] using priority-1 perception inputs: "
-            f"{OUT_ROOT / f'scene_{int(scene_id)}' / 'perception'}",
+            f"{input_dir}{input_note}",
             flush=True,
         )
     else:
@@ -554,7 +594,23 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         image_path = out_dir / "scene_image.png"
         source_image.save(image_path)
         (out_dir / "summary.json").write_text(
-            json.dumps(priority_inputs["summary"], ensure_ascii=False, indent=2),
+            json.dumps(
+                {
+                    **priority_inputs["summary"],
+                    "scene_id": scene_id,
+                    "query_obj_id": query_obj_id,
+                    "annotation": annotation,
+                    "instruction": annotation,
+                    "input_dir": str(Path(priority_inputs["input_dir"]).resolve()),
+                    "input_instruction_path": (
+                        str(Path(priority_inputs["instruction_path"]).resolve())
+                        if priority_inputs.get("instruction_path")
+                        else None
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
     else:

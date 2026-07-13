@@ -31,6 +31,9 @@ graspnet-workspace/
 /data copy/
 /sample_data/
 /scene_details/
+/input
+/testcase
+/tests
 /outputs/
 *.parquet
 *.npz

@@ -6,6 +6,8 @@
 #   bash run_pipeline.sh              → 跑全部场景
 #   bash run_pipeline.sh 59           → 跑单个场景
 #   bash run_pipeline.sh 59 242 691   → 跑指定多个场景
+#   bash run_pipeline.sh 59 --instruction=input
+#                                     → 从 input/scene_59 读取 RGB/depth 和指令
 #
 # 执行顺序：Perception（SAM2+VLM+遮挡图）→ Intent（VLM意图解析）→ Reason（分支分类+graspability评分）
 #
@@ -13,6 +15,7 @@
 #   RUN_INTENT=0              → 跳过 Intent，Reason 遍历所有物体
 #   TARGET_ID=5               → 跳过 Intent，Reason 只跑指定 id
 #   INSTRUCTION="拿左边扳手"   → 自定义 Intent 指令（覆盖 annotation）
+#   --instruction=input       → 不传字面指令；使用 input/scene_<id> 中的 input.txt/instruction.txt
 # ============================================================================
 set -euo pipefail
 
@@ -64,11 +67,51 @@ REASON_MODEL="${REASON_MODEL:-gpt-5.5}"
 REASON_PRIOR_PROMPT="${REASON_PRIOR_PROMPT:-graspability}"
 REASON_RANKING_SCORE="${REASON_RANKING_SCORE:-ig_graspability}"
 
-# ---- 解析场景 ----
-if [[ $# -eq 0 ]] || [[ "$1" == "--all" ]]; then
+# ---- 解析场景和指令参数 ----
+USE_ALL=0
+INPUT_INSTRUCTION_MODE="${INPUT_INSTRUCTION_MODE:-0}"
+SCENES=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --all)
+            USE_ALL=1
+            shift
+            ;;
+        --instruction=input)
+            INPUT_INSTRUCTION_MODE=1
+            shift
+            ;;
+        --instruction=*)
+            INSTRUCTION="${1#--instruction=}"
+            INPUT_INSTRUCTION_MODE=0
+            shift
+            ;;
+        --instruction)
+            if [[ $# -lt 2 ]]; then
+                echo "❌ --instruction requires a value" >&2
+                exit 2
+            fi
+            if [[ "$2" == "input" ]]; then
+                INPUT_INSTRUCTION_MODE=1
+            else
+                INSTRUCTION="$2"
+                INPUT_INSTRUCTION_MODE=0
+            fi
+            shift 2
+            ;;
+        --*)
+            echo "❌ Unknown option: $1" >&2
+            exit 2
+            ;;
+        *)
+            SCENES+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ${#SCENES[@]} -eq 0 ]] || [[ "$USE_ALL" == "1" ]]; then
     SCENES=("${ALL_SCENES[@]}")
-else
-    SCENES=("$@")
 fi
 
 # ===================================================================
@@ -84,6 +127,7 @@ PIPELINE_EXIT=0
     echo "========================================="
     echo "  Time:     $(date)"
     echo "  Scenes:   ${SCENES[*]}"
+    echo "  Input instruction mode: ${INPUT_INSTRUCTION_MODE}"
     echo "========================================="
     echo ""
 
@@ -125,7 +169,7 @@ PIPELINE_EXIT=0
         TARGET_ARGS=(--target-source id --target-id "$TARGET_ID")
     elif [[ "$RUN_INTENT" == "1" ]]; then
         TARGET_ARGS=(--target-source auto)
-        if [[ -n "${INSTRUCTION:-}" ]]; then
+        if [[ "$INPUT_INSTRUCTION_MODE" != "1" && -n "${INSTRUCTION:-}" ]]; then
             TARGET_ARGS+=(--instruction "$INSTRUCTION")
         fi
     else

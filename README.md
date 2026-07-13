@@ -40,9 +40,25 @@ RUN_INTENT=0 bash run_pipeline.sh 59
 # 指定物体 id，跳过 Intent
 TARGET_ID=5 bash run_pipeline.sh 59
 
-# 自定义自然语言指令
+# 自定义自然语言指令（覆盖 summary.json annotation）
 INSTRUCTION="拿左边的扳手" bash run_pipeline.sh 59
+
+# 从 input/scene_59 读取 depth.npy 和 instruction.txt
+bash run_pipeline.sh 59 --instruction=input
 ```
+
+本地 RGB+depth 输入可以放在 `input/scene_<id>/`：
+
+```text
+input/scene_<id>/scene_image.png
+input/scene_<id>/depth.npy
+input/scene_<id>/summary.json       # 可选；默认从这里读 annotation
+input/scene_<id>/input.txt          # 可选；存在时覆盖 annotation
+```
+
+`instruction.txt` 也会被兼容读取。只有这种 RGB+`depth.npy` 本地输入会读取
+`input.txt`/`instruction.txt`；回退到 `.parquet` + `npz_file.zip` 时仍使用
+parquet 里的 `annotation`。
 
 ## 模块说明
 

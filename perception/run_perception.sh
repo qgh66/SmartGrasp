@@ -230,12 +230,13 @@ run_once() {
         fi
         if [[ $EXIT_CODE -ne 0 ]]; then
             echo ""
-            echo "Input search priority 1: data/scene_<id>/perception/summary.json, scene_image.png, depth.npy"
+            echo "Input search priority 1: input/scene_<id>/{summary.json,scene_image.png,depth.npy,input.txt}"
+            echo "Input search priority 2: data/scene_<id>/perception/summary.json, scene_image.png, depth.npy"
             if check_scene_outputs "${scenes[@]}"; then
-                echo "  priority-1 inputs found; fallback source check skipped"
+                echo "  generated perception inputs found; fallback source check skipped"
             else
                 echo ""
-                echo "Input search priority 2: *.parquet, npz_file.zip"
+                echo "Input search priority 3: *.parquet, npz_file.zip"
                 check_source_inputs || true
             fi
         fi

@@ -524,10 +524,15 @@ bash perception/run_perception.sh 242
 
 Perception itself searches inputs with this priority:
 
-1. `data/scene_<id>/perception/summary.json`,
+1. `input/scene_<id>/scene_image.png` or `input/scene_<id>/rgb.png`,
+   plus `input/scene_<id>/depth.npy`. If `input.txt` or `instruction.txt`
+   exists in the same folder, it overrides the instruction; otherwise
+   `summary.json["instruction"]` or `summary.json["annotation"]` is used.
+2. `data/scene_<id>/perception/summary.json`,
    `data/scene_<id>/perception/scene_image.png`,
    `data/scene_<id>/perception/depth.npy`
-2. fallback source data such as `*.parquet` and `npz_file.zip`
+3. fallback source data such as `*.parquet` and `npz_file.zip`. This path does
+   not read `input.txt` or `instruction.txt`; it uses the parquet annotation.
 
 Perception `vlm` mode needs SAM2. Set `SAM2_ROOT` and `SAM2_CHECKPOINT` if they
 are not discoverable in the environment.
