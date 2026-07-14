@@ -452,7 +452,9 @@ def build_grasp_point_cloud(
         return full_cloud, full_cloud, full_cloud_rgb, full_cloud_rgb, full_cloud, {
             "point_cloud_source": "full_depth",
             "grasp_point_cloud_source": "full_depth",
+            "grasp_input_mode": "full_depth",
             "obstacle_point_cloud_source": "full_depth_fallback_no_object_mask",
+            "num_grasp_input_points": int(len(full_cloud)),
             "num_obstacle_points": int(len(full_cloud)),
             "object_mask": None,
             "camera_intrinsics": frame["meta"]["intrinsics"],
@@ -478,11 +480,22 @@ def build_grasp_point_cloud(
         args.grasp_crop_margin_ratio,
     )
     grasp_crop_mask = bbox_mask_xyxy(object_mask.shape, grasp_bbox)
-    grasp_input_mask = valid & grasp_crop_mask
-    grasp_cloud = xyz_image[grasp_input_mask]
-    grasp_cloud_rgb = color_rgb_image[grasp_input_mask]
-    if len(grasp_cloud) == 0:
+    bbox_input_mask = valid & grasp_crop_mask
+    bbox_cloud = xyz_image[bbox_input_mask]
+    bbox_cloud_rgb = color_rgb_image[bbox_input_mask]
+    if len(bbox_cloud) == 0:
         raise RuntimeError("Expanded object crop produced no valid depth points for GraspNet.")
+
+    if args.grasp_input_mode == "mask":
+        grasp_cloud = object_cloud
+        grasp_cloud_rgb = object_cloud_rgb
+        point_cloud_source = "interactive_sam_mask"
+        grasp_point_cloud_source = "valid_depth_inside_interactive_sam_mask"
+    else:
+        grasp_cloud = bbox_cloud
+        grasp_cloud_rgb = bbox_cloud_rgb
+        point_cloud_source = "interactive_sam_expanded_bbox_crop"
+        grasp_point_cloud_source = "valid_depth_inside_expanded_object_bbox"
 
     crop_overlay_path = save_grasp_crop_overlay(frame["color_bgr"], target_mask, object_bbox, grasp_bbox, output_dir)
     object_mask_info["num_depth_valid_mask_pixels"] = int(np.count_nonzero(object_mask))
@@ -491,24 +504,29 @@ def build_grasp_point_cloud(
     object_mask_info["grasp_crop_bbox_xyxy"] = [int(value) for value in grasp_bbox]
     object_mask_info["grasp_crop_margin_px"] = int(args.grasp_crop_margin_px)
     object_mask_info["grasp_crop_margin_ratio"] = float(args.grasp_crop_margin_ratio)
-    object_mask_info["num_grasp_crop_points"] = int(len(grasp_cloud))
+    object_mask_info["num_grasp_crop_points"] = int(len(bbox_cloud))
+    object_mask_info["grasp_input_mode"] = args.grasp_input_mode
+    object_mask_info["num_grasp_input_points"] = int(len(grasp_cloud))
     object_mask_info["num_obstacle_points"] = int(len(obstacle_cloud))
     np.save(output_dir / "point_cloud_object_camera.npy", object_cloud.astype(np.float32, copy=False))
     np.save(output_dir / "point_cloud_grasp_input_camera.npy", grasp_cloud.astype(np.float32, copy=False))
     np.save(output_dir / "point_cloud_obstacles_camera.npy", obstacle_cloud.astype(np.float32, copy=False))
     print(
-        "[object-mask] saved mask.png and FreeGrasp-style crop input; "
+        "[object-mask] saved mask.png and selectable GraspNet input; "
+        f"grasp_input_mode={args.grasp_input_mode} "
         f"mask_pixels={object_mask_info['mask_pixels']} "
         f"object_points={len(object_cloud)} "
-        f"grasp_crop_points={len(grasp_cloud)} "
+        f"grasp_crop_points={len(bbox_cloud)} "
+        f"grasp_input_points={len(grasp_cloud)} "
         f"obstacle_points={len(obstacle_cloud)} "
         f"grasp_crop_bbox={object_mask_info['grasp_crop_bbox_xyxy']} "
         f"mode={object_mask_info['mode']}",
         flush=True,
     )
     return full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, {
-        "point_cloud_source": "interactive_sam_expanded_bbox_crop",
-        "grasp_point_cloud_source": "valid_depth_inside_expanded_object_bbox",
+        "point_cloud_source": point_cloud_source,
+        "grasp_point_cloud_source": grasp_point_cloud_source,
+        "grasp_input_mode": args.grasp_input_mode,
         "obstacle_point_cloud_source": "full_depth_minus_interactive_sam_object_mask",
         "mask_path": object_mask_info["mask_path"],
         "mask_overlay_path": object_mask_info["mask_overlay_path"],
@@ -519,9 +537,9 @@ def build_grasp_point_cloud(
         "obstacle_point_cloud_path": str((output_dir / "point_cloud_obstacles_camera.npy").resolve()),
         "num_grasp_input_points": int(len(grasp_cloud)),
         "num_object_points": int(len(object_cloud)),
+        "num_grasp_crop_points": int(len(bbox_cloud)),
         "num_obstacle_points": int(len(obstacle_cloud)),
         "object_mask": object_mask_info,
         "object_mask_array": target_mask,
         "camera_intrinsics": frame["meta"]["intrinsics"],
     }
-

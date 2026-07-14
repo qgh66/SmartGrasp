@@ -85,6 +85,32 @@ def move_jaka_pose(target_pose: list[float], ip: str, velocity: float, accelerat
         robot.logout()
 
 
+def move_jaka_relative_base(
+    translation_mm: list[float],
+    ip: str,
+    velocity: float,
+    acceleration: float,
+    jkrc_dir: Path,
+) -> None:
+    if len(translation_mm) != 3:
+        raise ValueError(f"Base-frame relative translation must have 3 values, got {translation_mm!r}")
+    jkrc = import_jkrc_backend(jkrc_dir)
+    robot = jkrc.RC(ip)
+    check_jaka_call("login", robot.login())
+    try:
+        check_jaka_call("power_on", robot.power_on())
+        check_jaka_call("enable_robot", robot.enable_robot())
+        target_pose = parse_jaka_tcp_pose(robot.get_tcp_position())
+        target_pose[:3] = [
+            float(value) + float(offset)
+            for value, offset in zip(target_pose[:3], translation_mm)
+        ]
+        ret = robot.linear_move_extend(target_pose, 0, True, velocity, acceleration, 1)
+        check_jaka_call("linear_move_extend", ret)
+    finally:
+        robot.logout()
+
+
 def move_jaka_joints(target_joints_rad: list[float], ip: str, velocity_rad_s: float, jkrc_dir: Path) -> None:
     jkrc = import_jkrc_backend(jkrc_dir)
 
@@ -232,6 +258,14 @@ def run_jaka_sequence(sequence: list[dict[str, Any]], args: argparse.Namespace, 
         for step in sequence:
             if step["type"] == "move":
                 move_jaka_pose(step["pose"], args.jaka_ip, args.velocity, args.acceleration, Path(args.jkrc_dir))
+            elif step["type"] == "move_relative_base":
+                move_jaka_relative_base(
+                    step["translation_mm"],
+                    args.jaka_ip,
+                    args.velocity,
+                    args.acceleration,
+                    Path(args.jkrc_dir),
+                )
             elif step["type"] == "joint_move":
                 move_jaka_joints(step["joints_rad"], args.jaka_ip, args.joint_velocity_rad_s, Path(args.jkrc_dir))
             elif step["type"] == "gripper":

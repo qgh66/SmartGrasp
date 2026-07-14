@@ -279,6 +279,27 @@ def execute_steps(
             check_call("linear_move_extend", ret)
             if args.tcp_monitor:
                 print_tcp_pose(robot, f"step={index} after_move")
+        elif step_type == "move_relative_base":
+            translation = step.get("translation_mm")
+            if not isinstance(translation, list) or len(translation) != 3:
+                raise ValueError(f"Base-frame relative move step {index} must provide a 3D translation_mm")
+            target_pose = parse_tcp_position(robot.get_tcp_position())
+            target_pose[:3] = [
+                float(value) + float(offset)
+                for value, offset in zip(target_pose[:3], translation)
+            ]
+            print(f"[tcp-base] step={index} relative_target: {format_tcp_pose(target_pose)}", flush=True)
+            ret = robot.linear_move_extend(
+                target_pose,
+                0,
+                True,
+                float(args.velocity),
+                float(args.acceleration),
+                1,
+            )
+            check_call("linear_move_extend", ret)
+            if args.tcp_monitor:
+                print_tcp_pose(robot, f"step={index} after_relative_move")
         elif step_type == "joint_move":
             joints = step.get("joints_rad")
             if not isinstance(joints, list) or len(joints) != 6:

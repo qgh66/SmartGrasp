@@ -99,6 +99,7 @@ DEFAULT_GRIPPER_CLOSE_FORCE = int(config_get(REALWORLD_CONFIG, "gripper.close_fo
 DEFAULT_READY_POSE = config_get(REALWORLD_CONFIG, "robot.ready_pose", [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0])
 DEFAULT_CAPTURE_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.capture_joint_pose_deg", [0.0, 90.0, 45.0, 135.0, 270.0, 72.0])
 DEFAULT_PLACE_TARGET_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.place_target_joint_pose_deg", [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0])
+DEFAULT_PLACE_RELEASE_LOWER_MM = float(config_get(REALWORLD_CONFIG, "robot.place_release_lower_mm", 50.0))
 DEFAULT_JOINT_VELOCITY_RAD_S = float(config_get(REALWORLD_CONFIG, "robot.joint_velocity_rad_s", 0.5))
 DEFAULT_CAMERA_INDEX = int(config_get(REALWORLD_CONFIG, "camera.default_index", 1))
 DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "72508"))
@@ -182,6 +183,7 @@ def execute_grasp_sequence(record: dict[str, Any], args: argparse.Namespace) -> 
             {"type": "gripper", "command": "close"},
             {"type": "joint_move", "joints_rad": initial_joints_rad},
             {"type": "joint_move", "joints_rad": place_target_joints_rad},
+            {"type": "move_relative_base", "translation_mm": [0.0, 0.0, -args.place_release_lower_mm]},
             {"type": "gripper", "command": "open"},
             {"type": "joint_move", "joints_rad": initial_joints_rad},
         ],
@@ -288,6 +290,7 @@ def save_outputs(
         "topdown_rerank": topdown_rerank_info,
         "point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("point_cloud_source"),
         "grasp_point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("grasp_point_cloud_source"),
+        "grasp_input_mode": None if point_cloud_info is None else point_cloud_info.get("grasp_input_mode"),
         "point_cloud_info": serializable_point_cloud_info,
         "calibration_mode": None if calibration is None else calibration["mode"],
         "camera_to_robot_chain": (
@@ -596,6 +599,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sam-device", default=None, help="SAM device override, e.g. cuda, cuda:0, or cpu.")
     parser.add_argument("--mask-clean-kernel", type=int, default=3, help="Morphological cleanup kernel for SAM masks; use 1 to disable.")
     parser.add_argument(
+        "--grasp-input-mode",
+        choices=("bbox", "mask"),
+        default="bbox",
+        help=(
+            "Point-cloud region sent to GraspNet when SAM is enabled: bbox keeps all valid depth "
+            "inside the expanded mask bounding box; mask keeps only valid depth inside the SAM mask."
+        ),
+    )
+    parser.add_argument(
         "--grasp-crop-margin-px",
         type=int,
         default=50,
@@ -637,7 +649,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-target-tcp-z-mm",
         type=float,
-        default=180.0,
+        default=175.0,
         help="Minimum allowed final TCP z in JAKA base frame, in millimeters.",
     )
     parser.add_argument(
@@ -748,6 +760,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PLACE_TARGET_JOINT_POSE_DEG,
         metavar=("J1", "J2", "J3", "J4", "J5", "J6"),
         help="Post-grasp placement target joint pose in degrees before opening the gripper.",
+    )
+    parser.add_argument(
+        "--place-release-lower-mm",
+        type=float,
+        default=DEFAULT_PLACE_RELEASE_LOWER_MM,
+        help="Move the TCP down along robot-base Z by this distance after reaching the place pose and before opening.",
     )
     parser.add_argument("--jaka-ip", default=DEFAULT_JAKA_IP, help="JAKA controller IP.")
     parser.add_argument("--robotiq-port", default=DEFAULT_ROBOTIQ_PORT, help="Robotiq serial port.")
@@ -893,7 +911,9 @@ def run_one_cycle(
             "obstacle_point_cloud": point_cloud_info.get("obstacle_point_cloud_path"),
             "num_grasp_input_points": point_cloud_info.get("num_grasp_input_points"),
             "num_object_points": point_cloud_info.get("num_object_points"),
+            "num_grasp_crop_points": point_cloud_info.get("num_grasp_crop_points"),
             "num_obstacle_points": point_cloud_info.get("num_obstacle_points"),
+            "grasp_input_mode": point_cloud_info.get("grasp_input_mode"),
             "grasp_candidates_png": str(output_dir / "grasp_candidates.png"),
             "grasp_candidates_ply": str(output_dir / "grasp_candidates.ply"),
             "grasp_candidates_3d_html": str(output_dir / "grasp_candidates_3d.html"),

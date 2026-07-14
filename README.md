@@ -360,6 +360,38 @@ python gui/app.py \
 
 常见原因是物体尺度不对（图形学单位 mesh 没缩放，用 `--scale` 调到约 5~8 cm），或物体随机朝向下平躺导致 GraspNet 抓取质量差。可多跑几次，或换更立体、规则的物体。
 
+## RealSense 多步骤场景采集
+
+使用独立脚本连续采集同一个真实场景中的多个步骤：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+python capture_realsense_scenes.py --camera-serial 72659
+```
+
+脚本会在 `realworld_data/` 下创建下一个未使用的场景目录，编号从 `scene_1` 开始。预览窗口左侧为 RGB，右侧为对齐到彩色图的伪彩深度：
+
+- 按 `c`：把当前原始 RGB-D 帧保存到当前场景的 `step_N/`，步骤编号从 `step_0` 递增。
+- 按 `q`：停止采集、关闭相机并退出。
+
+输出结构如下：
+
+```text
+realworld_data/
+└── scene_1/
+    ├── step_0/
+    │   ├── rgb.png
+    │   ├── depth.png
+    │   └── camera_meta.json
+    └── step_1/
+        ├── rgb.png
+        ├── depth.png
+        └── camera_meta.json
+```
+
+`depth.png` 是无损 `uint16` 原始深度，不是窗口中显示的伪彩图；真实米制深度等于像素值乘以 `camera_meta.json` 中的 `depth_scale_m`。如需修改数据根目录，可传入 `--output-root /path/to/realworld_data`。
+
 ## Eye-in-hand 棋盘格手眼标定
 
 当前真实机械臂场景中，RealSense 固定在夹爪/末端上。此时需要标定相机坐标系和 JAKA TCP/夹爪坐标系之间的固定变换 `T_tcp_camera`。根据当前实测候选坐标，真实抓取运行时使用该矩阵的逆矩阵：
@@ -454,12 +486,39 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
   --top-k 20 \
+  --grasp-input-mode bbox \
   --trial-name ring_horizontal_01 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 10 \
   --acceleration 10
 ```
+
+`--grasp-input-mode` 控制送入 GraspNet 的点云区域：
+
+- `bbox`（默认）：使用 SAM 掩码外接矩形内的全部有效深度点。`--grasp-crop-margin-px` 和 `--grasp-crop-margin-ratio` 只影响该模式。
+- `mask`：仅使用 SAM 掩码内部的有效深度点，适合外接矩形中混入大量桌面或相邻物体的场景。
+
+严格按 SAM 掩码生成 GraspNet 输入时，使用以下完整命令：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 20 \
+  --grasp-input-mode mask \
+  --trial-name ring_horizontal_mask_01 \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 10 \
+  --acceleration 10
+```
+
+如果指定 `--no-use-sam-mask`，程序会输入完整深度点云，忽略 `--grasp-input-mode`。
 
 生成后先检查：
 
@@ -468,6 +527,14 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 /home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates_3d.html
 /home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.json
 ```
+
+点云调试文件的含义如下：
+
+- `point_cloud_object_camera.npy`：始终为严格 SAM 掩码内的目标点云。
+- `point_cloud_grasp_input_camera.npy`：本轮实际送入 GraspNet 的点云；内容由 `--grasp-input-mode` 决定。
+- `grasp_crop_overlay.png`：同时显示 SAM 掩码和矩形裁剪范围，两种输入模式都会生成。
+
+`grasp_candidates.json` 会记录 `grasp_input_mode`、`num_object_points`、`num_grasp_crop_points` 和 `num_grasp_input_points`，用于确认本轮实际输入模式及各类点数。
 
 拍照并成功生成目标掩码后，脚本会默认保存一份轻量试验日志到：
 
@@ -541,6 +608,14 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 
 hand-eye 模式会在拍照后记录当前 TCP 到 `result/capture_tcp_pose.json`，并用 `T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp` 生成每个候选的 `target_jaka_tcp_pose`。如果使用 `--reuse-capture`，必须保证 `result/capture_tcp_pose.json` 与这张 RGB-D 的拍照时刻一致，或显式传入 `--capture-tcp-pose X Y Z RX RY RZ`。
 
+放置物体时，机械臂到达 `--place-target-joint-pose-deg` 指定的关节位姿后，会默认沿机器人 base 坐标系的 Z 轴向下移动 50 mm，再张开夹爪。可通过以下参数调整下移距离：
+
+```bash
+--place-release-lower-mm 50
+```
+
+设置为 `0` 可取消放置前下移。该动作是笛卡尔直线运动，使用 `--velocity` 和 `--acceleration` 的速度参数。
+
 ## Git 备注
 
 这台共享服务器上 GitHub SSH 可能会被 `LD_LIBRARY_PATH` 里的 conda OpenSSL 影响。如果出现 OpenSSL mismatch，可以临时清掉这个环境变量：
@@ -589,7 +664,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --velocity 10 \
   --acceleration 10
 
-## 拍照,抓取(循环):
+## 拍照,抓取(循环,bbox 模式):
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
@@ -603,6 +678,24 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --acceleration 20 \
   --loop \
   --execute \
-  --grasp-crop-margin-px 20 \
-  --grasp-crop-margin-ratio 0.2 \
-  --target-mask-center-tolerance-px 90 
+  --grasp-input-mode bbox \
+  --grasp-crop-margin-px 0 \
+  --grasp-crop-margin-ratio 0 \
+  --target-mask-center-tolerance-px 0
+
+## 拍照,抓取(循环,严格 mask 模式):
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --top-k 100 \
+  --trial-log-subdir single_object \
+  --trial-name grasp_execute_mask \
+  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
+  --velocity 40 \
+  --acceleration 20 \
+  --loop \
+  --execute \
+  --grasp-input-mode mask \
+  --target-mask-center-tolerance-px 0 
