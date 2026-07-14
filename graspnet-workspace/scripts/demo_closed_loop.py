@@ -6,11 +6,11 @@ GraspNet + PyBullet 闭环仿真 Demo。
 
 用法:
   conda activate smartgrasp
-  cd /home/admin128/beilei/graspnet-workspace
+  cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
   python scripts/demo_closed_loop.py
 """
 
-import sys, os, json, argparse, pickle, numpy as np
+import sys, os, json, argparse, pickle, random, numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path = [p for p in sys.path if 'graspnet-workspace/pointnet2' not in p and 'graspnet-workspace/knn' not in p]
@@ -26,6 +26,9 @@ from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
 from simulation.robot_gripper import JakaZu3Robotiq85Gripper
 from simulation.evaluator import GraspEvaluator
+from utils.collision_detector import ModelFreeCollisionDetector
+
+MAX_GRIPPER_OPENING = 0.085
 
 
 def _resolve_path(path, *, config_dir=None):
@@ -119,8 +122,14 @@ def crop_to_object(pc, object_points=None, margin=0.05, num_points=20000, table_
     return cropped[idx][np.newaxis].astype(np.float32)
 
 
-def filter_grasps_to_object(gg, object_points, max_center_dist=0.04, bbox_margin=0.04):
-    """Keep GraspNet candidates whose centers are close to the target object."""
+def filter_grasps_to_object(
+    gg,
+    object_points,
+    max_center_dist=0.04,
+    bbox_margin=0.04,
+    min_inner_points=5,
+):
+    """Keep candidates whose closing region contains visible target points."""
     if object_points is None or len(object_points) == 0 or len(gg) == 0:
         return gg, {"enabled": False, "kept": len(gg), "total": len(gg)}
 
@@ -138,8 +147,20 @@ def filter_grasps_to_object(gg, object_points, max_center_dist=0.04, bbox_margin
         dists = np.linalg.norm(chunk[:, None, :] - obj[None, :, :], axis=2)
         min_dists[start:start + len(chunk)] = dists.min(axis=1)
 
-    dist_mask = min_dists <= float(max_center_dist)
-    keep_mask = bbox_mask | dist_mask
+    inner_counts = np.zeros(len(gg), dtype=np.int32)
+    for index, grasp in enumerate(gg):
+        local = (obj - grasp.translation) @ grasp.rotation_matrix
+        within_height = np.abs(local[:, 2]) <= float(grasp.height) / 2.0
+        within_depth = (
+            (local[:, 0] >= float(grasp.depth) - 0.06)
+            & (local[:, 0] <= float(grasp.depth))
+        )
+        executable_width = min(float(grasp.width), MAX_GRIPPER_OPENING)
+        between_fingers = np.abs(local[:, 1]) <= executable_width / 2.0
+        inner_counts[index] = int(np.count_nonzero(within_height & within_depth & between_fingers))
+
+    inner_mask = inner_counts >= int(min_inner_points)
+    keep_mask = bbox_mask & inner_mask
     kept = int(keep_mask.sum())
     stats = {
         "enabled": True,
@@ -147,18 +168,75 @@ def filter_grasps_to_object(gg, object_points, max_center_dist=0.04, bbox_margin
         "total": int(len(gg)),
         "max_center_dist": float(max_center_dist),
         "bbox_margin": float(bbox_margin),
+        "min_inner_points": int(min_inner_points),
+        "best_inner_point_count": int(inner_counts.max()) if len(inner_counts) else 0,
         "best_center_dist": float(min_dists.min()) if len(min_dists) else None,
     }
-    if kept == 0:
-        return gg, stats
     filtered = gg[keep_mask]
     filtered.sort_by_score()
     return filtered, stats
 
 
+def filter_collision_grasps(gg, scene_points, config):
+    """Remove candidates whose fingers or approach path intersect the scene."""
+    stats = {"enabled": bool(config.get("enabled", True)), "total": int(len(gg))}
+    if not stats["enabled"] or len(gg) == 0:
+        stats.update({"kept": int(len(gg)), "reason": "disabled_or_no_candidates"})
+        return gg, stats
+
+    points = np.asarray(scene_points, dtype=np.float32)
+    detector = ModelFreeCollisionDetector(
+        points,
+        voxel_size=float(config.get("voxel_size", 0.005)),
+    )
+    collision_mask = detector.detect(
+        gg,
+        approach_dist=float(config.get("approach_dist", 0.05)),
+        collision_thresh=float(config.get("collision_thresh", 0.05)),
+    )
+    keep_mask = ~np.asarray(collision_mask, dtype=bool)
+    filtered = gg[keep_mask]
+    filtered.sort_by_score()
+    stats.update({
+        "kept": int(len(filtered)),
+        "removed": int((~keep_mask).sum()),
+        "voxel_size": float(config.get("voxel_size", 0.005)),
+        "approach_dist": float(config.get("approach_dist", 0.05)),
+        "collision_thresh": float(config.get("collision_thresh", 0.05)),
+    })
+    return filtered, stats
+
+
+def prefer_topdown_grasps(gg, config):
+    """Keep safe downward approaches and rank them by GraspNet score."""
+    stats = {"enabled": bool(config.get("enabled", True)), "total": int(len(gg))}
+    if not stats["enabled"] or len(gg) == 0:
+        stats.update({"kept": int(len(gg)), "reason": "disabled_or_no_candidates"})
+        return gg, stats
+
+    approach_axes = np.asarray(gg.rotation_matrices, dtype=np.float32)[:, :, 0]
+    downward_cosines = approach_axes @ np.array([0.0, 0.0, -1.0], dtype=np.float32)
+    max_angle_deg = float(config.get("max_angle_deg", 60.0))
+    safe_mask = downward_cosines >= np.cos(np.deg2rad(max_angle_deg))
+    if safe_mask.any():
+        safe = gg[safe_mask]
+        # The angle threshold is a safety gate, not a grasp-quality score.
+        # Ranking by angle first made nearly vertical low-quality grasps displace
+        # substantially better candidates from a small top-k evaluation.
+        preferred = safe
+        preferred.sort_by_score()
+        stats.update({"kept": int(len(preferred)), "fallback": False})
+    else:
+        preferred = gg
+        preferred.sort_by_score()
+        stats.update({"kept": int(len(preferred)), "fallback": True})
+    stats["max_angle_deg"] = max_angle_deg
+    return preferred, stats
+
+
 def parse_args():
     p = argparse.ArgumentParser(description='GraspNet + PyBullet 闭环仿真')
-    p.add_argument('--obj', default='/home/admin128/beilei/obj_phase3/002/textured.obj',
+    p.add_argument('--obj', default='assets/objects/industrial_tools/ycb/050_medium_clamp/google_16k/textured.obj',
                    help='物体 .obj 路径')
     p.add_argument('--scene-config', default=None,
                    help='多物体工业场景 JSON 配置；指定后优先使用配置中的 objects')
@@ -167,6 +245,18 @@ def parse_args():
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
+    p.add_argument('--test-all-candidates', action='store_true',
+                   help='物理评估所有过滤后候选，而不是只评估 top_k')
+    p.add_argument('--test-all-raw-candidates', action='store_true',
+                   help='诊断模式：跳过候选过滤并物理评估全部原始候选')
+    p.add_argument('--stop-on-success', action='store_true',
+                   help='依次评估全部过滤后候选，找到首个真实成功抓取后停止')
+    p.add_argument('--assisted-grasp', action='store_true',
+                   help='双指接触目标后建立临时约束，减少 PyBullet 数值抖动')
+    p.add_argument('--seed', type=int, default=1,
+                   help='NumPy/PyTorch 随机种子，用于复现实验（默认: 1）')
+    p.add_argument('--gui-speed', type=float, default=0.35,
+                   help='GUI 动画速度倍率，越小越慢（默认: 0.35）')
     p.add_argument('--scale', type=float, default=1.0,
                    help='物体缩放因子（图形学单位 mesh 需缩到米制小物体尺寸）')
     p.add_argument('--gui', action='store_true', help='打开 PyBullet GUI')
@@ -178,6 +268,13 @@ def parse_args():
 def main():
     args = parse_args()
 
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    print(f'[Seed] {args.seed}')
+
     # 设备
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     print(f'[Device] {device}')
@@ -185,10 +282,7 @@ def main():
     # 查找 checkpoint
     ckpt = args.ckpt
     if ckpt is None:
-        candidates = [
-            os.path.join(ROOT, 'checkpoints', 'checkpoint-rs.tar'),
-            '/home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar',
-        ]
+        candidates = [os.path.join(ROOT, 'checkpoints', 'checkpoint-rs.tar')]
         for c in candidates:
             if os.path.exists(c):
                 ckpt = c
@@ -286,45 +380,107 @@ def main():
     # 4. GraspNet 推理
     # ==============================================================
     print('[4/5] GraspNet 推理...')
-    cloud_tensor = torch.from_numpy(pc.astype(np.float32)).to(device)
+    camera_points = cam.world_to_camera_points(pc[0]).astype(np.float32)
+    cloud_tensor = torch.from_numpy(camera_points[np.newaxis]).to(device)
     with torch.no_grad():
         end_points = net({'point_clouds': cloud_tensor})
         grasp_preds = pred_decode(end_points)
     gg = GraspGroup(grasp_preds[0].detach().cpu().numpy())
+    gg = cam.camera_grasps_to_world(gg)
     gg.sort_by_score()
+    if len(gg) == 0:
+        raise RuntimeError('GraspNet produced no grasp candidates for the target crop')
     print(f'  ✅ {len(gg)} 个候选, top score={gg[0].score:.4f}')
 
+    raw_gg = GraspGroup(gg.grasp_group_array.copy())
     grasp_filter_stats = {}
-    if scene_config:
+    collision_filter_stats = {}
+    topdown_filter_stats = {}
+    if scene_config and not args.test_all_raw_candidates:
         filter_cfg = scene_config.get("grasp_filter", {})
         gg, grasp_filter_stats = filter_grasps_to_object(
             gg,
             target_points,
             max_center_dist=float(filter_cfg.get("max_center_dist", 0.04)),
             bbox_margin=float(filter_cfg.get("bbox_margin", 0.04)),
+            min_inner_points=int(filter_cfg.get("min_inner_points", 5)),
         )
         print(
             f'  🎯 目标过滤: {grasp_filter_stats.get("kept")}/'
             f'{grasp_filter_stats.get("total")} 个候选, '
             f'最近中心距={grasp_filter_stats.get("best_center_dist")}'
         )
+        collision_cfg = scene_config.get("collision_filter", {})
+        gg, collision_filter_stats = filter_collision_grasps(gg, pc[0], collision_cfg)
+        print(
+            f'  collision filter: {collision_filter_stats.get("kept")}/'
+            f'{collision_filter_stats.get("total")} candidates'
+        )
+
+        topdown_cfg = scene_config.get("topdown_filter", {})
+        gg, topdown_filter_stats = prefer_topdown_grasps(gg, topdown_cfg)
+        print(
+            f'  top-down preference: {topdown_filter_stats.get("kept")} candidates, '
+            f'fallback={topdown_filter_stats.get("fallback", False)}'
+        )
+    elif args.test_all_raw_candidates:
+        gg = raw_gg
+        grasp_filter_stats = {"enabled": False, "reason": "test_all_raw_candidates"}
+        collision_filter_stats = {"enabled": False, "reason": "test_all_raw_candidates"}
+        topdown_filter_stats = {"enabled": False, "reason": "test_all_raw_candidates"}
 
     # ==============================================================
     # 5. 物理仿真评估
     # ==============================================================
-    print(f'[5/5] 仿真评估 Top-{args.top_k}...')
+    evaluate_all = (
+        args.test_all_candidates
+        or args.test_all_raw_candidates
+        or args.stop_on_success
+    )
+    evaluation_count = len(gg) if evaluate_all else args.top_k
+    evaluation_description = (
+        f'最多 {evaluation_count} 个候选（首个成功后停止）'
+        if args.stop_on_success
+        else f'{evaluation_count} 个候选'
+    )
+    print(f'[5/5] 仿真评估 {evaluation_description}...')
     # JAKA Zu3 + Robotiq-85，纯 PyBullet IK（不启用 MoveIt）
-    gripper = JakaZu3Robotiq85Gripper(planner=None)
+    capture_joint_pose_deg = (
+        scene_config.get("capture_joint_pose_deg") if scene_config else None
+    )
+    place_target_joint_pose_deg = (
+        scene_config.get("place_target_joint_pose_deg") if scene_config else None
+    )
+    gripper = JakaZu3Robotiq85Gripper(
+        planner=None,
+        initial_joint_pose_deg=capture_joint_pose_deg,
+        gui_motion_step_delay=(0.003 / args.gui_speed) if args.gui else 0.0,
+    )
     gripper.load()
-    evaluator = GraspEvaluator(object_id=obj_id, gripper=gripper,
-                               point_cloud=pc[0], gui=args.gui)
-    results = evaluator.evaluate(gg, top_k=args.top_k)
+    evaluator = GraspEvaluator(
+        object_id=obj_id,
+        gripper=gripper,
+        point_cloud=target_points,
+        gui=args.gui,
+        assisted_grasp=args.assisted_grasp,
+        # The closing-region filter already validates target occupancy and is
+        # less biased than center-to-surface distance for slender objects.
+        validate_target_center=not bool(scene_config),
+        place_target_joint_pose_deg=place_target_joint_pose_deg,
+        gui_speed=args.gui_speed,
+    )
+    results = evaluator.evaluate(
+        gg,
+        top_k=evaluation_count,
+        stop_on_success=args.stop_on_success,
+    )
 
     n_ok = sum(1 for r in results if r['success'])
     for i, r in enumerate(results):
         status = '✅' if r['success'] else '❌'
         print(f'  {status} Grasp {i}: score={r["score"]:.3f}, '
-              f'lift_z={r["lift_z"]:.3f}m, w={r["width"]:.4f}m')
+              f'lift_delta={r.get("obj_lift_delta", 0.0):.3f}m, '
+              f'w={r["width"]:.4f}m')
 
     print(f'\n📊 结果: {n_ok}/{len(results)} 成功')
 
@@ -338,9 +494,21 @@ def main():
         'scene_config': scene_config.get("_path") if scene_config else None,
         'target_object_name': target_object.name,
         'target_body_id': int(obj_id),
+        'graspnet_input_frame': 'camera',
+        'candidate_execution_frame': 'world',
         'objects': scene.get_object_poses(),
         'object_point_counts': object_point_counts,
         'grasp_filter': grasp_filter_stats,
+        'collision_filter': collision_filter_stats,
+        'topdown_filter': topdown_filter_stats,
+        'seed': int(args.seed),
+        'capture_joint_pose_deg': capture_joint_pose_deg,
+        'place_target_joint_pose_deg': place_target_joint_pose_deg,
+        'gui_speed': float(args.gui_speed),
+        'test_all_candidates': bool(args.test_all_candidates),
+        'test_all_raw_candidates': bool(args.test_all_raw_candidates),
+        'stop_on_success': bool(args.stop_on_success),
+        'assisted_grasp': bool(args.assisted_grasp),
         'object_position': list(obj_pos),
         'object_orientation': list(obj_orn),
         'gripper': gripper.metadata(),
@@ -389,7 +557,10 @@ def main():
         pickle.dump({'rgb': rgb, 'depth': depth, 'point_cloud': pc,
                      'seg': seg, 'object_point_counts': object_point_counts,
                      'objects': scene.get_object_poses(),
-                     'grasp_filter': grasp_filter_stats,
+                      'grasp_filter': grasp_filter_stats,
+                     'collision_filter': collision_filter_stats,
+                     'topdown_filter': topdown_filter_stats,
+                     'seed': int(args.seed),
                      'target_body_id': int(obj_id),
                      'target_object_name': target_object.name,
                      'scene_config': scene_config.get("_path") if scene_config else None,

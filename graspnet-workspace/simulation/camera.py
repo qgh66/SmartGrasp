@@ -60,6 +60,36 @@ class VirtualCamera:
         cy = height / 2.0
         self.camera_info = CameraInfo(width, height, fx, fy, cx, cy, scale=1.0)
 
+    def camera_to_world_rotation(self) -> np.ndarray:
+        """Return the OpenCV-camera to PyBullet-world rotation matrix."""
+        position = np.asarray(self.position, dtype=np.float64)
+        target = np.asarray(self.target, dtype=np.float64)
+        up = np.asarray(self.up, dtype=np.float64)
+        forward = target - position
+        forward /= np.linalg.norm(forward)
+        right = np.cross(forward, up)
+        right /= np.linalg.norm(right)
+        camera_up = np.cross(right, forward)
+        return np.column_stack([right, -camera_up, forward])
+
+    def world_to_camera_points(self, world_points: np.ndarray) -> np.ndarray:
+        """Transform world XYZ into the camera frame expected by GraspNet."""
+        world_points = np.asarray(world_points, dtype=np.float64)
+        rotation = self.camera_to_world_rotation()
+        return (world_points - np.asarray(self.position, dtype=np.float64)) @ rotation
+
+    def camera_grasps_to_world(self, grasp_group):
+        """Transform GraspNet candidate translations and rotations to world."""
+        rotation = self.camera_to_world_rotation()
+        position = np.asarray(self.position, dtype=np.float64)
+        grasp_group.translations = grasp_group.translations @ rotation.T + position
+        grasp_group.rotation_matrices = np.einsum(
+            "ij,njk->nik",
+            rotation,
+            grasp_group.rotation_matrices,
+        )
+        return grasp_group
+
     # ------------------------------------------------------------------
     # 拍摄
     # ------------------------------------------------------------------
@@ -164,7 +194,9 @@ class VirtualCamera:
         xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
 
         px = (xmap - cx) * depth / fx
-        py = (ymap - cy) * depth / fy
+        # Image rows grow downward, while the camera/world up vector points up.
+        # Negate image Y so the reconstructed world cloud is not mirrored.
+        py = -(ymap - cy) * depth / fy
         pz = depth
 
         valid = (np.isfinite(px) & np.isfinite(py) &
@@ -198,7 +230,7 @@ class VirtualCamera:
         xmap, ymap = np.meshgrid(np.arange(W), np.arange(H))
 
         px = (xmap - cx) * depth / fx
-        py = (ymap - cy) * depth / fy
+        py = -(ymap - cy) * depth / fy
         pz = depth
         valid = (np.isfinite(px) & np.isfinite(py) &
                  (depth > 0.01) & (depth < self.far - 0.1))

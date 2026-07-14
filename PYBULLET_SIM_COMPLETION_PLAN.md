@@ -5,7 +5,7 @@
 项目路径：
 
 ```text
-/home/admin128/qiuguanhe/SmartGrasp
+/home/admin128/qiuguanhe/Simulation/SmartGrasp
 ```
 
 当前分支：
@@ -132,7 +132,7 @@ graspnet-workspace/simulation/evaluator.py
 当前可运行命令：
 
 ```bash
-cd /home/admin128/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
 bash run_grasp_simulation.sh \
   --scene-config config/industrial_scene.json \
@@ -187,7 +187,7 @@ PYBULLET_SIM_README.md
 当前可运行命令：
 
 ```bash
-cd /home/admin128/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
 python execution/run_execution.py \
   --input execution/examples/fully_visible_grasp_request.json \
@@ -314,7 +314,7 @@ graspnet-workspace/scripts/demo_closed_loop.py
 当前推荐验证命令：
 
 ```bash
-cd /home/admin128/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
 python execution/run_execution.py \
   --input execution/examples/reveal_request.json \
@@ -477,7 +477,7 @@ graspnet-workspace/config/industrial_scene.json
 建议先用 scripted grasp 测执行层，不要一上来调 GraspNet：
 
 ```bash
-cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 /home/admin128/anaconda3/envs/smartgrasp/bin/python scripts/test_scripted_grasp.py \
   --scene-config config/industrial_scene.json \

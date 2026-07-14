@@ -94,11 +94,34 @@ has_arg() {
   return 1
 }
 
+arg_value() {
+  local name="$1"
+  local default_value="$2"
+  local index
+  for ((index = 0; index < ${#ARGS[@]}; index++)); do
+    if [[ "${ARGS[index]}" == "$name" ]] && ((index + 1 < ${#ARGS[@]})); then
+      printf '%s' "${ARGS[index + 1]}"
+      return
+    fi
+    if [[ "${ARGS[index]}" == "$name="* ]]; then
+      printf '%s' "${ARGS[index]#*=}"
+      return
+    fi
+  done
+  printf '%s' "$default_value"
+}
+
 GRASP_OBJ_PATH="${GRASP_OBJ_PATH:-}"
 GRASP_SCENE_CONFIG="${GRASP_SCENE_CONFIG:-}"
 GRASP_TARGET_OBJECT="${GRASP_TARGET_OBJECT:-}"
 GRASP_CHECKPOINT_PATH="${GRASP_CHECKPOINT_PATH:-$WORKSPACE_DIR/checkpoints/checkpoint-rs.tar}"
 GRASP_TOP_K="${GRASP_TOP_K:-5}"
+GRASP_TEST_ALL_CANDIDATES="${GRASP_TEST_ALL_CANDIDATES:-0}"
+GRASP_TEST_ALL_RAW_CANDIDATES="${GRASP_TEST_ALL_RAW_CANDIDATES:-0}"
+GRASP_STOP_ON_SUCCESS="${GRASP_STOP_ON_SUCCESS:-0}"
+GRASP_ASSISTED_GRASP="${GRASP_ASSISTED_GRASP:-0}"
+GRASP_SEED="${GRASP_SEED:-1}"
+GRASP_GUI_SPEED="${GRASP_GUI_SPEED:-0.35}"
 GRASP_DEVICE="${GRASP_DEVICE:-cuda:0}"
 GRASP_OUTPUT="${GRASP_OUTPUT:-results/grasp_simulation.json}"
 GRASP_RECORD_VIDEO="${GRASP_RECORD_VIDEO:-0}"
@@ -123,12 +146,14 @@ if ! has_arg "--ckpt" && [[ ! -f "$GRASP_CHECKPOINT_PATH" ]]; then
   exit 2
 fi
 
-if [[ "$GRASP_OUTPUT" = /* ]]; then
-  mkdir -p "$(dirname "$GRASP_OUTPUT")"
-  DISPLAY_OUTPUT="$GRASP_OUTPUT"
+REQUESTED_OUTPUT="$(arg_value --output "$GRASP_OUTPUT")"
+REQUESTED_TOP_K="$(arg_value --top_k "$GRASP_TOP_K")"
+if [[ "$REQUESTED_OUTPUT" = /* ]]; then
+  mkdir -p "$(dirname "$REQUESTED_OUTPUT")"
+  DISPLAY_OUTPUT="$REQUESTED_OUTPUT"
 else
-  mkdir -p "$WORKSPACE_DIR/$(dirname "$GRASP_OUTPUT")"
-  DISPLAY_OUTPUT="$WORKSPACE_DIR/$GRASP_OUTPUT"
+  mkdir -p "$WORKSPACE_DIR/$(dirname "$REQUESTED_OUTPUT")"
+  DISPLAY_OUTPUT="$WORKSPACE_DIR/$REQUESTED_OUTPUT"
 fi
 
 export PYTHONUNBUFFERED=1
@@ -172,6 +197,30 @@ if ! has_arg "--top_k"; then
   CMD+=(--top_k "$GRASP_TOP_K")
 fi
 
+if [[ "$GRASP_TEST_ALL_CANDIDATES" == "1" || "$GRASP_TEST_ALL_CANDIDATES" == "true" ]]; then
+  CMD+=(--test-all-candidates)
+fi
+
+if [[ "$GRASP_TEST_ALL_RAW_CANDIDATES" == "1" || "$GRASP_TEST_ALL_RAW_CANDIDATES" == "true" ]]; then
+  CMD+=(--test-all-raw-candidates)
+fi
+
+if [[ "$GRASP_STOP_ON_SUCCESS" == "1" || "$GRASP_STOP_ON_SUCCESS" == "true" ]]; then
+  CMD+=(--stop-on-success)
+fi
+
+if [[ "$GRASP_ASSISTED_GRASP" == "1" || "$GRASP_ASSISTED_GRASP" == "true" ]]; then
+  CMD+=(--assisted-grasp)
+fi
+
+if ! has_arg "--seed"; then
+  CMD+=(--seed "$GRASP_SEED")
+fi
+
+if ! has_arg "--gui-speed"; then
+  CMD+=(--gui-speed "$GRASP_GUI_SPEED")
+fi
+
 if ! has_arg "--device"; then
   CMD+=(--device "$GRASP_DEVICE")
 fi
@@ -209,7 +258,13 @@ echo "  scene_config=${GRASP_SCENE_CONFIG:-<from args>}"
 echo "  target_object=${GRASP_TARGET_OBJECT:-<from args/default>}"
 echo "  checkpoint=$GRASP_CHECKPOINT_PATH"
 echo "  device=$GRASP_DEVICE"
-echo "  top_k=$GRASP_TOP_K"
+echo "  top_k=$REQUESTED_TOP_K"
+echo "  test_all_candidates=$GRASP_TEST_ALL_CANDIDATES"
+echo "  test_all_raw_candidates=$GRASP_TEST_ALL_RAW_CANDIDATES"
+echo "  stop_on_success=$GRASP_STOP_ON_SUCCESS"
+echo "  assisted_grasp=$GRASP_ASSISTED_GRASP"
+echo "  seed=$GRASP_SEED"
+echo "  gui_speed=$GRASP_GUI_SPEED"
 echo "  scale=${GRASP_SCALE:-<script/default>}"
 echo "  record_video=$GRASP_RECORD_VIDEO"
 echo "  output=$DISPLAY_OUTPUT"

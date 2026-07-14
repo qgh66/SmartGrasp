@@ -8,7 +8,7 @@ GUI 只负责展示，不会重新运行 GraspNet 推理或 PyBullet 仿真。
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/beilei/SG_graspmodule/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 python gui/app.py \
   --host 0.0.0.0 \
   --port 8050 \

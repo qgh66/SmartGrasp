@@ -4,7 +4,7 @@
 # ============================================================
 # 用法:
 #   conda activate smartgrasp
-#   cd /home/admin128/beilei/graspnet-workspace
+#   cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 #   bash scripts/train.sh
 # ============================================================
 

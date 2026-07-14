@@ -4,7 +4,7 @@ GraspNet 模型 Demo — 纯推理演示（无需 PyBullet）。
 
 用法:
   conda activate smartgrasp
-  cd /home/admin128/beilei/graspnet-workspace
+  cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
   python scripts/demo_inference.py
 """
 

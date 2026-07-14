@@ -3,7 +3,7 @@
 本文档只说明感知和推理模块如何调用执行层。项目路径：
 
 ```text
-/home/admin128/qiuguanhe/SmartGrasp
+/home/admin128/qiuguanhe/Simulation/SmartGrasp
 ```
 
 执行层统一入口：
@@ -25,7 +25,7 @@ execution/run_execution.py
 在服务器上运行：
 
 ```bash
-cd /home/admin128/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 conda activate smartgrasp
 
 python execution/run_execution.py \
@@ -217,8 +217,8 @@ response 主要字段：
     "failure_reason": "push_displacement_below_threshold"
   },
   "artifacts": {
-    "result_json": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal.json",
-    "viz_data_pkl": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal_viz_data.pkl"
+    "result_json": "/home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal.json",
+    "viz_data_pkl": "/home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/results/scene_0001_step_01_reveal_viz_data.pkl"
   },
   "request_reloop": true,
   "diagnostics": {}
@@ -258,7 +258,7 @@ import json
 import subprocess
 from pathlib import Path
 
-repo = Path("/home/admin128/qiuguanhe/SmartGrasp")
+repo = Path("/home/admin128/qiuguanhe/Simulation/SmartGrasp")
 request_path = repo / "execution/examples/reveal_request.json"
 response_path = repo / "graspnet-workspace/results/test_reveal_response.json"
 

@@ -26,9 +26,13 @@ JAKA_JOINT_NAMES = [f"joint_{i}" for i in range(1, 7)]
 JAKA_FLANGE_LINK_NAME = "Link_6"
 ROBOTIQ_BASE_LINK_NAME = "robotiq_85_base_link"
 DEFAULT_JAKA_JOINTS = [0.0, -0.3, -0.1, -1.1, 1.57, 1.9]
-ROBOTIQ_TCP_OFFSET = np.array([0.0, 0.0, 0.1625], dtype=float)
+# Measured from robotiq_85_base_link to the midpoint between the open fingertip
+# link frames in this combined URDF. The old 162.5 mm ThinkGrasp constant refers
+# to a different gripper attachment/frame convention.
+ROBOTIQ_TCP_OFFSET = np.array([0.1054, 0.0, 0.0], dtype=float)
 IK_CONTINUITY_WEIGHT = 0.003
 MOVEIT_TCP_REFINE_THRESHOLD = 0.006
+MAX_EXECUTION_TCP_ERROR = 0.01
 JOINT_MOVE_STEP = 0.035
 JOINT_MOVE_MIN_STEPS = 8
 JOINT_MOVE_MAX_STEPS = 80
@@ -79,7 +83,13 @@ class JakaZu3Robotiq85Gripper:
 
     _max_opening = 0.085
 
-    def __init__(self, robot_base_position=(-0.05, 0.0, 0.0), planner: MoveItJakaPlanner | None = None):
+    def __init__(
+        self,
+        robot_base_position=(-0.05, 0.0, 0.0),
+        planner: MoveItJakaPlanner | None = None,
+        initial_joint_pose_deg=None,
+        gui_motion_step_delay: float = 0.0,
+    ):
         self.robot_base_position = np.asarray(robot_base_position, dtype=float)
         self.planner = planner
         self.robot_id = None
@@ -96,8 +106,18 @@ class JakaZu3Robotiq85Gripper:
         self._resolved_urdf_path: str | None = None
         self.ee_tip_id = None
         self.ee_finger_pad_ids: list[int] = []
+        self.left_finger_link_ids: set[int] = set()
+        self.right_finger_link_ids: set[int] = set()
         self._current_opening = 0.06
-        self.robot_joint_values = list(DEFAULT_JAKA_JOINTS)
+        self.initial_joint_pose_deg = (
+            [float(value) for value in initial_joint_pose_deg]
+            if initial_joint_pose_deg is not None
+            else list(np.rad2deg(DEFAULT_JAKA_JOINTS))
+        )
+        if len(self.initial_joint_pose_deg) != len(JAKA_JOINT_NAMES):
+            raise ValueError("initial_joint_pose_deg must contain exactly 6 values")
+        self.robot_joint_values = list(np.deg2rad(self.initial_joint_pose_deg))
+        self.gui_motion_step_delay = max(0.0, float(gui_motion_step_delay))
         self.last_motion_plan: dict | None = None
         self.last_motion_error: str | None = None
 
@@ -131,6 +151,8 @@ class JakaZu3Robotiq85Gripper:
         self.last_motion_error = None
         self._move_arm_to(target_pos, target_orn, grasp_pos)
         self._sync_attachment()
+        tcp_pos, _ = self.get_tcp_pose()
+        return float(np.linalg.norm(np.asarray(tcp_pos, dtype=float) - grasp_pos))
 
     def plan_and_execute_pose(self, position, rotation_matrix, steps_per_point: int = 3):
         if self.planner is None or not self.planner.enabled:
@@ -166,6 +188,14 @@ class JakaZu3Robotiq85Gripper:
         self._current_opening = float(np.clip(width, 0.002, self._max_opening))
         self._move_gripper_angle(GRIPPER_ANGLE_OPEN)
 
+    def move_to_joint_pose_deg(self, joint_pose_deg):
+        """Move the arm to an explicit six-joint target expressed in degrees."""
+        joint_pose_deg = [float(value) for value in joint_pose_deg]
+        if len(joint_pose_deg) != len(JAKA_ARM_JOINTS):
+            raise ValueError("joint_pose_deg must contain exactly 6 values")
+        self._move_joints_smooth(np.deg2rad(joint_pose_deg))
+        return list(self.robot_joint_values)
+
     def close_fingers(self, target_width: float, steps: int = 100):
         target_width = float(np.clip(target_width, 0.002, self._max_opening))
         self._current_opening = target_width
@@ -181,7 +211,11 @@ class JakaZu3Robotiq85Gripper:
     def create_grasp_constraint(self, object_id):
         if self.grasp_constraint is not None:
             p.removeConstraint(self.grasp_constraint)
-        gripper_pos, gripper_orn = p.getBasePositionAndOrientation(self.robotiq_id)
+        parent_link = self.ee_tip_id if self.robot_id == self.robotiq_id else -1
+        if parent_link >= 0:
+            gripper_pos, gripper_orn = _link_frame_pose(self.robotiq_id, parent_link)
+        else:
+            gripper_pos, gripper_orn = p.getBasePositionAndOrientation(self.robotiq_id)
         obj_pos, obj_orn = p.getBasePositionAndOrientation(object_id)
         inv_gripper_pos, inv_gripper_orn = p.invertTransform(gripper_pos, gripper_orn)
         parent_frame_pos, parent_frame_orn = p.multiplyTransforms(
@@ -189,7 +223,7 @@ class JakaZu3Robotiq85Gripper:
         )
         self.grasp_constraint = p.createConstraint(
             self.robotiq_id,
-            -1,
+            parent_link,
             object_id,
             -1,
             p.JOINT_FIXED,
@@ -200,6 +234,26 @@ class JakaZu3Robotiq85Gripper:
             childFrameOrientation=[0, 0, 0, 1],
         )
         return self.grasp_constraint
+
+    def has_bilateral_finger_contact(self, object_id):
+        contacts = p.getContactPoints(bodyA=self.robotiq_id, bodyB=object_id)
+        contacted_links = {int(contact[3]) for contact in contacts}
+        left_contact = bool(contacted_links & self.left_finger_link_ids)
+        right_contact = bool(contacted_links & self.right_finger_link_ids)
+        return left_contact and right_contact
+
+    def finger_contact_links(self, object_id):
+        contacts = p.getContactPoints(bodyA=self.robotiq_id, bodyB=object_id)
+        return sorted({int(contact[3]) for contact in contacts})
+
+    def finger_link_positions(self):
+        def positions(link_ids):
+            return [list(_link_frame_pose(self.robotiq_id, link_id)[0]) for link_id in sorted(link_ids)]
+
+        return {
+            "left": positions(self.left_finger_link_ids),
+            "right": positions(self.right_finger_link_ids),
+        }
 
     def get_tcp_pose(self):
         if self.robot_id == self.robotiq_id:
@@ -213,6 +267,39 @@ class JakaZu3Robotiq85Gripper:
 
     def collision_body_ids(self):
         return list(dict.fromkeys([self.robot_id, self.robotiq_id]))
+
+    def set_collision_with_object(self, object_id, enabled):
+        """Enable or disable collisions between every robot link and an object."""
+        enabled_flag = 1 if enabled else 0
+        for body_id in self.collision_body_ids():
+            if body_id is None:
+                continue
+            for link_index in range(-1, p.getNumJoints(body_id)):
+                p.setCollisionFilterPair(
+                    bodyUniqueIdA=body_id,
+                    bodyUniqueIdB=object_id,
+                    linkIndexA=link_index,
+                    linkIndexB=-1,
+                    enableCollision=enabled_flag,
+                )
+
+    def has_contact_with_object(self, object_id):
+        return any(
+            p.getContactPoints(bodyA=body_id, bodyB=object_id)
+            for body_id in self.collision_body_ids()
+            if body_id is not None
+        )
+
+    def max_penetration_depth(self, object_id):
+        penetration_depth = 0.0
+        for body_id in self.collision_body_ids():
+            if body_id is None:
+                continue
+            for contact in p.getContactPoints(bodyA=body_id, bodyB=object_id):
+                contact_distance = float(contact[8])
+                if contact_distance < 0.0:
+                    penetration_depth = max(penetration_depth, -contact_distance)
+        return penetration_depth
 
     def release_grasp(self):
         if self.grasp_constraint is not None:
@@ -242,6 +329,7 @@ class JakaZu3Robotiq85Gripper:
             "robotiq_urdf": str(ROBOTIQ_URDF),
             "jaka_base_position": list(self.robot_base_position),
             "jaka_joint_values": list(self.robot_joint_values),
+            "initial_joint_pose_deg": list(self.initial_joint_pose_deg),
             "execution": "jaka_moveit_attached_robotiq" if self.planner and self.planner.enabled else "jaka_ik_attached_robotiq",
             "moveit_enabled": bool(self.planner and self.planner.enabled),
         }
@@ -268,6 +356,7 @@ class JakaZu3Robotiq85Gripper:
                     p.resetJointState(self.robot_id, joint_idx, float(value))
                 self._sync_attachment()
                 p.stepSimulation()
+                self._gui_motion_pause()
             current = target
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
 
@@ -304,6 +393,14 @@ class JakaZu3Robotiq85Gripper:
             joint_type = info[2]
             if link_name == ROBOTIQ_BASE_LINK_NAME:
                 self.ee_tip_id = joint_idx
+            if "robotiq_85_left_" in link_name and any(
+                part in link_name for part in ("finger", "knuckle")
+            ):
+                self.left_finger_link_ids.add(joint_idx)
+            if "robotiq_85_right_" in link_name and any(
+                part in link_name for part in ("finger", "knuckle")
+            ):
+                self.right_finger_link_ids.add(joint_idx)
             if "finger_tip" in joint_name or "finger_tip" in link_name:
                 self.ee_finger_pad_ids.append(joint_idx)
                 p.changeDynamics(self.robot_id, joint_idx, lateralFriction=3.0, spinningFriction=0.2)
@@ -359,25 +456,51 @@ class JakaZu3Robotiq85Gripper:
         upper_limits = [6.28, 4.62, 3.05, 4.62, 6.28, 6.28]
         joint_ranges = [u - l for l, u in zip(lower_limits, upper_limits)]
         original = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
-        # Keep IK solving continuous in GUI mode. The previous implementation
-        # temporarily reset the live robot into several rest poses to score IK
-        # candidates; PyBullet's GUI renders those internal probes, which looks
-        # like violent random arm twitching. Use the current joint state as the
-        # only rest pose and move smoothly to that single solution.
-        solution = p.calculateInverseKinematics(
-            self.robot_id,
-            JAKA_EE_LINK,
-            target_pos.tolist(),
-            target_orn.tolist(),
-            lowerLimits=lower_limits,
-            upperLimits=upper_limits,
-            jointRanges=joint_ranges,
-            restPoses=original,
-            maxNumIterations=2000,
-            residualThreshold=1e-6,
-        )
-        if solution:
-            self._move_joints_smooth(solution[: len(JAKA_ARM_JOINTS)])
+        rest_candidates = [
+            original,
+            list(DEFAULT_JAKA_JOINTS),
+            [0.0, 0.4, -0.2, -1.7, -1.57, 0.0],
+            [0.0, -0.3, 2.0, -0.1, 1.57, 1.2],
+            [-0.4, -0.3, 2.0, -0.1, 1.57, 1.2],
+        ]
+        tcp_target = np.asarray(tcp_target if tcp_target is not None else target_pos, dtype=float)
+        best_solution = None
+        best_error = float("inf")
+        saved_state = p.saveState()
+        try:
+            for rest_poses in rest_candidates:
+                solution = p.calculateInverseKinematics(
+                    self.robot_id,
+                    JAKA_EE_LINK,
+                    target_pos.tolist(),
+                    target_orn.tolist(),
+                    lowerLimits=lower_limits,
+                    upperLimits=upper_limits,
+                    jointRanges=joint_ranges,
+                    restPoses=rest_poses,
+                    maxNumIterations=2000,
+                    residualThreshold=1e-6,
+                )
+                candidate = solution[: len(JAKA_ARM_JOINTS)]
+                for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, candidate):
+                    p.resetJointState(self.robot_id, joint_idx, joint_value)
+                ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
+                tcp_pos, _ = _tip_pose_from_ee(ee_pos, ee_orn)
+                position_error = float(np.linalg.norm(tcp_pos - tcp_target))
+                orientation_error = 1.0 - abs(float(np.dot(np.asarray(ee_orn), target_orn)))
+                continuity_error = _joint_delta_norm(candidate, original)
+                error = position_error + 0.02 * orientation_error + IK_CONTINUITY_WEIGHT * continuity_error
+                if error < best_error:
+                    best_error = error
+                    best_solution = candidate
+                p.restoreState(saved_state)
+        finally:
+            p.restoreState(saved_state)
+            p.removeState(saved_state)
+
+        if best_solution is not None:
+            self._move_joints_smooth(best_solution)
+        self.last_motion_error = None if best_solution is not None else "No IK solution"
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
 
     def _move_joints_smooth(self, target_joints):
@@ -401,6 +524,7 @@ class JakaZu3Robotiq85Gripper:
             self.robot_joint_values = waypoint.tolist()
             self._sync_attachment()
             p.stepSimulation()
+            self._gui_motion_pause()
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
         self._hold_current_joints()
 
@@ -409,6 +533,17 @@ class JakaZu3Robotiq85Gripper:
             return
         if not self.robot_joint_values:
             self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
+        # The combined JAKA/Robotiq URDF has incomplete inertial data. Finger
+        # constraints otherwise kick the arm away from the IK pose during each
+        # simulation step. Keep the arm kinematic while leaving finger/object
+        # contacts dynamic.
+        for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, self.robot_joint_values):
+            p.resetJointState(
+                self.robot_id,
+                joint_idx,
+                targetValue=float(joint_value),
+                targetVelocity=0.0,
+            )
         p.setJointMotorControlArray(
             bodyUniqueId=self.robot_id,
             jointIndices=JAKA_ARM_JOINTS,
@@ -417,6 +552,10 @@ class JakaZu3Robotiq85Gripper:
             positionGains=[1.0] * len(JAKA_ARM_JOINTS),
             forces=[JAKA_HOLD_FORCE] * len(JAKA_ARM_JOINTS),
         )
+
+    def _gui_motion_pause(self):
+        if self.gui_motion_step_delay > 0.0:
+            time.sleep(self.gui_motion_step_delay)
 
     @staticmethod
     def _grasp_pose_to_robotiq_base(position, rotation_matrix):
@@ -428,10 +567,10 @@ class JakaZu3Robotiq85Gripper:
         opening_axis = opening_axis - np.dot(opening_axis, approach_axis) * approach_axis
         opening_axis = opening_axis / max(np.linalg.norm(opening_axis), 1e-8)
 
-        robotiq_z = approach_axis
+        robotiq_x = approach_axis
         robotiq_y = opening_axis
-        robotiq_x = np.cross(robotiq_y, robotiq_z)
-        robotiq_x = robotiq_x / max(np.linalg.norm(robotiq_x), 1e-8)
+        robotiq_z = np.cross(robotiq_x, robotiq_y)
+        robotiq_z = robotiq_z / max(np.linalg.norm(robotiq_z), 1e-8)
         robotiq_y = np.cross(robotiq_z, robotiq_x)
         robotiq_rot = np.column_stack([robotiq_x, robotiq_y, robotiq_z])
         robotiq_base_pos = grasp_pos - robotiq_rot @ ROBOTIQ_TCP_OFFSET

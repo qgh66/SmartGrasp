@@ -115,7 +115,7 @@ Dash 网页外观：使用最早的小基座 + 两根手指样式，避免长横
 运行：
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
 conda run -n smartgrasp python execution/test_reveal_api.py
 ```
@@ -144,7 +144,7 @@ OK
 运行：
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 conda run -n smartgrasp python scripts/demo_reveal_push.py \
   --distance 0.05 \
@@ -191,7 +191,7 @@ success = signed_displacement >= success_threshold
 完成集成测试后运行：
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 conda run -n smartgrasp python gui/app.py \
   --host 0.0.0.0 \
@@ -273,7 +273,7 @@ Dash，并在浏览器中按 `Ctrl+Shift+R` 强制刷新。
 ### 8.1 验证 `reveal_api.py`
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
 conda run -n smartgrasp python execution/test_reveal_api.py
 ```
@@ -288,7 +288,7 @@ OK
 ### 8.2 运行 PyBullet Push 仿真
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 conda run -n smartgrasp python scripts/demo_reveal_push.py \
   --distance 0.05 \
@@ -333,7 +333,7 @@ SSH 且没有图形转发时不要增加该参数。
 在服务器 SSH 终端中运行：
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 conda run -n smartgrasp python gui/app.py \
   --host 0.0.0.0 \

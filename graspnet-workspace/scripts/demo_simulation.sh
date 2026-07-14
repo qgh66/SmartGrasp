@@ -4,14 +4,14 @@
 # ============================================================
 # 用法:
 #   conda activate smartgrasp
-#   cd /home/admin128/beilei/graspnet-workspace
+#   cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 #   bash scripts/demo_simulation.sh
 # ============================================================
 
 set -e
 
-ROOT=$(dirname $(dirname $(realpath $0)))
-cd $ROOT
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT"
 
 echo "=========================================="
 echo " GraspNet + PyBullet Simulation Demo"
@@ -19,13 +19,13 @@ echo " ROOT: $ROOT"
 echo "=========================================="
 
 # 检查物体文件
-OBJ_PATH="/home/admin128/beilei/obj_phase3/002/textured.obj"
+OBJ_PATH="${OBJ_PATH:-$ROOT/assets/objects/industrial_tools/ycb/050_medium_clamp/google_16k/textured.obj}"
 if [ ! -f "$OBJ_PATH" ]; then
-    echo "⚠️ 物体文件不存在: $OBJ_PATH"
-    echo "  尝试使用其他物体..."
-    OBJ_PATH=$(find /home/admin128/beilei/obj_phase3 -name "textured.obj" 2>/dev/null | head -1)
+    echo "Object file not found: $OBJ_PATH"
+    echo "  Trying another repository-local object..."
+    OBJ_PATH=$(find "$ROOT/assets/objects" -name "textured.obj" -print -quit 2>/dev/null)
     if [ -z "$OBJ_PATH" ]; then
-        echo "❌ 未找到任何物体文件！"
+        echo "No repository-local textured.obj found."
         exit 1
     fi
 fi
@@ -34,15 +34,9 @@ echo "  Object: $OBJ_PATH"
 # 检查 checkpoint
 CKPT="$ROOT/checkpoints/checkpoint-rs.tar"
 if [ ! -f "$CKPT" ]; then
-    echo "⚠️ checkpoint 不存在: $CKPT"
-    echo "  请将 checkpoint 放到该路径下"
-    CKPT="/home/admin128/beilei/graspnet-baseline/checkpoints/checkpoint-rs.tar"
-    if [ -f "$CKPT" ]; then
-        echo "  使用源项目 checkpoint: $CKPT"
-    else
-        echo "❌ checkpoint 未找到！"
-        exit 1
-    fi
+    echo "Checkpoint not found: $CKPT"
+    echo "Place checkpoint-rs.tar under $ROOT/checkpoints/ or set CKPT."
+    exit 1
 fi
 
 echo ""

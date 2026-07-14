@@ -92,7 +92,7 @@ python scripts/demo_reveal_push.py \
 `smartgrasp` 环境没有安装 `pyrealsense2`，本机的 `calib` 环境可以直接采集：
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 conda run -n calib python scripts/capture_realsense_rgbd.py \
   --output-dir real_rgbd_capture \
@@ -122,8 +122,8 @@ real_rgbd_capture/push_scene_capture.json
 cd /home/admin128/Gsam2/Grounded-SAM-2
 
 python mysteps.py \
-  --input-path /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/real_rgbd_capture/push_scene_rgb.png \
-  --output-dir /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace/real_rgbd_capture/segmentation
+  --input-path /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/real_rgbd_capture/push_scene_rgb.png \
+  --output-dir /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/real_rgbd_capture/segmentation
 ```
 
 如果要推动的遮挡物就是该模具，使用输出的
@@ -133,7 +133,7 @@ python mysteps.py \
 #### 第三步：由真实 RGB-D 建模并运行 Push
 
 ```bash
-cd /home/admin128/sangxiyuan/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 conda activate smartgrasp
 
 python scripts/demo_reveal_push.py \

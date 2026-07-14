@@ -1,6 +1,8 @@
 {
   "description": "Industrial-tool tabletop scene for SmartGrasp PyBullet simulation.",
   "settle_steps": 300,
+  "capture_joint_pose_deg": [0.0, 90.0, 45.0, 135.0, 270.0, 72.0],
+  "place_target_joint_pose_deg": [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0],
   "camera": {
     "position": [0.32, 0.0, 0.62],
     "target": [0.32, 0.0, 0.04],
@@ -17,7 +19,18 @@
   },
   "grasp_filter": {
     "max_center_dist": 0.04,
-    "bbox_margin": 0.04
+    "bbox_margin": 0.04,
+    "min_inner_points": 5
+  },
+  "collision_filter": {
+    "enabled": true,
+    "voxel_size": 0.005,
+    "approach_dist": 0.05,
+    "collision_thresh": 0.05
+  },
+  "topdown_filter": {
+    "enabled": true,
+    "max_angle_deg": 60.0
   },
   "objects": [
     {

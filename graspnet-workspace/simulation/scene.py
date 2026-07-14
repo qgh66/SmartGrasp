@@ -137,7 +137,10 @@ class SimulationScene:
             basePosition=position,
             baseOrientation=orientation,
             globalScaling=global_scaling,
+            flags=p.URDF_USE_MATERIAL_COLORS_FROM_MTL,
         )
+        if suffix == ".obj":
+            self._apply_obj_texture(obj_id, Path(obj_path))
         p.changeDynamics(obj_id, -1, mass=mass,
                          lateralFriction=lateral_friction,
                          spinningFriction=spinning_friction)
@@ -154,6 +157,36 @@ class SimulationScene:
         self.objects_by_id[obj_id] = scene_object
         self.objects_by_name[object_name] = obj_id
         return obj_id
+
+    @staticmethod
+    def _apply_obj_texture(obj_id: int, obj_path: Path) -> None:
+        """Bind an OBJ's diffuse texture explicitly for PyBullet GUI rendering."""
+        try:
+            material_names = []
+            for line in obj_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                fields = line.strip().split(maxsplit=1)
+                if len(fields) == 2 and fields[0].lower() == "mtllib":
+                    material_names.append(fields[1].strip())
+
+            for material_name in material_names:
+                material_path = obj_path.parent / material_name
+                if not material_path.exists():
+                    continue
+                for line in material_path.read_text(
+                    encoding="utf-8", errors="ignore"
+                ).splitlines():
+                    fields = line.strip().split(maxsplit=1)
+                    if len(fields) != 2 or fields[0].lower() != "map_kd":
+                        continue
+                    texture_path = material_path.parent / fields[1].strip()
+                    if texture_path.exists():
+                        texture_id = p.loadTexture(str(texture_path.resolve()))
+                        p.changeVisualShape(obj_id, -1, textureUniqueId=texture_id)
+                        return
+        except (OSError, p.error):
+            # The physics object remains usable if a third-party mesh has a
+            # malformed or unsupported material file.
+            return
 
     def load_objects(self, object_specs: list[dict[str, Any]]) -> list[int]:
         """批量加载对象配置。

@@ -41,7 +41,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 ```
 
 检查 GUI 和仿真依赖是否可导入：
@@ -60,13 +60,13 @@ python -c "import pybullet, dash, plotly, trimesh, scipy; print('deps OK')"
 
 
 ```text
-/home/qiuguanhe/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
+/home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
 ```
 
 2. 一个待抓取物体 mesh，例如：
 
 ```text
-/home/qiuguanhe/SmartGrasp/assert/workspace/data/banana.obj
+/home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/workspace/data/banana.obj
 ```
 
 运行时也可以通过 `--obj` 指定其他 `.obj` 文件。
@@ -88,9 +88,9 @@ assert/ur5e/gripper/robotiq_2f_85.urdf
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
-GRASP_OBJ_PATH=/home/qiuguanhe/SmartGrasp/assert/unseen_objects/gelatin_box/textured.obj \
+GRASP_OBJ_PATH=/home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/unseen_objects/gelatin_box/textured.obj \
 GRASP_TOP_K=5 \
 sbatch run_grasp_simulation.sh
 ```
@@ -99,7 +99,7 @@ sbatch run_grasp_simulation.sh
 
 ```bash
 sbatch run_grasp_simulation.sh \
-  --obj /home/qiuguanhe/SmartGrasp/assert/workspace/data/duck.obj \
+  --obj /home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/workspace/data/duck.obj \
   --top_k 5 \
   --scale 0.04
 ```
@@ -220,7 +220,7 @@ results_viz_data.pkl
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 
 python gui/app.py \
   --host 0.0.0.0 \
@@ -375,3 +375,37 @@ env -u LD_LIBRARY_PATH \
   GIT_SSH_COMMAND='ssh -i /home/admin128/.ssh/beilei_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o KexAlgorithms=ecdh-sha2-nistp256' \
   git push origin feat/GraspExecutionModule
 ```
+
+## 服务器本机 PyBullet GUI 抓取与放置
+
+`graspnet-workspace/config/industrial_scene.json` 中配置了：
+
+```text
+capture_joint_pose_deg: [0, 90, 45, 135, 270, 72]
+place_target_joint_pose_deg: [-75, 90, 45, 135, 270, 72]
+```
+
+前者是每个候选抓取开始前的 JAKA 初始关节位姿；抓取成功后，机械臂携带
+物体运动到后者并松爪放置。OBJ 的 MTL 漫反射贴图会在 PyBullet 中显式绑定，
+避免 GUI 中物体显示为黑色。
+
+服务器本机图形桌面运行命令：
+
+```bash
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
+conda activate smartgrasp
+
+PYBULLET_GUI=1 \
+GRASP_ASSISTED_GRASP=1 \
+GRASP_STOP_ON_SUCCESS=1 \
+GRASP_SEED=1 \
+GRASP_GUI_SPEED=0.6 \
+bash run_grasp_simulation.sh \
+  --scene-config config/industrial_scene.json \
+  --target-object flat_screwdriver \
+  --output results/flat_screwdriver_gui.json
+```
+
+`GRASP_GUI_SPEED` 是动画速度倍率，默认 `0.35`；数值越小越慢，例如 `0.2`，
+`1.0` 为正常速度。`--target-object` 可以换成场景配置 `objects` 中的其他名称，
+例如 `phillips_screwdriver`、`adjustable_wrench` 或 `power_drill`。

@@ -884,7 +884,10 @@ def make_summary(case, selected_index: int | None):
             html.Div([html.Span("Raw status: ", className="metric-label"), html.Strong("success" if selected.get("raw_success", selected["success"]) else "failed")]),
             html.Div([html.Span("Physical valid: ", className="metric-label"), html.Strong("yes" if selected.get("physical_valid", True) else "no")]),
             html.Div([html.Span("Score: ", className="metric-label"), html.Strong(f"{selected['score']:.4f}")]),
-            html.Div([html.Span("Lift Z: ", className="metric-label"), html.Strong(f"{selected['lift_z']:.4f} m")]),
+            html.Div([
+                html.Span("Lift delta: ", className="metric-label"),
+                html.Strong(f"{selected.get('obj_lift_delta', 0.0):.4f} m"),
+            ]),
             html.Div([html.Span("Width: ", className="metric-label"), html.Strong(f"{selected['width']:.4f} m")]),
             html.Div([html.Span("Depth: ", className="metric-label"), html.Strong(f"{selected['depth']:.4f} m")]),
             html.Div([html.Span("Center-object dist: ", className="metric-label"), html.Strong(f"{selected.get('center_object_dist', 0.0):.4f} m")]),

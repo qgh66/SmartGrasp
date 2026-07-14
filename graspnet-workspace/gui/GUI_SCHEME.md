@@ -19,7 +19,7 @@ graspnet-workspace/
 启动入口：
 
 ```bash
-cd /home/admin128/beilei/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 conda run -n smartgrasp python gui/app.py \
   --host 0.0.0.0 \
   --port 8050 \
@@ -263,7 +263,7 @@ PyBullet 负责计算，Dash 负责查看。
 日常查看结果：
 
 ```bash
-cd /home/admin128/beilei/graspnet-workspace
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
 conda run -n smartgrasp python gui/app.py \
   --host 0.0.0.0 \
   --port 8050 \
