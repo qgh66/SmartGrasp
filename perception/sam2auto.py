@@ -327,12 +327,14 @@ def _resolve_overlaps_by_depth(
             for p in sample_o:
                 # Find k nearest from A exclusive, mean distance
                 dist_i = np.sum((coords_i - p) ** 2, axis=1)
-                top_i = np.partition(dist_i, min(k, n_i))[:min(k, n_i)]
+                k_i = min(k, n_i) - 1
+                top_i = np.partition(dist_i, k_i)[:k_i + 1] if k_i >= 0 else np.array([float('inf')])
                 mean_i = np.mean(top_i) if len(top_i) > 0 else float('inf')
 
                 # Find k nearest from B exclusive, mean distance
                 dist_j = np.sum((coords_j - p) ** 2, axis=1)
-                top_j = np.partition(dist_j, min(k, n_j))[:min(k, n_j)]
+                k_j = min(k, n_j) - 1
+                top_j = np.partition(dist_j, k_j)[:k_j + 1] if k_j >= 0 else np.array([float('inf')])
                 mean_j = np.mean(top_j) if len(top_j) > 0 else float('inf')
 
                 if mean_i <= mean_j:

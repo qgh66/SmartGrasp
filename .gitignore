@@ -11,6 +11,7 @@
 .codex/
 .agents/
 AGENTS.md
+*.pdf
 
 # --- Python / build caches ---
 __pycache__/
