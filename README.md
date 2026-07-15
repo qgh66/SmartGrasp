@@ -168,7 +168,8 @@ TABLE_CLEARANCE = 0.005       # 桌面余量
 MAX_GRASP_CENTER_DIST = 0.04  # 抓取中心到物体点云的最大允许距离（米）
 ```
 
-夹爪闭合力等参数在 `simulation/robot_gripper.py`（如 `GRIPPER_MOTOR_FORCE = 8.0`，与参考一致）。
+夹爪闭合力等参数在 `simulation/robot_gripper.py`。当前六个活动指节由同一主角度
+主动保持，`GRIPPER_MOTOR_FORCE = 20.0`，用于抑制 PyBullet 中从动指节松垮和抖动。
 
 ## 如何评估 / 查看评估结果
 
@@ -381,13 +382,15 @@ env -u LD_LIBRARY_PATH \
 `graspnet-workspace/config/industrial_scene.json` 中配置了：
 
 ```text
+robot_base_yaw_deg: 180
 capture_joint_pose_deg: [0, 90, 45, 135, 270, 72]
 place_target_joint_pose_deg: [-75, 90, 45, 135, 270, 72]
 ```
 
-前者是每个候选抓取开始前的 JAKA 初始关节位姿；抓取成功后，机械臂携带
-物体运动到后者并松爪放置。OBJ 的 MTL 漫反射贴图会在 PyBullet 中显式绑定，
-避免 GUI 中物体显示为黑色。
+`robot_base_yaw_deg` 将机械臂整机底座绕世界 Z 轴旋转 180 度，不改变下面两组
+关节角。`capture_joint_pose_deg` 是抓取开始前的 JAKA 初始关节位姿；抓取成功后，
+机械臂携带物体运动到 `place_target_joint_pose_deg` 并松爪放置。OBJ 的 MTL 漫反射
+贴图会在 PyBullet 中显式绑定，避免 GUI 中物体显示为黑色。
 
 服务器本机图形桌面运行命令：
 
@@ -399,13 +402,18 @@ PYBULLET_GUI=1 \
 GRASP_ASSISTED_GRASP=1 \
 GRASP_STOP_ON_SUCCESS=1 \
 GRASP_SEED=1 \
-GRASP_GUI_SPEED=0.6 \
+GRASP_GUI_SPEED=0.35 \
 bash run_grasp_simulation.sh \
   --scene-config config/industrial_scene.json \
-  --target-object flat_screwdriver \
-  --output results/flat_screwdriver_gui.json
+  --all-objects \
+  --target-objects battery flat_screwdriver \
+  --max-candidates-per-object 30 \
+  --output results/battery_then_red_screwdriver_gui.json
 ```
 
 `GRASP_GUI_SPEED` 是动画速度倍率，默认 `0.35`；数值越小越慢，例如 `0.2`，
-`1.0` 为正常速度。`--target-object` 可以换成场景配置 `objects` 中的其他名称，
-例如 `phillips_screwdriver`、`adjustable_wrench` 或 `power_drill`。
+`1.0` 为正常速度。这里的圆柱物模型实际是东芝电池，场景名称为 `battery`；
+离它最近的红色螺丝刀名称为 `flat_screwdriver`。`--target-objects` 后面的顺序就是
+实际抓取顺序。每个目标最多执行 30 个候选，首次成功后立即移动到放置关节位姿
+并松爪，然后处理下一个目标。抓取开始前，机械臂会在
+`capture_joint_pose_deg` 保持 3 秒。

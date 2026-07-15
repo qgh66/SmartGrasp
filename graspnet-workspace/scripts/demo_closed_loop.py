@@ -242,6 +242,10 @@ def parse_args():
                    help='多物体工业场景 JSON 配置；指定后优先使用配置中的 objects')
     p.add_argument('--target-object', default=None,
                    help='多物体场景中的目标物体 name；不指定时使用 metadata.role=target 或第一个物体')
+    p.add_argument('--target-objects', nargs='+', default=None,
+                   help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
+    p.add_argument('--all-objects', action='store_true',
+                   help='启用顺序抓取与放置流程；配合 --target-objects 指定目标及顺序')
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
@@ -257,6 +261,10 @@ def parse_args():
                    help='NumPy/PyTorch 随机种子，用于复现实验（默认: 1）')
     p.add_argument('--gui-speed', type=float, default=0.35,
                    help='GUI 动画速度倍率，越小越慢（默认: 0.35）')
+    p.add_argument('--initial-pose-hold-seconds', type=float, default=3.0,
+                   help='全部抓取开始前保持初始关节位姿的秒数（默认: 3）')
+    p.add_argument('--max-candidates-per-object', type=int, default=30,
+                   help='批量模式每个物体最多执行的候选数（默认: 30）')
     p.add_argument('--scale', type=float, default=1.0,
                    help='物体缩放因子（图形学单位 mesh 需缩到米制小物体尺寸）')
     p.add_argument('--gui', action='store_true', help='打开 PyBullet GUI')
@@ -267,6 +275,10 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    if args.all_objects:
+        from demo_all_objects import run_all_objects
+        return run_all_objects(args)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -454,6 +466,9 @@ def main():
     gripper = JakaZu3Robotiq85Gripper(
         planner=None,
         initial_joint_pose_deg=capture_joint_pose_deg,
+        robot_base_yaw_deg=(
+            scene_config.get("robot_base_yaw_deg", 0.0) if scene_config else 0.0
+        ),
         gui_motion_step_delay=(0.003 / args.gui_speed) if args.gui else 0.0,
     )
     gripper.load()

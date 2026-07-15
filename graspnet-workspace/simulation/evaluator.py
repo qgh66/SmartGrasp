@@ -108,9 +108,11 @@ class GraspEvaluator:
     def evaluate(self, grasp_group: GraspGroup, top_k: int = 10,
                  approach_depth_offset: float = 0.05,
                  lift_height: float = 0.20, lift_steps: int = 200,
-                 stop_on_success: bool = False):
+                 stop_on_success: bool = False,
+                 preserve_success_state: bool = False):
         gg_top = grasp_group[:min(top_k, len(grasp_group))]
         results = []
+        successful_state_id = None
         try:
             for idx, grasp in enumerate(gg_top):
                 p.restoreState(self._initial_state_id)
@@ -120,11 +122,15 @@ class GraspEvaluator:
                 res['grasp_index'] = idx
                 res['frame_log'] = frame_log
                 results.append(res)
+                if preserve_success_state and res['success']:
+                    successful_state_id = p.saveState()
                 if stop_on_success and res['success']:
                     break
         finally:
-            p.restoreState(self._initial_state_id)
+            p.restoreState(successful_state_id or self._initial_state_id)
             self.gripper.grasp_constraint = None
+            if successful_state_id is not None:
+                p.removeState(successful_state_id)
             p.removeState(self._initial_state_id)
             self._initial_state_id = None
         return results

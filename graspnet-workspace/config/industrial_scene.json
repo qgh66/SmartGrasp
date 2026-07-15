@@ -1,6 +1,7 @@
 {
   "description": "Industrial-tool tabletop scene for SmartGrasp PyBullet simulation.",
   "settle_steps": 300,
+  "robot_base_yaw_deg": 180.0,
   "capture_joint_pose_deg": [0.0, 90.0, 45.0, 135.0, 270.0, 72.0],
   "place_target_joint_pose_deg": [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0],
   "camera": {

@@ -122,6 +122,7 @@ GRASP_STOP_ON_SUCCESS="${GRASP_STOP_ON_SUCCESS:-0}"
 GRASP_ASSISTED_GRASP="${GRASP_ASSISTED_GRASP:-0}"
 GRASP_SEED="${GRASP_SEED:-1}"
 GRASP_GUI_SPEED="${GRASP_GUI_SPEED:-0.35}"
+GRASP_MAX_CANDIDATES_PER_OBJECT="${GRASP_MAX_CANDIDATES_PER_OBJECT:-30}"
 GRASP_DEVICE="${GRASP_DEVICE:-cuda:0}"
 GRASP_OUTPUT="${GRASP_OUTPUT:-results/grasp_simulation.json}"
 GRASP_RECORD_VIDEO="${GRASP_RECORD_VIDEO:-0}"
@@ -221,6 +222,10 @@ if ! has_arg "--gui-speed"; then
   CMD+=(--gui-speed "$GRASP_GUI_SPEED")
 fi
 
+if ! has_arg "--max-candidates-per-object"; then
+  CMD+=(--max-candidates-per-object "$GRASP_MAX_CANDIDATES_PER_OBJECT")
+fi
+
 if ! has_arg "--device"; then
   CMD+=(--device "$GRASP_DEVICE")
 fi
@@ -265,6 +270,7 @@ echo "  stop_on_success=$GRASP_STOP_ON_SUCCESS"
 echo "  assisted_grasp=$GRASP_ASSISTED_GRASP"
 echo "  seed=$GRASP_SEED"
 echo "  gui_speed=$GRASP_GUI_SPEED"
+echo "  max_candidates_per_object=$GRASP_MAX_CANDIDATES_PER_OBJECT"
 echo "  scale=${GRASP_SCALE:-<script/default>}"
 echo "  record_video=$GRASP_RECORD_VIDEO"
 echo "  output=$DISPLAY_OUTPUT"

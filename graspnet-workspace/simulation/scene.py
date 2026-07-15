@@ -181,7 +181,15 @@ class SimulationScene:
                     texture_path = material_path.parent / fields[1].strip()
                     if texture_path.exists():
                         texture_id = p.loadTexture(str(texture_path.resolve()))
-                        p.changeVisualShape(obj_id, -1, textureUniqueId=texture_id)
+                        # PyBullet imported these YCB MTL files with a black
+                        # diffuse multiplier. Textures are multiplied by RGBA,
+                        # so binding a valid texture alone still rendered black.
+                        p.changeVisualShape(
+                            obj_id,
+                            -1,
+                            textureUniqueId=texture_id,
+                            rgbaColor=[1.0, 1.0, 1.0, 1.0],
+                        )
                         return
         except (OSError, p.error):
             # The physics object remains usable if a third-party mesh has a

@@ -40,7 +40,18 @@ JAKA_HOLD_FORCE = 500.0
 GRIPPER_ANGLE_OPEN = 0.03
 GRIPPER_ANGLE_CLOSE = 0.8
 GRIPPER_ANGLE_CLOSE_THRESHOLD = 0.73
-GRIPPER_MOTOR_FORCE = 8.0
+GRIPPER_MOTOR_FORCE = 20.0
+
+# PyBullet does not execute the URDF/Gazebo <mimic> plugins. Drive every
+# movable finger joint from the same master angle so the linkage cannot sag.
+GRIPPER_JOINT_MULTIPLIERS = {
+    "finger_joint": 1.0,
+    "right_outer_knuckle_joint": 1.0,
+    "left_inner_knuckle_joint": 1.0,
+    "right_inner_knuckle_joint": 1.0,
+    "left_inner_finger_joint": -1.0,
+    "right_inner_finger_joint": -1.0,
+}
 
 EE_TIP_TRANSFORM = np.array([
     [0.0, 0.0, -1.0, 0.0],
@@ -88,9 +99,11 @@ class JakaZu3Robotiq85Gripper:
         robot_base_position=(-0.05, 0.0, 0.0),
         planner: MoveItJakaPlanner | None = None,
         initial_joint_pose_deg=None,
+        robot_base_yaw_deg: float = 0.0,
         gui_motion_step_delay: float = 0.0,
     ):
         self.robot_base_position = np.asarray(robot_base_position, dtype=float)
+        self.robot_base_yaw_deg = float(robot_base_yaw_deg)
         self.planner = planner
         self.robot_id = None
         self.robotiq_id = None
@@ -328,6 +341,7 @@ class JakaZu3Robotiq85Gripper:
             "jaka_urdf": str(JAKA_URDF),
             "robotiq_urdf": str(ROBOTIQ_URDF),
             "jaka_base_position": list(self.robot_base_position),
+            "jaka_base_yaw_deg": self.robot_base_yaw_deg,
             "jaka_joint_values": list(self.robot_joint_values),
             "initial_joint_pose_deg": list(self.initial_joint_pose_deg),
             "execution": "jaka_moveit_attached_robotiq" if self.planner and self.planner.enabled else "jaka_ik_attached_robotiq",
@@ -369,7 +383,9 @@ class JakaZu3Robotiq85Gripper:
         self.robot_id = p.loadURDF(
             str(resolved_urdf),
             basePosition=self.robot_base_position.tolist(),
-            baseOrientation=[0, 0, 0, 1],
+            baseOrientation=p.getQuaternionFromEuler(
+                [0.0, 0.0, np.deg2rad(self.robot_base_yaw_deg)]
+            ),
             useFixedBase=True,
             flags=p.URDF_USE_INERTIA_FROM_FILE,
         )
@@ -408,7 +424,6 @@ class JakaZu3Robotiq85Gripper:
                 p.setJointMotorControl2(
                     self.robot_id, joint_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0
                 )
-        self._setup_robotiq_mimic_constraints()
         self.set_opening(0.06)
         self._sync_attachment()
 
@@ -593,48 +608,29 @@ class JakaZu3Robotiq85Gripper:
         ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
         p.resetBasePositionAndOrientation(self.robotiq_id, ee_pos, ee_orn)
 
-    def _setup_robotiq_mimic_constraints(self):
-        for constraint_id in self._mimic_constraints:
-            p.removeConstraint(constraint_id)
-        self._mimic_constraints = []
-
-        def add_gear(parent_name, child_name, axis, ratio, max_force=10000):
-            parent_joint = self._robotiq_joint_map.get(parent_name)
-            child_joint = self._robotiq_joint_map.get(child_name)
-            if parent_joint is None or child_joint is None:
-                return
-            constraint_id = p.createConstraint(
-                self.robotiq_id,
-                parent_joint,
-                self.robotiq_id,
-                child_joint,
-                jointType=p.JOINT_GEAR,
-                jointAxis=axis,
-                parentFramePosition=[0, 0, 0],
-                childFramePosition=[0, 0, 0],
-            )
-            p.changeConstraint(constraint_id, gearRatio=ratio, erp=0.8, maxForce=max_force)
-            self._mimic_constraints.append(constraint_id)
-
-        add_gear("finger_joint", "left_inner_finger_joint", [1, 0, 0], 1)
-        add_gear("finger_joint", "left_inner_knuckle_joint", [1, 0, 0], -1)
-        add_gear("right_outer_knuckle_joint", "right_inner_finger_joint", [1, 0, 0], 1)
-        add_gear("right_outer_knuckle_joint", "right_inner_knuckle_joint", [1, 0, 0], -1)
-        add_gear("finger_joint", "right_outer_knuckle_joint", [0, 1, 0], -1, max_force=1000)
+    def _controlled_gripper_joints(self):
+        """Return unique (joint id, multiplier) pairs for the six-bar linkage."""
+        controlled = []
+        seen = set()
+        for name, multiplier in GRIPPER_JOINT_MULTIPLIERS.items():
+            joint_id = self._robotiq_joint_map.get(name)
+            if joint_id is None or joint_id in seen:
+                continue
+            seen.add(joint_id)
+            controlled.append((joint_id, multiplier))
+        return controlled
 
     def _command_gripper_angle(self, joint_value: float, step_count: int = 10):
         if self.robotiq_id is None:
             return
-        main_joint = self._robotiq_joint_map.get("finger_joint")
-        right_outer_joint = self._robotiq_joint_map.get("right_outer_knuckle_joint")
-        for joint_idx in (main_joint, right_outer_joint):
-            if joint_idx is None:
-                continue
+        for joint_idx, multiplier in self._controlled_gripper_joints():
             p.setJointMotorControl2(
                 self.robotiq_id,
                 joint_idx,
                 p.POSITION_CONTROL,
-                targetPosition=joint_value,
+                targetPosition=multiplier * joint_value,
+                positionGain=1.0,
+                velocityGain=1.0,
                 force=GRIPPER_MOTOR_FORCE,
             )
         for _ in range(step_count):
@@ -643,21 +639,19 @@ class JakaZu3Robotiq85Gripper:
 
     def _move_gripper_angle(self, target_angle: float, timeout: float = 3.0, is_slow: bool = False):
         main_joint = self._robotiq_joint_map.get("finger_joint")
-        right_outer_joint = self._robotiq_joint_map.get("right_outer_knuckle_joint")
         if main_joint is None:
             return
 
         if is_slow:
             previous_angle = p.getJointState(self.robotiq_id, main_joint)[0]
             direction = 1.0 if target_angle > previous_angle else -1.0
-            for joint_idx in (main_joint, right_outer_joint):
-                if joint_idx is None:
-                    continue
+            for joint_idx, multiplier in self._controlled_gripper_joints():
                 p.setJointMotorControl2(
                     self.robotiq_id,
                     joint_idx,
                     p.VELOCITY_CONTROL,
-                    targetVelocity=direction,
+                    targetVelocity=multiplier * direction,
+                    maxVelocity=1.0,
                     force=GRIPPER_MOTOR_FORCE,
                 )
             for _ in range(10):
