@@ -302,6 +302,9 @@ class OpenAIVisionClient(VLMClient):
         client_kwargs: dict = {
             "api_key": api_key or os.environ.get(vlm_config.VLM_API_KEY_ENV),
             "timeout": float(vlm_config.VLM_TIMEOUT),
+            # A query gets one ten-minute attempt. SDK retries are disabled so
+            # this timeout is not multiplied by hidden retry attempts.
+            "max_retries": int(vlm_config.VLM_MAX_RETRIES),
         }
         base = base_url or vlm_config.VLM_BASE_URL
         if base:

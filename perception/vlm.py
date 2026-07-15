@@ -65,7 +65,10 @@ def _openai_client(api_key_env: str, base_url: str | None, timeout: float) -> An
         from openai import OpenAI
     except ImportError as exc:
         raise RuntimeError("OpenAI package not installed.") from exc
-    kwargs: dict[str, Any] = {"timeout": timeout}
+    kwargs: dict[str, Any] = {
+        "timeout": min(float(timeout), 600.0),
+        "max_retries": 0,
+    }
     key = os.environ.get(api_key_env)
     if key:
         kwargs["api_key"] = key

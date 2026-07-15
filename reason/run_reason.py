@@ -335,6 +335,7 @@ def _scene_reason_summary(
     return {
         "scene_id": row.get("scene_id"),
         "instruction": row.get("intent_instruction") or perception.annotation,
+        "status": row.get("status"),
         "target_object": {
             "id": target_id,
             "label": _object_label(perception, target_id, object_labels),
@@ -580,39 +581,13 @@ def main():
             print(f"  [ERROR] {scene_key}: target resolution failed: {e}")
             continue
 
+        # Keep these defined even when Intent returns no target ID. A missing
+        # ID is still classified below: scenes with occlusion edges enter the
+        # fully-occluded handler; scenes without edges are treated as no item.
+        decision = None
+        actions_seq = None
         for target_entry in targets:
             mid = target_entry["target_id"]
-            if mid is None:
-                row = {
-                    "model": model_name,
-                    "prior_prompt": args.prior_prompt,
-                    "ranking_score": args.ranking_score,
-                    "target_source": target_entry["target_source"],
-                    "intent_instruction": target_entry["intent_instruction"],
-                    "intent_reason": target_entry["intent_reason"],
-                    "intent_candidate_ids": target_entry["intent_candidate_ids"],
-                    "intent_vlm_decision": target_entry.get("intent_vlm_decision"),
-                    "scene_key": scene_key,
-                    "scene_id": perception.scene_id,
-                    "target_id": None,
-                    "target_label": "none",
-                    "is_query_target": False,
-                    "annotation": perception.annotation,
-                    "branch": None,
-                    "grasp_id": None,
-                    "grasp_label": None,
-                    "is_terminal": None,
-                    "reason": "run_intent returned no target object",
-                    "status": "intent_no_target",
-                }
-                row.update(_selected_graspability_fields(None))
-                csv_rows.append(row)
-                scene_detail_rows.append(row)
-                selected_graspability_summary.append(_selected_summary_row(row))
-                reason_blocks.append(_reason_block(row, None))
-                object_count += 1
-                continue
-
             p = replace(perception, target_molmo_id=mid)
 
             # 1) Branch classification.
@@ -675,7 +650,22 @@ def main():
                 t_handler = time.time() - t0
                 print(f"[TIMING] {scene_key} target={mid}: handler = {t_handler:.2f}s", flush=True)
 
-            if mid in perception.molmo_to_node:
+            if status == "ok" and branch == Branch.FAULT:
+                status = "no_item_found"
+            elif status == "ok" and (
+                decision is None
+                or not decision.success
+                or decision.grasp_id is None
+            ):
+                status = "selection_no_found"
+
+            if mid is None:
+                label = str(
+                    target_entry.get("intent_instruction")
+                    or perception.annotation
+                    or "unknown target"
+                )
+            elif mid in perception.molmo_to_node:
                 label = perception.node_info[perception.molmo_to_node[mid]]["label"]
             else:
                 label = f"object_{mid}_not_in_graph"

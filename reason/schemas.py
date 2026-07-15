@@ -20,7 +20,7 @@ class Branch(str, Enum):
 class PerceptionOutput:
     """Shared input to the reasoning pipeline."""
     # Required graph fields
-    target_molmo_id: int
+    target_molmo_id: Optional[int]
     task_type: str
     occlusion_graph: nx.DiGraph
     node_info: dict[int, dict]

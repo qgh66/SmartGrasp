@@ -21,7 +21,7 @@ from typing import Any, Iterable, Protocol
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://www.highland-api.top/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
-DEFAULT_TIMEOUT = 300.0
+DEFAULT_TIMEOUT = 600.0
 
 _SIDE_WORDS = {
     "left",
@@ -143,6 +143,7 @@ class ResponsesVLMClient:
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
+            max_retries=0,
         )
 
     @classmethod
@@ -315,9 +316,7 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "Step 2. Relevant object identification: from the listed objects and "
         "attached labeled image, select the object most relevant to the task.\n"
         "Step 3. Spatial reasoning: if the instruction uses words such as top, "
-        "bottom, upper, lower, front, or back, interpret them as real scene height "
-        "or stacking order by default. Use occlusion data and the occlusion graph "
-        "for this disambiguation, not only 2D image position.\n\n"
+        "bottom, upper, lower, front, or back, interpret them from 2D image position.\n\n"
 
         "Rules:\n"
         "- The target object must be one object id from summary.json.\n"
