@@ -50,6 +50,7 @@ graspnet-workspace/
 results.csv
 branch_results.json
 reason.txt
+/rsr/data
 
 # --- Downloaded models, checkpoints, and external repos ---
 /models/
