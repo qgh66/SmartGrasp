@@ -117,6 +117,13 @@ for t in tasks:
     ok += 1
     print(f'\n===== [{ok}/{total}] scene_{sid} ({cat}) =====', flush=True)
 
+    # 清除残留
+    import shutil as _shutil
+    for _d in [ROOT / 'data' / f'scene_{sid}', ROOT / 'data' / cat / f'scene_{sid}']:
+        if _d.exists():
+            _shutil.rmtree(_d)
+            print(f'  [clean] removed {_d}', flush=True)
+
     dst = ROOT / 'data' / cat / f'scene_{sid}'
     dst.mkdir(parents=True, exist_ok=True)
 

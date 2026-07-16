@@ -29,6 +29,7 @@ graspnet-workspace/
 
 # --- Data and generated scene artifacts ---
 /data/
+/data*
 /data copy/
 /sample_data/
 /scene_details/

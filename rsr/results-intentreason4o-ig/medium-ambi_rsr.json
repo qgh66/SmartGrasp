@@ -1,891 +1,891 @@
 {
-  "category": "medium",
+  "category": "medium-ambi",
   "iou_threshold": 0.5,
   "total": 147,
-  "success": 109,
-  "rsr": 0.7415,
+  "success": 102,
+  "rsr": 0.6939,
   "details": [
     {
-      "scene_id": 1064,
+      "scene_id": 1042,
       "split": "split0",
       "success": true,
-      "iou": 0.9389
+      "iou": 0.9514
     },
     {
-      "scene_id": 1064,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9389
-    },
-    {
-      "scene_id": 1064,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9389
-    },
-    {
-      "scene_id": 1104,
-      "split": "split0",
-      "success": false,
-      "iou": 0.1594
-    },
-    {
-      "scene_id": 1104,
-      "split": "split1",
-      "success": false,
-      "iou": 0.1594
-    },
-    {
-      "scene_id": 1104,
-      "split": "split2",
-      "success": false,
-      "iou": 0.1594
-    },
-    {
-      "scene_id": 1216,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 1216,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9604
-    },
-    {
-      "scene_id": 1216,
-      "split": "split2",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 1449,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9816
-    },
-    {
-      "scene_id": 1449,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9816
-    },
-    {
-      "scene_id": 1449,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9816
-    },
-    {
-      "scene_id": 1631,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1631,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1631,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1670,
-      "split": "split0",
-      "success": true,
-      "iou": 0.7602
-    },
-    {
-      "scene_id": 1670,
-      "split": "split1",
-      "success": true,
-      "iou": 0.7602
-    },
-    {
-      "scene_id": 1670,
-      "split": "split2",
-      "success": true,
-      "iou": 0.7602
-    },
-    {
-      "scene_id": 1697,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9795
-    },
-    {
-      "scene_id": 1697,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9795
-    },
-    {
-      "scene_id": 1697,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9795
-    },
-    {
-      "scene_id": 1755,
-      "split": "split0",
-      "success": true,
-      "iou": 0.963
-    },
-    {
-      "scene_id": 1755,
-      "split": "split1",
-      "success": true,
-      "iou": 0.963
-    },
-    {
-      "scene_id": 1755,
-      "split": "split2",
-      "success": true,
-      "iou": 0.963
-    },
-    {
-      "scene_id": 1786,
-      "split": "split0",
-      "success": true,
-      "iou": 0.8488
-    },
-    {
-      "scene_id": 1786,
-      "split": "split1",
-      "success": true,
-      "iou": 0.8488
-    },
-    {
-      "scene_id": 1786,
-      "split": "split2",
-      "success": true,
-      "iou": 0.8488
-    },
-    {
-      "scene_id": 1860,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9855
-    },
-    {
-      "scene_id": 1860,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9855
-    },
-    {
-      "scene_id": 1860,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9855
-    },
-    {
-      "scene_id": 1948,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9932
-    },
-    {
-      "scene_id": 1948,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9932
-    },
-    {
-      "scene_id": 1948,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9932
-    },
-    {
-      "scene_id": 2037,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2037,
+      "scene_id": 1042,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 2037,
+      "scene_id": 1042,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9514
+    },
+    {
+      "scene_id": 1078,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9838
+    },
+    {
+      "scene_id": 1078,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9838
+    },
+    {
+      "scene_id": 1078,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9838
+    },
+    {
+      "scene_id": 1115,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9912
+    },
+    {
+      "scene_id": 1115,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9912
+    },
+    {
+      "scene_id": 1115,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 2052,
+      "scene_id": 1125,
       "split": "split0",
       "success": true,
-      "iou": 0.9776
+      "iou": 0.9899
     },
     {
-      "scene_id": 2052,
+      "scene_id": 1125,
       "split": "split1",
       "success": true,
-      "iou": 0.9913
+      "iou": 0.9899
     },
     {
-      "scene_id": 2052,
+      "scene_id": 1125,
       "split": "split2",
       "success": true,
-      "iou": 0.9776
+      "iou": 0.9899
     },
     {
-      "scene_id": 206,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 206,
-      "split": "split1",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 206,
-      "split": "split2",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2284,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2284,
-      "split": "split1",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2284,
-      "split": "split2",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2520,
+      "scene_id": 1269,
       "split": "split0",
       "success": true,
-      "iou": 0.9935
+      "iou": 0.9894
     },
     {
-      "scene_id": 2520,
+      "scene_id": 1269,
       "split": "split1",
       "success": true,
-      "iou": 0.9935
+      "iou": 0.9928
     },
     {
-      "scene_id": 2520,
+      "scene_id": 1269,
       "split": "split2",
       "success": true,
-      "iou": 0.9935
+      "iou": 0.9894
     },
     {
-      "scene_id": 2862,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9643
-    },
-    {
-      "scene_id": 2862,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9643
-    },
-    {
-      "scene_id": 2862,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9643
-    },
-    {
-      "scene_id": 3288,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9909
-    },
-    {
-      "scene_id": 3288,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9909
-    },
-    {
-      "scene_id": 3288,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9909
-    },
-    {
-      "scene_id": 348,
-      "split": "split0",
-      "success": false,
-      "iou": 0.39
-    },
-    {
-      "scene_id": 348,
-      "split": "split1",
-      "success": false,
-      "iou": 0.39
-    },
-    {
-      "scene_id": 348,
-      "split": "split2",
-      "success": false,
-      "iou": 0.39
-    },
-    {
-      "scene_id": 3661,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9884
-    },
-    {
-      "scene_id": 3661,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9884
-    },
-    {
-      "scene_id": 3661,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9884
-    },
-    {
-      "scene_id": 3789,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9887
-    },
-    {
-      "scene_id": 3789,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9887
-    },
-    {
-      "scene_id": 3789,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9887
-    },
-    {
-      "scene_id": 390,
-      "split": "split0",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 390,
-      "split": "split1",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 390,
-      "split": "split2",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 3961,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0248
-    },
-    {
-      "scene_id": 3961,
-      "split": "split1",
-      "success": false,
-      "iou": 0.0248
-    },
-    {
-      "scene_id": 3961,
-      "split": "split2",
-      "success": false,
-      "iou": 0.0248
-    },
-    {
-      "scene_id": 4020,
-      "split": "split0",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 4020,
-      "split": "split1",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 4020,
-      "split": "split2",
-      "success": true,
-      "iou": 0.994
-    },
-    {
-      "scene_id": 4098,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9911
-    },
-    {
-      "scene_id": 4098,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9911
-    },
-    {
-      "scene_id": 4098,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9911
-    },
-    {
-      "scene_id": 422,
+      "scene_id": 1357,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 422,
+      "scene_id": 1357,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 422,
+      "scene_id": 1357,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9801
     },
     {
-      "scene_id": 4409,
+      "scene_id": 1494,
       "split": "split0",
       "success": true,
-      "iou": 0.9947
+      "iou": 0.9562
     },
     {
-      "scene_id": 4409,
+      "scene_id": 1494,
       "split": "split1",
       "success": true,
-      "iou": 0.9947
+      "iou": 0.9562
     },
     {
-      "scene_id": 4409,
+      "scene_id": 1494,
       "split": "split2",
       "success": true,
-      "iou": 0.9947
+      "iou": 0.9562
     },
     {
-      "scene_id": 4877,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 4877,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 4877,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 491,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9897
-    },
-    {
-      "scene_id": 491,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9897
-    },
-    {
-      "scene_id": 491,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9897
-    },
-    {
-      "scene_id": 610,
-      "split": "split0",
-      "success": true,
-      "iou": 0.99
-    },
-    {
-      "scene_id": 610,
-      "split": "split1",
-      "success": true,
-      "iou": 0.99
-    },
-    {
-      "scene_id": 610,
-      "split": "split2",
-      "success": true,
-      "iou": 0.99
-    },
-    {
-      "scene_id": 6726,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 6726,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 6726,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 6751,
-      "split": "split0",
-      "success": true,
-      "iou": 0.572
-    },
-    {
-      "scene_id": 6751,
-      "split": "split1",
-      "success": true,
-      "iou": 0.572
-    },
-    {
-      "scene_id": 6751,
-      "split": "split2",
-      "success": true,
-      "iou": 0.572
-    },
-    {
-      "scene_id": 6758,
-      "split": "split0",
-      "success": true,
-      "iou": 0.8088
-    },
-    {
-      "scene_id": 6758,
-      "split": "split1",
-      "success": true,
-      "iou": 0.8088
-    },
-    {
-      "scene_id": 6758,
-      "split": "split2",
-      "success": true,
-      "iou": 0.8088
-    },
-    {
-      "scene_id": 6817,
+      "scene_id": 1498,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 6817,
+      "scene_id": 1498,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 6817,
+      "scene_id": 1498,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9969
+    },
+    {
+      "scene_id": 1500,
+      "split": "split0",
+      "success": true,
+      "iou": 0.973
+    },
+    {
+      "scene_id": 1500,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1500,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 6862,
-      "split": "split0",
-      "success": true,
-      "iou": 0.7953
-    },
-    {
-      "scene_id": 6862,
-      "split": "split1",
-      "success": true,
-      "iou": 0.7953
-    },
-    {
-      "scene_id": 6862,
-      "split": "split2",
-      "success": true,
-      "iou": 0.7953
-    },
-    {
-      "scene_id": 6874,
+      "scene_id": 1508,
       "split": "split0",
       "success": false,
-      "iou": 0.4847
+      "iou": 0.0
     },
     {
-      "scene_id": 6874,
+      "scene_id": 1508,
       "split": "split1",
       "success": false,
-      "iou": 0.4847
+      "iou": 0.0
     },
     {
-      "scene_id": 6874,
+      "scene_id": 1508,
       "split": "split2",
       "success": false,
-      "iou": 0.4847
+      "iou": 0.0
     },
     {
-      "scene_id": 6897,
+      "scene_id": 1524,
       "split": "split0",
       "success": true,
-      "iou": 0.7174
+      "iou": 0.9942
     },
     {
-      "scene_id": 6897,
+      "scene_id": 1524,
       "split": "split1",
-      "success": true,
-      "iou": 0.7174
+      "success": false,
+      "iou": 0.0
     },
     {
-      "scene_id": 6897,
+      "scene_id": 1524,
       "split": "split2",
-      "success": true,
-      "iou": 0.7174
+      "success": false,
+      "iou": 0.0
     },
     {
-      "scene_id": 6903,
+      "scene_id": 1662,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1662,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1662,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1827,
       "split": "split0",
       "success": true,
-      "iou": 0.9979
+      "iou": 0.985
     },
     {
-      "scene_id": 6903,
+      "scene_id": 1827,
       "split": "split1",
       "success": true,
-      "iou": 0.9979
+      "iou": 0.985
     },
     {
-      "scene_id": 6903,
+      "scene_id": 1827,
       "split": "split2",
       "success": true,
-      "iou": 0.9979
+      "iou": 0.9917
     },
     {
-      "scene_id": 6938,
+      "scene_id": 1871,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1871,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1871,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1962,
+      "split": "split0",
+      "success": true,
+      "iou": 0.7718
+    },
+    {
+      "scene_id": 1962,
+      "split": "split1",
+      "success": true,
+      "iou": 0.7718
+    },
+    {
+      "scene_id": 1962,
+      "split": "split2",
+      "success": true,
+      "iou": 0.7718
+    },
+    {
+      "scene_id": 1963,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1963,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1963,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 1978,
+      "split": "split0",
+      "success": false,
+      "iou": 0.3116
+    },
+    {
+      "scene_id": 1978,
+      "split": "split1",
+      "success": false,
+      "iou": 0.3116
+    },
+    {
+      "scene_id": 1978,
+      "split": "split2",
+      "success": false,
+      "iou": 0.3116
+    },
+    {
+      "scene_id": 2000,
+      "split": "split0",
+      "success": true,
+      "iou": 0.8013
+    },
+    {
+      "scene_id": 2000,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2000,
+      "split": "split2",
+      "success": true,
+      "iou": 0.8013
+    },
+    {
+      "scene_id": 2078,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9656
+    },
+    {
+      "scene_id": 2078,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9656
+    },
+    {
+      "scene_id": 2078,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9656
+    },
+    {
+      "scene_id": 2157,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2157,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2157,
+      "split": "split2",
+      "success": true,
+      "iou": 0.892
+    },
+    {
+      "scene_id": 2163,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9634
+    },
+    {
+      "scene_id": 2163,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9634
+    },
+    {
+      "scene_id": 2163,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9634
+    },
+    {
+      "scene_id": 2179,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2179,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2179,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2275,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9907
+    },
+    {
+      "scene_id": 2275,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9907
+    },
+    {
+      "scene_id": 2275,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9907
+    },
+    {
+      "scene_id": 2313,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9231
+    },
+    {
+      "scene_id": 2313,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9231
+    },
+    {
+      "scene_id": 2313,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9231
+    },
+    {
+      "scene_id": 2448,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9862
+    },
+    {
+      "scene_id": 2448,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9862
+    },
+    {
+      "scene_id": 2448,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9862
+    },
+    {
+      "scene_id": 2516,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9441
+    },
+    {
+      "scene_id": 2516,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9441
+    },
+    {
+      "scene_id": 2516,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9441
+    },
+    {
+      "scene_id": 2541,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9745
+    },
+    {
+      "scene_id": 2541,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9745
+    },
+    {
+      "scene_id": 2541,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9745
+    },
+    {
+      "scene_id": 2765,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2765,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2765,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2867,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9952
+    },
+    {
+      "scene_id": 2867,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2867,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9952
+    },
+    {
+      "scene_id": 2973,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9818
+    },
+    {
+      "scene_id": 2973,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9818
+    },
+    {
+      "scene_id": 2973,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9818
+    },
+    {
+      "scene_id": 298,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9702
+    },
+    {
+      "scene_id": 298,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9702
+    },
+    {
+      "scene_id": 298,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9702
+    },
+    {
+      "scene_id": 3078,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9928
+    },
+    {
+      "scene_id": 3078,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9928
+    },
+    {
+      "scene_id": 3078,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9928
+    },
+    {
+      "scene_id": 3216,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9778
+    },
+    {
+      "scene_id": 3216,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0001
+    },
+    {
+      "scene_id": 3216,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9778
+    },
+    {
+      "scene_id": 3217,
+      "split": "split0",
+      "success": false,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 3217,
+      "split": "split1",
+      "success": false,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 3217,
+      "split": "split2",
+      "success": false,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 3309,
       "split": "split0",
       "success": true,
       "iou": 0.9881
     },
     {
-      "scene_id": 6938,
+      "scene_id": 3309,
       "split": "split1",
       "success": true,
       "iou": 0.9881
     },
     {
-      "scene_id": 6938,
+      "scene_id": 3309,
       "split": "split2",
       "success": true,
       "iou": 0.9881
     },
     {
-      "scene_id": 6962,
+      "scene_id": 3357,
       "split": "split0",
       "success": true,
-      "iou": 0.9831
+      "iou": 0.9882
     },
     {
-      "scene_id": 6962,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9831
-    },
-    {
-      "scene_id": 6962,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9831
-    },
-    {
-      "scene_id": 6991,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9834
-    },
-    {
-      "scene_id": 6991,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9834
-    },
-    {
-      "scene_id": 6991,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9834
-    },
-    {
-      "scene_id": 7024,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9427
-    },
-    {
-      "scene_id": 7024,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9427
-    },
-    {
-      "scene_id": 7024,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9427
-    },
-    {
-      "scene_id": 7025,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9505
-    },
-    {
-      "scene_id": 7025,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9505
-    },
-    {
-      "scene_id": 7025,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9505
-    },
-    {
-      "scene_id": 7029,
-      "split": "split0",
-      "success": false,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 7029,
+      "scene_id": 3357,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 7029,
+      "scene_id": 3357,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9882
     },
     {
-      "scene_id": 7163,
+      "scene_id": 3374,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
-      "scene_id": 7163,
+      "scene_id": 3374,
       "split": "split1",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9871
     },
     {
-      "scene_id": 7163,
+      "scene_id": 3374,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9871
     },
     {
-      "scene_id": 79,
+      "scene_id": 345,
       "split": "split0",
       "success": true,
-      "iou": 0.8676
+      "iou": 0.6193
     },
     {
-      "scene_id": 79,
+      "scene_id": 345,
       "split": "split1",
       "success": true,
-      "iou": 0.8676
+      "iou": 0.6193
     },
     {
-      "scene_id": 79,
+      "scene_id": 345,
       "split": "split2",
       "success": true,
-      "iou": 0.8676
+      "iou": 0.6193
     },
     {
-      "scene_id": 913,
-      "split": "split0",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 913,
-      "split": "split1",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 913,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 944,
+      "scene_id": 358,
       "split": "split0",
       "success": false,
-      "iou": 0.0
+      "iou": 0.3281
     },
     {
-      "scene_id": 944,
+      "scene_id": 358,
       "split": "split1",
       "success": false,
-      "iou": 0.0
+      "iou": 0.3281
     },
     {
-      "scene_id": 944,
+      "scene_id": 358,
       "split": "split2",
       "success": false,
-      "iou": 0.0
+      "iou": 0.3281
     },
     {
-      "scene_id": 988,
+      "scene_id": 3686,
       "split": "split0",
       "success": true,
-      "iou": 0.9891
+      "iou": 0.9863
     },
     {
-      "scene_id": 988,
+      "scene_id": 3686,
       "split": "split1",
       "success": true,
-      "iou": 0.9891
+      "iou": 0.9863
     },
     {
-      "scene_id": 988,
+      "scene_id": 3686,
       "split": "split2",
       "success": true,
-      "iou": 0.9891
+      "iou": 0.9863
+    },
+    {
+      "scene_id": 3908,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9791
+    },
+    {
+      "scene_id": 3908,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9791
+    },
+    {
+      "scene_id": 3908,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9791
+    },
+    {
+      "scene_id": 395,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9641
+    },
+    {
+      "scene_id": 395,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9641
+    },
+    {
+      "scene_id": 395,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9641
+    },
+    {
+      "scene_id": 4189,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0001
+    },
+    {
+      "scene_id": 4189,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0001
+    },
+    {
+      "scene_id": 4189,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0001
+    },
+    {
+      "scene_id": 4351,
+      "split": "split0",
+      "success": true,
+      "iou": 0.5177
+    },
+    {
+      "scene_id": 4351,
+      "split": "split1",
+      "success": true,
+      "iou": 0.5177
+    },
+    {
+      "scene_id": 4351,
+      "split": "split2",
+      "success": true,
+      "iou": 0.5177
+    },
+    {
+      "scene_id": 460,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9724
+    },
+    {
+      "scene_id": 460,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9724
+    },
+    {
+      "scene_id": 460,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9724
+    },
+    {
+      "scene_id": 501,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9947
+    },
+    {
+      "scene_id": 501,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9947
+    },
+    {
+      "scene_id": 501,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9947
+    },
+    {
+      "scene_id": 771,
+      "split": "split0",
+      "success": false,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 771,
+      "split": "split1",
+      "success": true,
+      "iou": 0.5395
+    },
+    {
+      "scene_id": 771,
+      "split": "split2",
+      "success": true,
+      "iou": 0.5395
+    },
+    {
+      "scene_id": 774,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9873
+    },
+    {
+      "scene_id": 774,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9873
+    },
+    {
+      "scene_id": 774,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9873
+    },
+    {
+      "scene_id": 820,
+      "split": "split0",
+      "success": true,
+      "iou": 0.7203
+    },
+    {
+      "scene_id": 820,
+      "split": "split1",
+      "success": true,
+      "iou": 0.7203
+    },
+    {
+      "scene_id": 820,
+      "split": "split2",
+      "success": true,
+      "iou": 0.7203
     }
   ]
 }
