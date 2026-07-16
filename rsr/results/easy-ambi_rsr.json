@@ -2,8 +2,8 @@
   "category": "easy-ambi",
   "iou_threshold": 0.5,
   "total": 144,
-  "success": 101,
-  "rsr": 0.7014,
+  "success": 103,
+  "rsr": 0.7153,
   "details": [
     {
       "scene_id": 1047,
@@ -50,14 +50,14 @@
     {
       "scene_id": 1070,
       "split": "split1",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9873
     },
     {
       "scene_id": 1070,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9873
     },
     {
       "scene_id": 1071,

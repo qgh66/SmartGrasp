@@ -8,6 +8,7 @@
 |------|------|
 | `prepare.py` | 从 parquet 生成任务清单（`tasks.json` + `scene_lists/*.txt`） |
 | `run_all.sh` | 以 scene 为单位：perception → intent → reason → organize |
+| `run_all_reason.sh` | **仅重跑 intent + reason**，基于已有 perception 结果 |
 | `evaluate_ssr.py` | 计算 SSR 指标（模型预测 mask vs GT mask 的 IoU） |
 | `evaluate_ssr.sh` | SSR 计算的 shell 封装 |
 | `results/` | SSR 结果输出目录 |
@@ -29,6 +30,39 @@ bash ssr/run_all.sh easy
 # 4. 只跑某一个 scene
 bash ssr/run_all.sh easy 0
 ```
+
+### 只重跑 intent + reason（不重跑 perception）
+
+当 perception 已经跑完，只想换模型/算法重新跑 intent 和 reason 时使用：
+
+```bash
+# 重跑某个类的全部场景
+bash ssr/run_all_reason.sh medium
+
+# 从指定 scene_id 开始（断点续跑）
+bash ssr/run_all_reason.sh medium --from 79
+
+# 只跑指定场景
+bash ssr/run_all_reason.sh medium 79 206 348 6862
+```
+
+脚本顶部可切换模型和算法：
+```bash
+REASON_MODEL="gpt-4o"
+INTENT_MODEL="gpt-4o"
+REASON_ARGS="
+  --model ${REASON_MODEL}
+  --intent-model ${INTENT_MODEL}
+  --ranking-score ig
+"
+```
+
+与 `run_all.sh` 的区别：
+- **跳过** perception（不重新跑 SAM2 + VLM review）
+- 自动检测 perception 是否存在，不存在则跳过
+- 自动清除旧的 `intent/` 和 `reason/` 子目录
+- 通过软链接复用已有 perception 数据，不复制文件
+
 
 ## 执行流程（逐 scene）
 

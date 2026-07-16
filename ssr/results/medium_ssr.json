@@ -1,7 +1,7 @@
 {
   "category": "medium",
   "total_splits": 147,
-  "ssr_mean_iou": 0.7195,
+  "ssr_mean_iou": 0.6436,
   "details": [
     {
       "scene_id": 1064,
@@ -166,12 +166,12 @@
     {
       "scene_id": 1670,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 8,
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.7602
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1670,
@@ -246,12 +246,12 @@
     {
       "scene_id": 1786,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 1,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": 1,
-      "iou": 0.8488
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1786,
@@ -266,12 +266,12 @@
     {
       "scene_id": 1786,
       "split": "split2",
-      "grasp_id": 3,
+      "grasp_id": 1,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": 1,
-      "iou": 0.8488
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1860,
@@ -316,12 +316,12 @@
     {
       "scene_id": 1948,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 6,
       "gt_object_ids": [
         5
       ],
-      "best_gt_id": 5,
-      "iou": 0.9932
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1948,
@@ -346,22 +346,22 @@
     {
       "scene_id": 2037,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 6,
+      "iou": 0.9922
     },
     {
       "scene_id": 2037,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 6,
+      "iou": 0.9922
     },
     {
       "scene_id": 2052,
@@ -377,6 +377,17 @@
     {
       "scene_id": 2052,
       "split": "split1",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        1,
+        3
+      ],
+      "best_gt_id": 1,
+      "iou": 0.9776
+    },
+    {
+      "scene_id": 2052,
+      "split": "split2",
       "grasp_id": 4,
       "gt_object_ids": [
         1,
@@ -386,17 +397,6 @@
       "iou": 0.9913
     },
     {
-      "scene_id": 2052,
-      "split": "split2",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        1,
-        3
-      ],
-      "best_gt_id": 1,
-      "iou": 0.9776
-    },
-    {
       "scene_id": 206,
       "split": "split0",
       "grasp_id": 4,
@@ -499,12 +499,12 @@
     {
       "scene_id": 2862,
       "split": "split1",
-      "grasp_id": 1,
+      "grasp_id": 4,
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.9643
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 2862,
@@ -659,12 +659,12 @@
     {
       "scene_id": 390,
       "split": "split2",
-      "grasp_id": 1,
+      "grasp_id": 2,
       "gt_object_ids": [
         2
       ],
-      "best_gt_id": 2,
-      "iou": 0.994
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 3961,
@@ -689,12 +689,12 @@
     {
       "scene_id": 3961,
       "split": "split2",
-      "grasp_id": 8,
+      "grasp_id": 1,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": 6,
-      "iou": 0.0248
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 4020,
@@ -762,16 +762,6 @@
     {
       "scene_id": 422,
       "split": "split0",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 422,
-      "split": "split1",
       "grasp_id": 5,
       "gt_object_ids": [
         4
@@ -781,6 +771,16 @@
     },
     {
       "scene_id": 422,
+      "split": "split1",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 422,
       "split": "split2",
       "grasp_id": 3,
       "gt_object_ids": [
@@ -792,22 +792,22 @@
     {
       "scene_id": 4409,
       "split": "split0",
-      "grasp_id": 4,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": 1,
-      "iou": 0.9947
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 4409,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": 1,
-      "iou": 0.9947
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 4409,
@@ -822,13 +822,13 @@
     {
       "scene_id": 4877,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 4,
       "gt_object_ids": [
         1,
         2
       ],
-      "best_gt_id": 1,
-      "iou": 0.9948
+      "best_gt_id": 2,
+      "iou": 0.9946
     },
     {
       "scene_id": 4877,
@@ -958,32 +958,32 @@
     {
       "scene_id": 6751,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 8,
       "gt_object_ids": [
         8
       ],
-      "best_gt_id": 8,
-      "iou": 0.572
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6751,
       "split": "split2",
-      "grasp_id": 9,
+      "grasp_id": 8,
       "gt_object_ids": [
         8
       ],
-      "best_gt_id": 8,
-      "iou": 0.572
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6758,
       "split": "split0",
-      "grasp_id": 6,
+      "grasp_id": 4,
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.8088
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6758,
@@ -1048,12 +1048,12 @@
     {
       "scene_id": 6862,
       "split": "split1",
-      "grasp_id": 5,
+      "grasp_id": 2,
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.7953
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6862,
@@ -1407,12 +1407,12 @@
     {
       "scene_id": 913,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": 1,
-      "iou": 0.9948
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 913,
@@ -1467,22 +1467,22 @@
     {
       "scene_id": 988,
       "split": "split0",
-      "grasp_id": 1,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
-      "best_gt_id": 4,
-      "iou": 0.9891
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 988,
       "split": "split1",
-      "grasp_id": 1,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
-      "best_gt_id": 4,
-      "iou": 0.9891
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 988,

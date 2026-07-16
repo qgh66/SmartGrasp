@@ -1,7 +1,7 @@
 {
   "category": "easy-ambi",
   "total_splits": 144,
-  "ssr_mean_iou": 0.694,
+  "ssr_mean_iou": 0.7077,
   "details": [
     {
       "scene_id": 1047,
@@ -76,22 +76,22 @@
     {
       "scene_id": 1070,
       "split": "split1",
-      "grasp_id": 8,
+      "grasp_id": 7,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 1,
+      "iou": 0.9873
     },
     {
       "scene_id": 1070,
       "split": "split2",
-      "grasp_id": 8,
+      "grasp_id": 7,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 1,
+      "iou": 0.9873
     },
     {
       "scene_id": 1071,

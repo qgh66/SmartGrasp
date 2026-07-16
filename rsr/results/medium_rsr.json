@@ -2,8 +2,8 @@
   "category": "medium",
   "iou_threshold": 0.5,
   "total": 147,
-  "success": 109,
-  "rsr": 0.7415,
+  "success": 96,
+  "rsr": 0.6531,
   "details": [
     {
       "scene_id": 1064,
@@ -104,8 +104,8 @@
     {
       "scene_id": 1670,
       "split": "split1",
-      "success": true,
-      "iou": 0.7602
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1670,
@@ -152,8 +152,8 @@
     {
       "scene_id": 1786,
       "split": "split0",
-      "success": true,
-      "iou": 0.8488
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1786,
@@ -164,8 +164,8 @@
     {
       "scene_id": 1786,
       "split": "split2",
-      "success": true,
-      "iou": 0.8488
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1860,
@@ -194,8 +194,8 @@
     {
       "scene_id": 1948,
       "split": "split1",
-      "success": true,
-      "iou": 0.9932
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1948,
@@ -212,14 +212,14 @@
     {
       "scene_id": 2037,
       "split": "split1",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9922
     },
     {
       "scene_id": 2037,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9922
     },
     {
       "scene_id": 2052,
@@ -230,16 +230,16 @@
     {
       "scene_id": 2052,
       "split": "split1",
+      "success": true,
+      "iou": 0.9776
+    },
+    {
+      "scene_id": 2052,
+      "split": "split2",
       "success": true,
       "iou": 0.9913
     },
     {
-      "scene_id": 2052,
-      "split": "split2",
-      "success": true,
-      "iou": 0.9776
-    },
-    {
       "scene_id": 206,
       "split": "split0",
       "success": false,
@@ -302,8 +302,8 @@
     {
       "scene_id": 2862,
       "split": "split1",
-      "success": true,
-      "iou": 0.9643
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 2862,
@@ -398,8 +398,8 @@
     {
       "scene_id": 390,
       "split": "split2",
-      "success": true,
-      "iou": 0.994
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 3961,
@@ -417,7 +417,7 @@
       "scene_id": 3961,
       "split": "split2",
       "success": false,
-      "iou": 0.0248
+      "iou": 0.0
     },
     {
       "scene_id": 4020,
@@ -476,14 +476,14 @@
     {
       "scene_id": 4409,
       "split": "split0",
-      "success": true,
-      "iou": 0.9947
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 4409,
       "split": "split1",
-      "success": true,
-      "iou": 0.9947
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 4409,
@@ -495,7 +495,7 @@
       "scene_id": 4877,
       "split": "split0",
       "success": true,
-      "iou": 0.9948
+      "iou": 0.9946
     },
     {
       "scene_id": 4877,
@@ -572,20 +572,20 @@
     {
       "scene_id": 6751,
       "split": "split1",
-      "success": true,
-      "iou": 0.572
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6751,
       "split": "split2",
-      "success": true,
-      "iou": 0.572
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6758,
       "split": "split0",
-      "success": true,
-      "iou": 0.8088
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6758,
@@ -626,8 +626,8 @@
     {
       "scene_id": 6862,
       "split": "split1",
-      "success": true,
-      "iou": 0.7953
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6862,
@@ -836,8 +836,8 @@
     {
       "scene_id": 913,
       "split": "split0",
-      "success": true,
-      "iou": 0.9948
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 913,
@@ -872,14 +872,14 @@
     {
       "scene_id": 988,
       "split": "split0",
-      "success": true,
-      "iou": 0.9891
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 988,
       "split": "split1",
-      "success": true,
-      "iou": 0.9891
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 988,
