@@ -36,11 +36,15 @@ bash ssr/run_all.sh easy 0
 当 perception 已经跑完，只想换模型/算法重新跑 intent 和 reason 时使用：
 
 ```bash
-# 重跑某个类的全部场景
+# 全部 6 类
+bash ssr/run_all_reason.sh --all
+
+# 重跑某个类
 bash ssr/run_all_reason.sh medium
 
 # 从指定 scene_id 开始（断点续跑）
 bash ssr/run_all_reason.sh medium --from 79
+bash ssr/run_all_reason.sh --all --from 5000
 
 # 只跑指定场景
 bash ssr/run_all_reason.sh medium 79 206 348 6862
@@ -61,7 +65,7 @@ REASON_ARGS="
 - **跳过** perception（不重新跑 SAM2 + VLM review）
 - 自动检测 perception 是否存在，不存在则跳过
 - 自动清除旧的 `intent/` 和 `reason/` 子目录
-- 通过软链接复用已有 perception 数据，不复制文件
+- 直接从 `data/{category}/` 读取 perception，无需软链接
 
 
 ## 执行流程（逐 scene）

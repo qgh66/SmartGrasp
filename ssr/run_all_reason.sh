@@ -8,8 +8,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # ======== Reason 参数 ========
-REASON_MODEL="gpt-4o"
-INTENT_MODEL="gpt-4o"
+REASON_MODEL="gpt-5.5"
+INTENT_MODEL="gpt-5.5"
 REASON_ARGS="
   --model ${REASON_MODEL}
   --intent-model ${INTENT_MODEL}
@@ -24,15 +24,22 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://www.highland-api.top/v1}"
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }
 
-CATEGORY="${1:-}"
-shift 2>/dev/null || true
-
+CATEGORY=""
 FROM_SCENE=""
 SCENE_IDS=""
+CATEGORY_SET=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --all) CATEGORY=""; CATEGORY_SET="1"; shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
-        *) SCENE_IDS="$SCENE_IDS $1"; shift ;;
+        *) 
+            if [[ -z "$CATEGORY_SET" && "$1" != --* ]]; then
+                CATEGORY="$1"; CATEGORY_SET="1"
+            else
+                SCENE_IDS="$SCENE_IDS $1"
+            fi
+            shift
+            ;;
     esac
 done
 SCENE_IDS="${SCENE_IDS# }"
