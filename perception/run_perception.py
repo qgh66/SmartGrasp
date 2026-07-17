@@ -795,8 +795,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mask",
         choices=["gt", "depth"],
-        default="gt",
-        help="Background exclusion mask source. gt uses the inverse union of GT object masks; depth uses depth+HSV generation. Default: gt.",
+        default="depth",
+        help="Background exclusion mask source. gt uses the inverse union of GT object masks; depth uses per-pixel depth matching. Default: depth.",
     )
     parser.add_argument("--review-model-id", default="gpt-5.5")
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
