@@ -50,10 +50,12 @@ graspnet-workspace/
 /runs_reason_compare/
 /runs_reason_current/
 /analysis_report/
+/ssr/results/
 results.csv
 branch_results.json
 reason.txt
 /rsr/data
+/temp
 
 # --- Downloaded models, checkpoints, and external repos ---
 /models/
