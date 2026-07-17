@@ -129,3 +129,12 @@ def background_overlap_fraction(mask: np.ndarray, background_mask: np.ndarray | 
     if area == 0:
         return 0.0
     return float(np.count_nonzero(mask_bool & np.asarray(background_mask, dtype=bool)) / area)
+
+
+def exclude_background_pixels(mask: np.ndarray, background_mask: np.ndarray) -> np.ndarray:
+    """Return a copy of *mask* with all background pixels removed.
+
+    This is a pure boolean operation — it does not mutate the inputs.
+    The result is `mask AND NOT background_mask`.
+    """
+    return np.asarray(mask, dtype=bool) & ~np.asarray(background_mask, dtype=bool)

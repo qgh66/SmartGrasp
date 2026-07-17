@@ -21,6 +21,7 @@ from SmartGrasp.perception._shared import (
 from SmartGrasp.perception.background import (
     background_overlap_fraction,
     BACKGROUND_OVERLAP_REJECTION_THRESHOLD,
+    exclude_background_pixels,
 )
 from SmartGrasp.perception.vlm import review_and_assign_sam2
 
@@ -475,6 +476,36 @@ def _hard_filter_sam2_proposals(
             metadata["rejection_reason"] = reason
             report.append(metadata)
             continue
+
+        # ── Background-pixel exclusion ───────────────────────────────────
+        # Strip background pixels from every candidate that survived hard
+        # filtering, so downstream VLM review / merging / morphology never
+        # see background material.
+        # (empty-after-exclusion is impossible: background_overlap ≤ 0.5
+        #  is already enforced by the hard-filter checks above.)
+        area_before_exclusion = area
+        if background_exclusion_mask is not None and int(np.count_nonzero(background_exclusion_mask)) > 0:
+            cleaned = exclude_background_pixels(mask, background_exclusion_mask)
+            removed = area_before_exclusion - int(np.count_nonzero(cleaned))
+            if removed > 0:
+                metadata["area_before_background_exclusion"] = area_before_exclusion
+                metadata["background_exclusion_pixels_removed"] = removed
+                mask = cleaned
+                # Recompute every geometry-dependent field from the cleaned mask
+                area = int(np.count_nonzero(mask))
+                area_ratio = float(area / image_area)
+                border_fraction = _border_touch_fraction(mask)
+                background_overlap = background_overlap_fraction(mask, background_exclusion_mask)
+                bbox_xywh = _mask_bbox(mask)
+                bbox_xyxy = _box_xywh_to_xyxy(bbox_xywh)
+                cx, cy = _mask_centroid_xy(mask)
+                metadata["area"] = area
+                metadata["area_ratio"] = area_ratio
+                metadata["bbox"] = bbox_xywh
+                metadata["bbox_xyxy"] = bbox_xyxy
+                metadata["border_fraction"] = border_fraction
+                metadata["background_exclusion_overlap"] = background_overlap
+                metadata["centroid"] = {"x": int(cx), "y": int(cy)}
 
         metadata["selection_score"] = _proposal_score(proposal)
         metadata["mask"] = mask

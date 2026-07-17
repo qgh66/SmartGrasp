@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -310,6 +311,8 @@ def build_graph_from_gt_masks(
     kernel_size: int,
     min_contact_pixels: int,
     min_contact_ratio: float,
+    background_mask: np.ndarray | None = None,
+    max_contact_background_ratio: float = 0.4,
 ) -> dict[str, Any]:
     node_records = save_gt_masks(instances_objects, out_dir)
     object_ids = [record["object_id"] for record in node_records]
@@ -320,6 +323,8 @@ def build_graph_from_gt_masks(
         kernel_size=kernel_size,
         min_contact_pixels=min_contact_pixels,
         min_contact_ratio=min_contact_ratio,
+        background_mask=background_mask,
+        max_contact_background_ratio=max_contact_background_ratio,
     )
     graph_payload = graph_to_jsonable(graph, adjacency, node_records=node_records)
     for edge in graph_payload["edges"]:
@@ -512,6 +517,11 @@ def build_gt_reference_outputs(
     depth_image_path = save_depth_image(depth, gt_dir)
     points = build_gt_points(instances_objects, annotation, query_obj_id)
     points_path = write_points_json(gt_dir, image_path, width, height, prompt, points, "gt_centers")
+
+    # GT background mask: everything that is not a foreground object
+    from SmartGrasp.perception.background import generate_gt_background_exclusion_mask
+    gt_background_mask = generate_gt_background_exclusion_mask(instances_objects)
+
     graph_payload = build_graph_from_gt_masks(
         instances_objects=instances_objects,
         depth=depth,
@@ -519,6 +529,8 @@ def build_gt_reference_outputs(
         kernel_size=args.kernel_size,
         min_contact_pixels=args.min_contact_pixels,
         min_contact_ratio=args.min_contact_ratio,
+        background_mask=gt_background_mask,
+        max_contact_background_ratio=args.max_contact_background_ratio,
     )
     scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
     summary = {
@@ -734,6 +746,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
             background_mask_source=background_mask_source,
             gt_instances_objects=instances_objects if background_mask_source == "gt" else None,
+            max_contact_background_ratio=args.max_contact_background_ratio,
         )
         # Graph PNG already saved by build_org_json with scene-image background
         # Write a minimal points.json for summary generation
@@ -805,6 +818,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)
+    parser.add_argument(
+        "--max-contact-background-ratio",
+        type=float,
+        default=float(os.environ.get("MAX_CONTACT_BACKGROUND_RATIO", "0.4")),
+        help="Maximum allowed background fraction in contact area; exceed → skip occlusion edge. "
+             "Env: MAX_CONTACT_BACKGROUND_RATIO. Default: 0.4.",
+    )
     parser.add_argument("--mask-clean-kernel", type=int, default=3)
     parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
     parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)

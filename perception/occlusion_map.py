@@ -88,6 +88,8 @@ class OcclusionEdgeInfo:
     depth_i_median: float
     depth_j_median: float
     depth_gap: float
+    contact_background_pixels: int = 0
+    contact_background_ratio: float = 0.0
 
 
 def _binary_dilate(mask: np.ndarray, kernel_size: int) -> np.ndarray:
@@ -221,6 +223,8 @@ def graph_to_jsonable(
                     "source_depth_median": float(info.depth_i_median),
                     "target_depth_median": float(info.depth_j_median),
                     "depth_gap": float(info.depth_gap),
+                    "contact_background_pixels": int(info.contact_background_pixels),
+                    "contact_background_ratio": float(info.contact_background_ratio),
                 }
             )
         edges_payload.append(edge_payload)
@@ -242,6 +246,8 @@ def build_occlusion_graph(
     depth_gap_threshold: float = 0.5,
     band_lo: int = 2,
     band_hi: int = 9,
+    background_mask: np.ndarray | None = None,
+    max_contact_background_ratio: float = 0.4,
 ) -> tuple[nx.DiGraph, np.ndarray]:
     """Build an ORG from instance masks and a depth map.
 
@@ -251,15 +257,25 @@ def build_occlusion_graph(
     An edge i→j is added when the band median of i is at least
     *depth_gap_threshold* shallower than that of j.
 
+    Each mask is dilated **once** and reused for every pair.
+
+    When *background_mask* is supplied, contact-area pixels that fall inside
+    the background are counted.  If the fraction of background pixels in the
+    contact zone exceeds *max_contact_background_ratio* the pair is treated
+    as having **no effective contact** and no occlusion edge is created.
+
     Args:
         masks: Boolean-like array (N, H, W).
-        depth_map: Depth array (H, W). Smaller = closer.
+        depth_map: Depth array (H, W).  Smaller = closer.
         kernel_size: Dilation kernel for contact detection.
         min_contact_pixels: Minimum contact pixels.
         min_contact_ratio: Minimum contact ratio.
         depth_gap_threshold: Minimum band-median gap for occlusion.
         band_lo: Inner radius of measurement band (px from other mask).
         band_hi: Outer radius of measurement band.
+        background_mask: Optional boolean background exclusion mask (H, W).
+        max_contact_background_ratio: Maximum allowed background fraction
+            in the contact zone; exceed → skip the pair.
 
     Returns:
         graph: A directed graph where edge i -> j means i occludes j.
@@ -267,6 +283,14 @@ def build_occlusion_graph(
     """
 
     masks, depth_map = _validate_inputs(masks, depth_map)
+    if background_mask is not None:
+        bg = np.asarray(background_mask, dtype=bool)
+        if bg.shape != depth_map.shape:
+            raise ValueError(
+                f"background_mask shape {bg.shape} must match depth_map shape {depth_map.shape}."
+            )
+    else:
+        bg = None
 
     if min_contact_pixels < 1:
         raise ValueError(f"`min_contact_pixels` must be >= 1, got {min_contact_pixels}.")
@@ -278,9 +302,12 @@ def build_occlusion_graph(
     graph.add_nodes_from(range(num_objects))
     mask_areas = [int(np.count_nonzero(masks[index])) for index in range(num_objects)]
 
+    # ── Pre-dilate every mask once (O(N) instead of O(N²)) ──────────────
+    dilated_masks = [_binary_dilate(masks[idx], kernel_size) for idx in range(num_objects)]
+
     for i in range(num_objects):
         for j in range(i + 1, num_objects):
-            contact_area = find_contact_area(masks[i], masks[j], kernel_size=kernel_size)
+            contact_area = dilated_masks[i] & dilated_masks[j]
             contact_pixels = int(np.count_nonzero(contact_area))
             if contact_pixels < min_contact_pixels:
                 continue
@@ -288,6 +315,15 @@ def build_occlusion_graph(
             contact_ratio = contact_pixels / min_area
             if contact_ratio < min_contact_ratio:
                 continue
+
+            # ── Background-ratio gate ──────────────────────────────────
+            contact_background_pixels = 0
+            contact_background_ratio = 0.0
+            if bg is not None and int(np.count_nonzero(bg)) > 0:
+                contact_background_pixels = int(np.count_nonzero(contact_area & bg))
+                contact_background_ratio = contact_background_pixels / contact_pixels
+                if contact_background_ratio > max_contact_background_ratio:
+                    continue  # no effective contact — skip depth judgement
 
             stats_i = _band_depth_stats(masks[i], masks[j], depth_map, band_lo, band_hi)
             stats_j = _band_depth_stats(masks[j], masks[i], depth_map, band_lo, band_hi)
@@ -307,6 +343,8 @@ def build_occlusion_graph(
                         depth_i_median=p50_i,
                         depth_j_median=p50_j,
                         depth_gap=p50_j - p50_i,
+                        contact_background_pixels=contact_background_pixels,
+                        contact_background_ratio=contact_background_ratio,
                     ),
                 )
             elif p50_j + depth_gap_threshold < p50_i:
@@ -318,6 +356,8 @@ def build_occlusion_graph(
                         depth_i_median=p50_j,
                         depth_j_median=p50_i,
                         depth_gap=p50_i - p50_j,
+                        contact_background_pixels=contact_background_pixels,
+                        contact_background_ratio=contact_background_ratio,
                     ),
                 )
 
@@ -427,7 +467,6 @@ if __name__ == "__main__":
     demo_graph, demo_adjacency = build_occlusion_graph(
         demo_masks,
         demo_depth,
-        epsilon=0.05,
         kernel_size=5,
         min_contact_pixels=3,
     )
@@ -473,6 +512,7 @@ def build_org_json(
     depth_sam2_stability_score_thresh: float | None = None,
     background_mask_source: str = "depth",
     gt_instances_objects: np.ndarray | None = None,
+    max_contact_background_ratio: float = 0.4,
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
 
@@ -543,6 +583,8 @@ def build_org_json(
         band_lo=band_lo,
         band_hi=band_hi,
         depth_gap_threshold=depth_gap_threshold,
+        background_mask=background_exclusion_mask,
+        max_contact_background_ratio=max_contact_background_ratio,
     )
 
     node_records: list[dict[str, Any]] = []
