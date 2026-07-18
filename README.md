@@ -169,7 +169,9 @@ MAX_GRASP_CENTER_DIST = 0.04  # 抓取中心到物体点云的最大允许距离
 ```
 
 夹爪闭合力等参数在 `simulation/robot_gripper.py`。当前六个活动指节由同一主角度
-主动保持，`GRIPPER_MOTOR_FORCE = 20.0`，用于抑制 PyBullet 中从动指节松垮和抖动。
+主动保持，`GRIPPER_MOTOR_FORCE = 50.0`；指节使用有限关节阻尼，指垫使用有限摩擦
+与接触阻尼，同时提高 PyBullet 接触求解迭代精度，用于抑制从动指节松垮和抖动。
+这些参数均为有限值，避免无限摩擦/阻尼造成物体粘桌、夹爪无法开合或求解器发散。
 
 ## 如何评估 / 查看评估结果
 
@@ -377,7 +379,7 @@ env -u LD_LIBRARY_PATH \
   git push origin feat/GraspExecutionModule
 ```
 
-## 服务器本机 PyBullet GUI 抓取与放置
+## 服务器本机 PyBullet GUI 抓取与搬运悬停
 
 `graspnet-workspace/config/industrial_scene.json` 中配置了：
 
@@ -389,31 +391,111 @@ place_target_joint_pose_deg: [-75, 90, 45, 135, 270, 72]
 
 `robot_base_yaw_deg` 将机械臂整机底座绕世界 Z 轴旋转 180 度，不改变下面两组
 关节角。`capture_joint_pose_deg` 是抓取开始前的 JAKA 初始关节位姿；抓取成功后，
-机械臂携带物体运动到 `place_target_joint_pose_deg` 并松爪放置。OBJ 的 MTL 漫反射
+机械臂携带物体运动到 `place_target_joint_pose_deg` 并保持夹持悬停。OBJ 的 MTL 漫反射
 贴图会在 PyBullet 中显式绑定，避免 GUI 中物体显示为黑色。
 
-服务器本机图形桌面运行命令：
+### 方案一：原始 Robotiq 85 夹爪
+
+完整运行命令：
 
 ```bash
 cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 conda activate smartgrasp
 
 PYBULLET_GUI=1 \
+GRASP_RECORD_VIDEO=1 \
 GRASP_ASSISTED_GRASP=1 \
 GRASP_STOP_ON_SUCCESS=1 \
 GRASP_SEED=1 \
-GRASP_GUI_SPEED=0.35 \
+GRASP_GUI_SPEED=1 \
 bash run_grasp_simulation.sh \
   --scene-config config/industrial_scene.json \
   --all-objects \
-  --target-objects battery flat_screwdriver \
+  --target-objects flat_screwdriver \
+  --gripper-model robotiq85 \
   --max-candidates-per-object 30 \
-  --output results/battery_then_red_screwdriver_gui.json
+  --output results/robotiq85_red_screwdriver_gui.json
 ```
 
-`GRASP_GUI_SPEED` 是动画速度倍率，默认 `0.35`；数值越小越慢，例如 `0.2`，
-`1.0` 为正常速度。这里的圆柱物模型实际是东芝电池，场景名称为 `battery`；
-离它最近的红色螺丝刀名称为 `flat_screwdriver`。`--target-objects` 后面的顺序就是
-实际抓取顺序。每个目标最多执行 30 个候选，首次成功后立即移动到放置关节位姿
-并松爪，然后处理下一个目标。抓取开始前，机械臂会在
-`capture_joint_pose_deg` 保持 3 秒。
+输出文件：
+
+```text
+graspnet-workspace/results/robotiq85_red_screwdriver_gui.json
+graspnet-workspace/results/robotiq85_red_screwdriver_gui_pybullet.mp4
+```
+
+### 方案二：稳定简易平行夹爪
+
+完整运行命令：
+
+```bash
+cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
+conda activate smartgrasp
+
+PYBULLET_GUI=1 \
+GRASP_RECORD_VIDEO=1 \
+GRASP_ASSISTED_GRASP=1 \
+GRASP_STOP_ON_SUCCESS=1 \
+GRASP_SEED=1 \
+GRASP_GUI_SPEED=1 \
+bash run_grasp_simulation.sh \
+  --scene-config config/industrial_scene.json \
+  --all-objects \
+  --target-objects flat_screwdriver \
+  --gripper-model box_parallel \
+  --max-candidates-per-object 30 \
+  --output results/box_gripper_red_screwdriver_gui.json
+```
+
+输出文件：
+
+```text
+graspnet-workspace/results/box_gripper_red_screwdriver_gui.json
+graspnet-workspace/results/box_gripper_red_screwdriver_gui_pybullet.mp4
+```
+
+`GRASP_GUI_SPEED` 是动画速度倍率，默认 `1`；数值越小越慢，例如 `0.5`，
+`1.0` 为正常速度。当前只抓红色一字螺丝刀 `flat_screwdriver`。每个目标最多执行
+30 个候选，首次成功后立即移动到目标关节位姿上方并保持夹持，不执行放置或松爪。
+抓取开始前，机械臂会在 `capture_joint_pose_deg` 保持 3 秒。
+
+抓住物体后，前往 `place_target_joint_pose_deg` 的运输阶段使用独立慢速轨迹：
+关节路径采用更密的插值点和缓起缓停曲线，GUI 中也会额外放慢；抓取前定位速度
+保持不变。运输期间，简易夹爪的掌座、腕部连接座和双指会在每个物理步进前后
+重新锁定到机械臂 TCP，保持固定相对位姿；这项锁定不改变抓取前的同步逻辑。
+
+两套命令中的 `GRASP_ASSISTED_GRASP=1` 会启用运输吸附：确认目标已被双指夹住，
+或原始 Robotiq 因目标阻挡而未完全闭合且目标仍在 TCP 附近后，程序建立高保持力
+固定约束。约束在抬升和慢速运输期间持续生效；到达目标关节位姿后继续保持吸附
+和闭爪，使物体悬停在指定位置上方。该检查只针对当前目标物体，不会把场景中的
+其他物体隔空吸到夹爪上。
+
+`flat_screwdriver` 是当前固定随机种子结果中候选执行效率最高的目标：原始
+Robotiq 夹爪的第 1 个候选即可成功。两种夹爪使用相同目标，便于直接比较效果。
+
+当前场景配置了 `place_target_joint_pose_deg`，它现在表示搬运终点，而不是松爪放置
+位置。最终结果不再要求物体必须先抬升 3 cm，程序只检查：
+
+1. 机械臂是否到达配置的目标关节位姿。
+2. 搬运过程中物体是否跟随夹爪到达目标位置（`object_followed_to_place=true`）。
+
+`obj_lift_delta` 和 `bilateral_finger_contact` 仍会写入结果用于诊断，但不再决定这套
+任务的最终 `SUCCESS/FAIL`。只有未配置放置关节位姿的旧运行模式，才继续使用
+“双侧接触且抬升至少 3 cm”的兼容判定。
+
+### 保存原生 PyBullet GUI 动画
+
+上面的 `GRASP_RECORD_VIDEO=1` 会在运行抓取仿真的同时，直接录制 PyBullet GUI
+窗口的 OpenGL framebuffer。视频包含窗口中实际显示的完整机械臂、Robotiq 夹爪、
+桌面、所有物体、初始位姿停留、候选尝试、抓取和搬运悬停，不是根据 JSON
+重新绘制的简化回放。
+
+原生窗口录制要求同时设置 `PYBULLET_GUI=1`，并且当前会话能够正常打开 PyBullet
+窗口。本地服务器桌面、X11 转发或远程桌面均可；纯无头 `DIRECT` 模式不能录制
+GUI framebuffer。
+
+`box_parallel` 位于独立文件 `simulation/box_parallel_gripper.py`。它保留 JAKA 手臂，
+但隐藏并禁用旧 Robotiq 指节的碰撞，仅使用两个无内部活动关节的刚性长方体作为
+实际夹持碰撞体。默认不传 `--gripper-model` 时仍使用原来的 `robotiq85`。
+
+ssh -Y -C admin128@100.115.245.13

@@ -57,6 +57,14 @@ class SimulationScene:
         self.client_id = p.connect(mode)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, self.gravity)
+        p.setPhysicsEngineParameter(
+            fixedTimeStep=1.0 / 240.0,
+            numSubSteps=4,
+            numSolverIterations=200,
+            solverResidualThreshold=1e-8,
+            enableConeFriction=1,
+            deterministicOverlappingPairs=1,
+        )
         # 实时仿真模式，stepSimulation 立即刷新画面
         p.setRealTimeSimulation(0)
 

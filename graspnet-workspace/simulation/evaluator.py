@@ -9,8 +9,8 @@
 抓取流程参照 ThinkGrasp/UR5e 风格的 grasp() 原语，但执行体换成 JAKA Zu3
 机械臂 + Robotiq-85 夹爪（见 robot_gripper.py）：
   张开 → 移到目标上方 over 点 → 沿 approach 方向直线下插 → 欠驱动闭合（真实摩擦
-  夹持，不再用固定约束吸附）→ 直线抬回 → 用夹爪关节角 is_gripper_closed()
-  判定是否真夹到实体。
+  夹持，可选约束仅用于抑制数值抖动）→ 直线抬回 → 搬运到配置的放置关节位姿
+  → 保持夹持。配置目标关节位姿时，以物体是否随夹爪到达该位置判定成功。
 """
 
 import sys
@@ -29,6 +29,10 @@ MAX_GRASP_CENTER_DIST = 0.04
 OBJECT_POINT_Z_THRESHOLD = 0.005
 MIN_EXECUTION_CENTER_Z = TABLE_Z + TABLE_CLEARANCE
 MIN_SUCCESSFUL_LIFT_DELTA = 0.03
+TRANSPORT_MIN_FOLLOW_RATIO = 0.5
+TRANSPORT_RELATIVE_DISTANCE_TOLERANCE = 0.05
+PLACE_JOINT_TOLERANCE_DEG = 1.0
+ASSISTED_GRASP_MAX_TCP_DISTANCE = 0.12
 
 
 def _snapshot(obj_id, gripper):
@@ -113,6 +117,7 @@ class GraspEvaluator:
         gg_top = grasp_group[:min(top_k, len(grasp_group))]
         results = []
         successful_state_id = None
+        successful_grasp_constraint = None
         try:
             for idx, grasp in enumerate(gg_top):
                 p.restoreState(self._initial_state_id)
@@ -124,11 +129,12 @@ class GraspEvaluator:
                 results.append(res)
                 if preserve_success_state and res['success']:
                     successful_state_id = p.saveState()
+                    successful_grasp_constraint = self.gripper.grasp_constraint
                 if stop_on_success and res['success']:
                     break
         finally:
             p.restoreState(successful_state_id or self._initial_state_id)
-            self.gripper.grasp_constraint = None
+            self.gripper.grasp_constraint = successful_grasp_constraint
             if successful_state_id is not None:
                 p.removeState(successful_state_id)
             p.removeState(self._initial_state_id)
@@ -261,13 +267,28 @@ class GraspEvaluator:
             }
 
         # Step 3: 欠驱动闭合，靠 Robotiq-85 真实摩擦夹持（不再创建固定约束吸附）
-        self.gripper.close_fingers(target_width=width, steps=30)
+        self.gripper.close_fingers(
+            target_width=width,
+            steps=30,
+            object_id=self.object_id,
+        )
         self._gui_step(20, sleep=0.01)
         finger_link_positions = self.gripper.finger_link_positions()
         finger_contact_links = self.gripper.finger_contact_links(self.object_id)
         bilateral_contact = self.gripper.has_bilateral_finger_contact(self.object_id)
+        close_obj_pos = np.array(p.getBasePositionAndOrientation(self.object_id)[0])
+        close_tcp_pos = self._get_tcp_pos()
+        close_obj_tcp_distance = float(np.linalg.norm(close_obj_pos - close_tcp_pos))
+        gripper_blocked_by_object = bool(self.gripper.is_gripper_closed())
+        attachment_eligible = bool(
+            bilateral_contact
+            or (
+                gripper_blocked_by_object
+                and close_obj_tcp_distance <= ASSISTED_GRASP_MAX_TCP_DISTANCE
+            )
+        )
         assisted_constraint = False
-        if self.assisted_grasp and bilateral_contact:
+        if self.assisted_grasp and attachment_eligible:
             self.gripper.create_grasp_constraint(self.object_id)
             assisted_constraint = True
         frame_log.append({'phase': 'close', 'step': 'done', **_snapshot(self.object_id, self.gripper)})
@@ -284,36 +305,88 @@ class GraspEvaluator:
             self._gui_step(6, sleep=0.003)
             frame_log.append({'phase': 'lift', 'step': i, **_snapshot(self.object_id, self.gripper)})
 
-        # Step 5: 判定（完全照参考 environment_sim.grasp）——夹爪关节角未完全合死即视为
-        # 夹到实体；物体能否跟随上升是物理自然结果，不作为额外判据。
+        # Keep lift measurements for diagnostics and for legacy scenes that do
+        # not define a placement pose. Placement-enabled tasks are judged only
+        # after the object has been transported to the configured joint pose.
         grasped = bool(self.gripper.is_gripper_closed())
         obj_pos_after = np.array(p.getBasePositionAndOrientation(self.object_id)[0])
         obj_z_after = float(obj_pos_after[2])
         obj_lift_delta = obj_z_after - float(obj_z_before)
         lifted = obj_lift_delta >= MIN_SUCCESSFUL_LIFT_DELTA
-        # A blocked joint or one-sided push is not a grasp. Require contact on
-        # both finger sides and a real lift, regardless of assisted stabilization.
-        success = bool(bilateral_contact and lifted)
-        frame_log.append({'phase': 'done', 'step': 'final', 'success': success,
-                          **_snapshot(self.object_id, self.gripper)})
-
         placement = None
-        if success and self.place_target_joint_pose_deg is not None:
-            self.gripper.move_to_joint_pose_deg(self.place_target_joint_pose_deg)
+        failure_reason = None
+        if self.place_target_joint_pose_deg is not None:
+            actual_place_joints = self.gripper.move_to_place_joint_pose_deg(
+                self.place_target_joint_pose_deg
+            )
             self._gui_step(20, sleep=0.4)
+
+            target_place_joints = np.deg2rad(self.place_target_joint_pose_deg)
+            actual_place_joints = np.asarray(actual_place_joints, dtype=float)
+            joint_error = (
+                actual_place_joints - target_place_joints + np.pi
+            ) % (2.0 * np.pi) - np.pi
+            place_joint_max_error_deg = float(
+                np.max(np.abs(np.rad2deg(joint_error)))
+            )
+            place_joint_reached = place_joint_max_error_deg <= PLACE_JOINT_TOLERANCE_DEG
+
+            transport_target_obj_pos = np.array(
+                p.getBasePositionAndOrientation(self.object_id)[0]
+            )
+            place_tcp_pos = self._get_tcp_pos()
+            tcp_transport_distance = float(
+                np.linalg.norm(place_tcp_pos - close_tcp_pos)
+            )
+            object_transport_distance = float(
+                np.linalg.norm(transport_target_obj_pos - close_obj_pos)
+            )
+            place_obj_tcp_distance = float(
+                np.linalg.norm(transport_target_obj_pos - place_tcp_pos)
+            )
+            transport_follow_ratio = object_transport_distance / max(
+                tcp_transport_distance, 1e-6
+            )
+            relative_distance_limit = (
+                close_obj_tcp_distance + TRANSPORT_RELATIVE_DISTANCE_TOLERANCE
+            )
+            object_followed_to_place = bool(
+                place_obj_tcp_distance <= relative_distance_limit
+                and (
+                    tcp_transport_distance < 0.01
+                    or transport_follow_ratio >= TRANSPORT_MIN_FOLLOW_RATIO
+                )
+            )
+            success = bool(place_joint_reached and object_followed_to_place)
+            if not place_joint_reached:
+                failure_reason = 'place_joint_pose_not_reached'
+            elif not object_followed_to_place:
+                failure_reason = 'object_did_not_follow_to_place'
             frame_log.append({'phase': 'place', 'step': 'target_pose',
                               **_snapshot(self.object_id, self.gripper)})
-            self.gripper.release_grasp()
-            self.gripper.set_opening(self.gripper._max_opening)
-            self._gui_step(120, sleep=0.8)
-            placed_obj_pos, placed_obj_orn = p.getBasePositionAndOrientation(self.object_id)
             placement = {
                 'target_joint_pose_deg': list(self.place_target_joint_pose_deg),
-                'object_position': list(placed_obj_pos),
-                'object_orientation': list(placed_obj_orn),
+                'joint_max_error_deg': place_joint_max_error_deg,
+                'joint_pose_reached': place_joint_reached,
+                'object_position': transport_target_obj_pos.tolist(),
+                'close_object_tcp_distance': close_obj_tcp_distance,
+                'place_object_tcp_distance': place_obj_tcp_distance,
+                'relative_distance_limit': relative_distance_limit,
+                'tcp_transport_distance': tcp_transport_distance,
+                'object_transport_distance': object_transport_distance,
+                'transport_follow_ratio': transport_follow_ratio,
+                'object_followed_to_place': object_followed_to_place,
+                'grasp_held_at_target': True,
             }
-            frame_log.append({'phase': 'place', 'step': 'released',
-                              **_snapshot(self.object_id, self.gripper)})
+        else:
+            success = bool(bilateral_contact and lifted)
+            if not bilateral_contact:
+                failure_reason = 'no_bilateral_finger_contact'
+            elif not lifted:
+                failure_reason = 'object_not_lifted_3cm'
+
+        frame_log.append({'phase': 'done', 'step': 'final', 'success': success,
+                          **_snapshot(self.object_id, self.gripper)})
 
         if self.gui:
             p.removeAllUserDebugItems()
@@ -325,13 +398,17 @@ class GraspEvaluator:
                 'score': grasp.score, 'translation': center,
                 'rotation': rot_m, 'width': width, 'depth': depth,
                 'raw_width': raw_width, 'width_clipped': raw_width > width,
-                # 判定依据：grasped_by_gripper（夹爪关节角）。obj_lift_delta 仅供诊断对照。
+                # Joint/contact/lift fields remain diagnostic; placement-enabled
+                # tasks use the transport and post-release checks above.
                 'grasped_by_gripper': grasped,
                 'bilateral_finger_contact': bilateral_contact,
+                'attachment_eligible': attachment_eligible,
+                'attachment_max_tcp_distance': ASSISTED_GRASP_MAX_TCP_DISTANCE,
                 'finger_contact_links': finger_contact_links,
                 'finger_link_positions': finger_link_positions,
                 'assisted_constraint': assisted_constraint,
                 'placement': placement,
+                'failure_reason': failure_reason,
                 'tcp_target_error': tcp_error,
                 'max_lift_tcp_error': max_lift_tcp_error,
                 'final_pose_penetration_depth': penetration_depth,

@@ -7,6 +7,7 @@ import pickle
 import random
 import sys
 import time
+import atexit
 
 import numpy as np
 import pybullet as p
@@ -30,7 +31,7 @@ from graspnetAPI import GraspGroup
 from models.graspnet import GraspNet, pred_decode
 from simulation.camera import VirtualCamera
 from simulation.evaluator import GraspEvaluator
-from simulation.robot_gripper import JakaZu3Robotiq85Gripper
+from simulation.gripper_factory import create_gripper
 from simulation.scene import SimulationScene
 
 
@@ -179,13 +180,22 @@ def run_all_objects(args):
 
     capture_pose = config.get("capture_joint_pose_deg")
     place_pose = config.get("place_target_joint_pose_deg")
-    gripper = JakaZu3Robotiq85Gripper(
+    gripper = create_gripper(
+        args.gripper_model,
         planner=None,
         initial_joint_pose_deg=capture_pose,
         robot_base_yaw_deg=float(config.get("robot_base_yaw_deg", 0.0)),
         gui_motion_step_delay=(0.003 / args.gui_speed) if args.gui else 0.0,
     )
     gripper.load()
+    video_recorder = None
+    if args.record_video:
+        from simulation.video_recorder import PyBulletVideoRecorder
+        video_path = args.video_output or args.output.replace(".json", "_pybullet.mp4")
+        video_recorder = PyBulletVideoRecorder(video_path)
+        video_recorder.start()
+        atexit.register(video_recorder.close)
+        print(f"  PyBullet GUI 录制: {video_path}")
     gripper.move_to_joint_pose_deg(capture_pose)
     print(f"  场景已倒入并稳定: {len(scene.object_ids)} 个物体")
     _hold_initial_pose(
@@ -275,6 +285,17 @@ def run_all_objects(args):
             stop_on_success=args.stop_on_success,
             preserve_success_state=True,
         )
+        for result in results:
+            placement = result.get("placement") or {}
+            status = "SUCCESS" if result["success"] else "FAIL"
+            failure_reason = result.get("failure_reason") or "none"
+            print(
+                f"  {status} candidate={result['grasp_index']}, "
+                f"score={result['score']:.3f}, "
+                f"transported={placement.get('object_followed_to_place', False)}, "
+                f"held={placement.get('grasp_held_at_target', False)}, "
+                f"reason={failure_reason}"
+            )
         successful = next((result for result in results if result["success"]), None)
         print(
             f"  结果: {'成功' if successful else '失败'}, "
@@ -318,6 +339,7 @@ def run_all_objects(args):
         "place_target_joint_pose_deg": place_pose,
         "gui_speed": float(args.gui_speed),
         "assisted_grasp": bool(args.assisted_grasp),
+        "gripper_model": args.gripper_model,
         "object_total": len(object_results),
         "object_success": successful_objects,
         "objects": object_results,
@@ -339,6 +361,10 @@ def run_all_objects(args):
 
     print(f"\n全部物体结果: {successful_objects}/{len(object_results)} 成功")
     print(f"结果已保存: {args.output}")
+    if video_recorder is not None:
+        video_recorder.close()
+        atexit.unregister(video_recorder.close)
+        print(f"PyBullet GUI 视频已保存: {video_recorder.output_path}")
     gripper.remove()
     scene.disconnect()
     return output

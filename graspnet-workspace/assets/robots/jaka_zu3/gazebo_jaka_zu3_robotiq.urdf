@@ -344,6 +344,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="3.141592653589793 0.0 0.0" xyz="0.05490451627 0.03060114443 0.0" />
         <limit effort="1000" lower="0.0" upper="0.80285" velocity="0.5" />
+        <dynamics damping="0.20" friction="0.05" />
     </joint>
     <joint name="robotiq_85_right_knuckle_joint" type="continuous">
         <parent link="robotiq_85_base_link" />
@@ -351,6 +352,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="0.0 0.0 0.0" xyz="0.05490451627 -0.03060114443 0.0" />
         <limit effort="1000" lower="-3.14" upper="3.14" velocity="100.0" />
+        <dynamics damping="0.20" friction="0.05" />
         <mimic joint="robotiq_85_left_knuckle_joint" />
     </joint>
     <link name="robotiq_85_left_knuckle_link">
@@ -367,7 +369,7 @@
         <inertial>
             <mass value="0.018491" />
             <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
-            <inertia ixx="0.000009" ixy="-0.000001" ixz="0.000000" iyx="-0.000001" iyy="0.000001" iyz="0.000000" izx="0.000000" izy="0.000000" izz="0.000010" />
+            <inertia ixx="0.000010" ixy="0.000000" ixz="0.000000" iyy="0.000010" iyz="0.000000" izz="0.000010" />
         </inertial>
     </link>
     <link name="robotiq_85_right_knuckle_link">
@@ -384,7 +386,7 @@
         <inertial>
             <mass value="0.018491" />
             <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
-            <inertia ixx="0.000009" ixy="-0.000001" ixz="0.000000" iyx="-0.000001" iyy="0.000001" iyz="0.000000" izx="0.000000" izy="0.000000" izz="0.000010" />
+            <inertia ixx="0.000010" ixy="0.000000" ixz="0.000000" iyy="0.000010" iyz="0.000000" izz="0.000010" />
         </inertial>
     </link>
     <joint name="robotiq_85_left_finger_joint" type="fixed">
@@ -437,6 +439,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="3.141592653589793 0.0 0.0" xyz="0.06142 0.0127 0" />
         <limit effort="0.1" lower="-3.14" upper="3.14" velocity="100.0" />
+        <dynamics damping="0.20" friction="0.05" />
         <mimic joint="robotiq_85_left_knuckle_joint" offset="0" />
     </joint>
     <joint name="robotiq_85_right_inner_knuckle_joint" type="continuous">
@@ -445,6 +448,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="0 0 0" xyz="0.06142 -0.0127 0" />
         <limit effort="0.1" lower="-3.14" upper="3.14" velocity="100.0" />
+        <dynamics damping="0.20" friction="0.05" />
         <mimic joint="robotiq_85_left_knuckle_joint" offset="0" />
     </joint>
     <link name="robotiq_85_left_inner_knuckle_link">
@@ -487,6 +491,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="0.0 0.0 0.0" xyz="0.04303959807 -0.03759940821 0.0" />
         <limit effort="0.1" lower="-3.14" upper="3.14" velocity="100.0" />
+        <dynamics damping="0.20" friction="0.05" />
         <mimic joint="robotiq_85_left_knuckle_joint" multiplier="-1" />
     </joint>
     <joint name="robotiq_85_right_finger_tip_joint" type="continuous">
@@ -495,6 +500,7 @@
         <axis xyz="0 0 1" />
         <origin rpy="0.0 0.0 0.0" xyz="0.04303959807 -0.03759940821  0.0" />
         <limit effort="0.1" lower="-3.14" upper="3.14" velocity="100.0" />
+        <dynamics damping="0.20" friction="0.05" />
         <mimic joint="robotiq_85_left_knuckle_joint" multiplier="-1" />
     </joint>
     <link name="robotiq_85_left_finger_tip_link">
@@ -663,4 +669,3 @@
         </actuator>
     </transmission>
 </robot>
-

@@ -10,7 +10,7 @@ GraspNet + PyBullet 闭环仿真 Demo。
   python scripts/demo_closed_loop.py
 """
 
-import sys, os, json, argparse, pickle, random, numpy as np
+import sys, os, json, argparse, pickle, random, atexit, numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path = [p for p in sys.path if 'graspnet-workspace/pointnet2' not in p and 'graspnet-workspace/knn' not in p]
@@ -24,7 +24,7 @@ from models.graspnet import GraspNet, pred_decode
 from graspnetAPI import GraspGroup
 from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
-from simulation.robot_gripper import JakaZu3Robotiq85Gripper
+from simulation.gripper_factory import GRIPPER_MODELS, create_gripper
 from simulation.evaluator import GraspEvaluator
 from utils.collision_detector import ModelFreeCollisionDetector
 
@@ -245,7 +245,7 @@ def parse_args():
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
-                   help='启用顺序抓取与放置流程；配合 --target-objects 指定目标及顺序')
+                   help='启用顺序抓取与搬运流程；配合 --target-objects 指定目标及顺序')
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
@@ -256,18 +256,24 @@ def parse_args():
     p.add_argument('--stop-on-success', action='store_true',
                    help='依次评估全部过滤后候选，找到首个真实成功抓取后停止')
     p.add_argument('--assisted-grasp', action='store_true',
-                   help='双指接触目标后建立临时约束，减少 PyBullet 数值抖动')
+                   help='确认目标被夹住后建立高保持力约束，运输到目标位姿后保持吸附')
     p.add_argument('--seed', type=int, default=1,
                    help='NumPy/PyTorch 随机种子，用于复现实验（默认: 1）')
-    p.add_argument('--gui-speed', type=float, default=0.35,
-                   help='GUI 动画速度倍率，越小越慢（默认: 0.35）')
+    p.add_argument('--gui-speed', type=float, default=1.0,
+                   help='GUI 动画速度倍率，越小越慢（默认: 1）')
     p.add_argument('--initial-pose-hold-seconds', type=float, default=3.0,
                    help='全部抓取开始前保持初始关节位姿的秒数（默认: 3）')
     p.add_argument('--max-candidates-per-object', type=int, default=30,
                    help='批量模式每个物体最多执行的候选数（默认: 30）')
+    p.add_argument('--gripper-model', choices=GRIPPER_MODELS, default='robotiq85',
+                   help='执行夹爪模型；默认 robotiq85，稳定简化模型为 box_parallel')
     p.add_argument('--scale', type=float, default=1.0,
                    help='物体缩放因子（图形学单位 mesh 需缩到米制小物体尺寸）')
     p.add_argument('--gui', action='store_true', help='打开 PyBullet GUI')
+    p.add_argument('--record-video', action='store_true',
+                   help='录制原生 PyBullet GUI 窗口动画为 MP4（需要 --gui）')
+    p.add_argument('--video-output', default=None,
+                   help='PyBullet GUI MP4 输出路径')
     p.add_argument('--device', default='cuda:0', help='推理设备')
     p.add_argument('--output', default='results/grasp_simulation.json', help='输出文件')
     return p.parse_args()
@@ -463,7 +469,8 @@ def main():
     place_target_joint_pose_deg = (
         scene_config.get("place_target_joint_pose_deg") if scene_config else None
     )
-    gripper = JakaZu3Robotiq85Gripper(
+    gripper = create_gripper(
+        args.gripper_model,
         planner=None,
         initial_joint_pose_deg=capture_joint_pose_deg,
         robot_base_yaw_deg=(
@@ -472,6 +479,14 @@ def main():
         gui_motion_step_delay=(0.003 / args.gui_speed) if args.gui else 0.0,
     )
     gripper.load()
+    video_recorder = None
+    if args.record_video:
+        from simulation.video_recorder import PyBulletVideoRecorder
+        video_path = args.video_output or args.output.replace('.json', '_pybullet.mp4')
+        video_recorder = PyBulletVideoRecorder(video_path)
+        video_recorder.start()
+        atexit.register(video_recorder.close)
+        print(f'  🎥 PyBullet GUI 录制: {video_path}')
     evaluator = GraspEvaluator(
         object_id=obj_id,
         gripper=gripper,
@@ -493,9 +508,17 @@ def main():
     n_ok = sum(1 for r in results if r['success'])
     for i, r in enumerate(results):
         status = '✅' if r['success'] else '❌'
+        placement = r.get('placement') or {}
+        transport_text = (
+            f', transported={placement.get("object_followed_to_place", False)}'
+            if place_target_joint_pose_deg is not None else ''
+        )
+        failure_text = (
+            f', reason={r["failure_reason"]}' if r.get('failure_reason') else ''
+        )
         print(f'  {status} Grasp {i}: score={r["score"]:.3f}, '
               f'lift_delta={r.get("obj_lift_delta", 0.0):.3f}m, '
-              f'w={r["width"]:.4f}m')
+              f'w={r["width"]:.4f}m{transport_text}{failure_text}')
 
     print(f'\n📊 结果: {n_ok}/{len(results)} 成功')
 
@@ -584,6 +607,10 @@ def main():
     _sys.stdout.flush()
     print(f'💾 可视化数据已保存: {viz_path}')
 
+    if video_recorder is not None:
+        video_recorder.close()
+        atexit.unregister(video_recorder.close)
+        print(f'🎥 PyBullet GUI 视频已保存: {video_recorder.output_path}')
     gripper.remove()
     scene.disconnect()
 

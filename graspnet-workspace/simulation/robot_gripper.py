@@ -36,11 +36,24 @@ MAX_EXECUTION_TCP_ERROR = 0.01
 JOINT_MOVE_STEP = 0.035
 JOINT_MOVE_MIN_STEPS = 8
 JOINT_MOVE_MAX_STEPS = 80
+TRANSPORT_JOINT_MOVE_STEP = 0.006
+TRANSPORT_JOINT_MOVE_MIN_STEPS = 60
+TRANSPORT_JOINT_MOVE_MAX_STEPS = 400
+TRANSPORT_GUI_DELAY_SCALE = 2.0
 JAKA_HOLD_FORCE = 500.0
 GRIPPER_ANGLE_OPEN = 0.03
 GRIPPER_ANGLE_CLOSE = 0.8
 GRIPPER_ANGLE_CLOSE_THRESHOLD = 0.73
-GRIPPER_MOTOR_FORCE = 20.0
+GRIPPER_MOTOR_FORCE = 50.0
+GRIPPER_MIMIC_CONSTRAINT_FORCE = 10000.0
+GRIPPER_JOINT_DAMPING = 0.20
+GRIPPER_LINK_ANGULAR_DAMPING = 0.20
+FINGER_LATERAL_FRICTION = 5.0
+FINGER_SPINNING_FRICTION = 0.5
+FINGER_CONTACT_STIFFNESS = 100000.0
+FINGER_CONTACT_DAMPING = 1000.0
+GRASP_ATTACHMENT_MAX_FORCE = 10000.0
+GRASP_ATTACHMENT_ERP = 1.0
 
 # PyBullet does not execute the URDF/Gazebo <mimic> plugins. Drive every
 # movable finger joint from the same master angle so the linkage cannot sag.
@@ -141,6 +154,12 @@ class JakaZu3Robotiq85Gripper:
 
     def remove(self):
         self.release_grasp()
+        for constraint_id in self._mimic_constraints:
+            try:
+                p.removeConstraint(constraint_id)
+            except p.error:
+                pass
+        self._mimic_constraints.clear()
         if self.robot_gripper_constraint is not None:
             p.removeConstraint(self.robot_gripper_constraint)
             self.robot_gripper_constraint = None
@@ -209,7 +228,24 @@ class JakaZu3Robotiq85Gripper:
         self._move_joints_smooth(np.deg2rad(joint_pose_deg))
         return list(self.robot_joint_values)
 
-    def close_fingers(self, target_width: float, steps: int = 100):
+    def move_to_place_joint_pose_deg(self, joint_pose_deg):
+        """Transport a grasped object with a slower, acceleration-limited path."""
+        joint_pose_deg = [float(value) for value in joint_pose_deg]
+        if len(joint_pose_deg) != len(JAKA_ARM_JOINTS):
+            raise ValueError("joint_pose_deg must contain exactly 6 values")
+        self._move_joints_smooth(
+            np.deg2rad(joint_pose_deg),
+            max_joint_step=TRANSPORT_JOINT_MOVE_STEP,
+            min_steps=TRANSPORT_JOINT_MOVE_MIN_STEPS,
+            max_steps=TRANSPORT_JOINT_MOVE_MAX_STEPS,
+            smooth_acceleration=True,
+            gui_delay_scale=TRANSPORT_GUI_DELAY_SCALE,
+            rigid_transport_attachment=True,
+        )
+        return list(self.robot_joint_values)
+
+    def close_fingers(self, target_width: float, steps: int = 100, object_id=None):
+        del object_id
         target_width = float(np.clip(target_width, 0.002, self._max_opening))
         self._current_opening = target_width
         self._move_gripper_angle(GRIPPER_ANGLE_CLOSE, timeout=3.0, is_slow=True)
@@ -245,6 +281,11 @@ class JakaZu3Robotiq85Gripper:
             [0, 0, 0],
             parentFrameOrientation=parent_frame_orn,
             childFrameOrientation=[0, 0, 0, 1],
+        )
+        p.changeConstraint(
+            self.grasp_constraint,
+            maxForce=GRASP_ATTACHMENT_MAX_FORCE,
+            erp=GRASP_ATTACHMENT_ERP,
         )
         return self.grasp_constraint
 
@@ -419,11 +460,28 @@ class JakaZu3Robotiq85Gripper:
                 self.right_finger_link_ids.add(joint_idx)
             if "finger_tip" in joint_name or "finger_tip" in link_name:
                 self.ee_finger_pad_ids.append(joint_idx)
-                p.changeDynamics(self.robot_id, joint_idx, lateralFriction=3.0, spinningFriction=0.2)
-            elif "robotiq_85" in joint_name and joint_type == p.JOINT_REVOLUTE:
+                p.changeDynamics(
+                    self.robot_id,
+                    joint_idx,
+                    lateralFriction=FINGER_LATERAL_FRICTION,
+                    spinningFriction=FINGER_SPINNING_FRICTION,
+                    rollingFriction=0.001,
+                    restitution=0.0,
+                    contactStiffness=FINGER_CONTACT_STIFFNESS,
+                    contactDamping=FINGER_CONTACT_DAMPING,
+                    frictionAnchor=1,
+                )
+            if "robotiq_85" in joint_name and joint_type == p.JOINT_REVOLUTE:
+                p.changeDynamics(
+                    self.robot_id,
+                    joint_idx,
+                    jointDamping=GRIPPER_JOINT_DAMPING,
+                    angularDamping=GRIPPER_LINK_ANGULAR_DAMPING,
+                )
                 p.setJointMotorControl2(
                     self.robot_id, joint_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0
                 )
+        self._create_mimic_constraints()
         self.set_opening(0.06)
         self._sync_attachment()
 
@@ -518,7 +576,16 @@ class JakaZu3Robotiq85Gripper:
         self.last_motion_error = None if best_solution is not None else "No IK solution"
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
 
-    def _move_joints_smooth(self, target_joints):
+    def _move_joints_smooth(
+        self,
+        target_joints,
+        max_joint_step: float = JOINT_MOVE_STEP,
+        min_steps: int = JOINT_MOVE_MIN_STEPS,
+        max_steps: int = JOINT_MOVE_MAX_STEPS,
+        smooth_acceleration: bool = False,
+        gui_delay_scale: float = 1.0,
+        rigid_transport_attachment: bool = False,
+    ):
         """Move through waypoints while keeping the IK target exact in PyBullet.
 
         The imported JAKA URDF does not reliably converge with POSITION_CONTROL
@@ -530,18 +597,29 @@ class JakaZu3Robotiq85Gripper:
         current = np.asarray([p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS], dtype=float)
         delta = _joint_delta(target, current)
         max_delta = float(np.max(np.abs(delta))) if len(delta) else 0.0
-        steps = int(np.clip(np.ceil(max_delta / JOINT_MOVE_STEP), JOINT_MOVE_MIN_STEPS, JOINT_MOVE_MAX_STEPS))
+        steps = int(np.clip(np.ceil(max_delta / max_joint_step), min_steps, max_steps))
         for step in range(steps):
             frac = (step + 1) / steps
+            if smooth_acceleration:
+                # Quintic smootherstep has zero velocity and acceleration at
+                # both ends, reducing inertial shocks on a grasped object.
+                frac = frac ** 3 * (frac * (frac * 6.0 - 15.0) + 10.0)
             waypoint = current + delta * frac
             for joint_idx, joint_value in zip(JAKA_ARM_JOINTS, waypoint):
                 p.resetJointState(self.robot_id, joint_idx, float(joint_value))
             self.robot_joint_values = waypoint.tolist()
-            self._sync_attachment()
+            if rigid_transport_attachment:
+                self._sync_transport_attachment()
+            else:
+                self._sync_attachment()
             p.stepSimulation()
-            self._gui_motion_pause()
+            if rigid_transport_attachment:
+                self._sync_transport_attachment()
+            self._gui_motion_pause(gui_delay_scale)
         self.robot_joint_values = [p.getJointState(self.robot_id, j)[0] for j in JAKA_ARM_JOINTS]
         self._hold_current_joints()
+        if rigid_transport_attachment:
+            self._sync_transport_attachment()
 
     def _hold_current_joints(self):
         if self.robot_id is None:
@@ -568,9 +646,9 @@ class JakaZu3Robotiq85Gripper:
             forces=[JAKA_HOLD_FORCE] * len(JAKA_ARM_JOINTS),
         )
 
-    def _gui_motion_pause(self):
+    def _gui_motion_pause(self, delay_scale: float = 1.0):
         if self.gui_motion_step_delay > 0.0:
-            time.sleep(self.gui_motion_step_delay)
+            time.sleep(self.gui_motion_step_delay * max(0.0, float(delay_scale)))
 
     @staticmethod
     def _grasp_pose_to_robotiq_base(position, rotation_matrix):
@@ -608,6 +686,10 @@ class JakaZu3Robotiq85Gripper:
         ee_pos, ee_orn = _link_frame_pose(self.robot_id, JAKA_EE_LINK)
         p.resetBasePositionAndOrientation(self.robotiq_id, ee_pos, ee_orn)
 
+    def _sync_transport_attachment(self):
+        """Keep the end effector aligned during grasped-object transport."""
+        self._sync_attachment()
+
     def _controlled_gripper_joints(self):
         """Return unique (joint id, multiplier) pairs for the six-bar linkage."""
         controlled = []
@@ -620,19 +702,47 @@ class JakaZu3Robotiq85Gripper:
             controlled.append((joint_id, multiplier))
         return controlled
 
+    def _create_mimic_constraints(self):
+        """Enforce the URDF mimic relationships that PyBullet does not load."""
+        master_joint = self._robotiq_joint_map.get("finger_joint")
+        if master_joint is None:
+            return
+        for joint_id, multiplier in self._controlled_gripper_joints():
+            if joint_id == master_joint:
+                continue
+            constraint_id = p.createConstraint(
+                parentBodyUniqueId=self.robotiq_id,
+                parentLinkIndex=master_joint,
+                childBodyUniqueId=self.robotiq_id,
+                childLinkIndex=joint_id,
+                jointType=p.JOINT_GEAR,
+                jointAxis=[0.0, 0.0, 1.0],
+                parentFramePosition=[0.0, 0.0, 0.0],
+                childFramePosition=[0.0, 0.0, 0.0],
+            )
+            p.changeConstraint(
+                constraint_id,
+                gearRatio=-float(multiplier),
+                maxForce=GRIPPER_MIMIC_CONSTRAINT_FORCE,
+                erp=0.8,
+            )
+            self._mimic_constraints.append(constraint_id)
+
     def _command_gripper_angle(self, joint_value: float, step_count: int = 10):
         if self.robotiq_id is None:
             return
-        for joint_idx, multiplier in self._controlled_gripper_joints():
-            p.setJointMotorControl2(
-                self.robotiq_id,
-                joint_idx,
-                p.POSITION_CONTROL,
-                targetPosition=multiplier * joint_value,
-                positionGain=1.0,
-                velocityGain=1.0,
-                force=GRIPPER_MOTOR_FORCE,
-            )
+        main_joint = self._robotiq_joint_map.get("finger_joint")
+        if main_joint is None:
+            return
+        p.setJointMotorControl2(
+            self.robotiq_id,
+            main_joint,
+            p.POSITION_CONTROL,
+            targetPosition=joint_value,
+            positionGain=1.0,
+            velocityGain=1.0,
+            force=GRIPPER_MOTOR_FORCE,
+        )
         for _ in range(step_count):
             self._hold_current_joints()
             p.stepSimulation()
@@ -645,15 +755,14 @@ class JakaZu3Robotiq85Gripper:
         if is_slow:
             previous_angle = p.getJointState(self.robotiq_id, main_joint)[0]
             direction = 1.0 if target_angle > previous_angle else -1.0
-            for joint_idx, multiplier in self._controlled_gripper_joints():
-                p.setJointMotorControl2(
-                    self.robotiq_id,
-                    joint_idx,
-                    p.VELOCITY_CONTROL,
-                    targetVelocity=multiplier * direction,
-                    maxVelocity=1.0,
-                    force=GRIPPER_MOTOR_FORCE,
-                )
+            p.setJointMotorControl2(
+                self.robotiq_id,
+                main_joint,
+                p.VELOCITY_CONTROL,
+                targetVelocity=direction,
+                maxVelocity=1.0,
+                force=GRIPPER_MOTOR_FORCE,
+            )
             for _ in range(10):
                 self._hold_current_joints()
                 p.stepSimulation()
