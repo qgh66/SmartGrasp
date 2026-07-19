@@ -29,8 +29,8 @@ PERCEPTION_ARGS="
 PERCEPTION_ARGS_FLAT=$(echo $PERCEPTION_ARGS)
 
 # ======== Reason 参数 ========
-REASON_MODEL="gpt-4o"
-INTENT_MODEL="gpt-4o"
+REASON_MODEL="gpt-5.5"
+INTENT_MODEL="gpt-5.5"
 REASON_ARGS="
   --model ${REASON_MODEL}
   --intent-model ${INTENT_MODEL}
