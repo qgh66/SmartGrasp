@@ -283,6 +283,7 @@ def _resolve_overlaps_by_depth(
 
     n = len(candidates)
     masks = [np.asarray(c["mask"], dtype=bool).copy() for c in candidates]
+    original_areas = [int(np.count_nonzero(mask)) for mask in masks]
     depth = None if depth_map is None else np.asarray(depth_map, dtype=np.float32)
     if depth is not None and depth.shape != masks[0].shape:
         depth = None
@@ -359,11 +360,19 @@ def _resolve_overlaps_by_depth(
     if not modified:
         return candidates
 
-    for idx, c in enumerate(candidates):
-        c["mask"] = masks[idx]
-        c["mask_area"] = int(np.count_nonzero(masks[idx]))
+    kept_candidates: list[dict[str, Any]] = []
+    for idx, candidate in enumerate(candidates):
+        new_area = int(np.count_nonzero(masks[idx]))
+        original_area = original_areas[idx]
+        removed_fraction = 1.0 - (new_area / max(1, original_area))
+        if removed_fraction > 0.82:
+            continue
+        candidate["mask"] = masks[idx]
+        candidate["mask_area"] = new_area
+        candidate["overlap_removed_fraction"] = float(removed_fraction)
+        kept_candidates.append(candidate)
 
-    return candidates
+    return kept_candidates
 
 
 def _is_background_like_proposal(
@@ -603,7 +612,9 @@ def _merge_candidates_with_depth_edges(
             depth_edge_report = _internal_depth_edge_report(new_mask, depth_gradient, valid_depth_mask)
             candidate["depth_edge_report"] = depth_edge_report
             if depth_edge_report.get("has_internal_depth_edge"):
-                candidate["rejection_reason"] = "internal_depth_edge"
+                candidate["rejection_reason"] = str(
+                    depth_edge_report.get("reason", "internal_depth_edge")
+                )
                 report.append({key: value for key, value in candidate.items() if key != "mask"})
                 continue
 
@@ -730,7 +741,7 @@ def _sam2_auto_candidate_pool(
         depth_gradient=depth_gradient,
         valid_depth_mask=valid_depth_mask,
         report=report,
-        reject_internal_depth_edges=False,
+        reject_internal_depth_edges=True,
     )
     candidates = _merge_candidates_with_depth_edges(
         candidates=depth_candidates,
