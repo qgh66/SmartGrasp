@@ -1,22 +1,22 @@
 {
   "category": "hard-ambi",
   "total_splits": 141,
-  "ssr_mean_iou": 0.6412,
+  "ssr_mean_iou": 0.6635,
   "details": [
     {
       "scene_id": 1072,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 8,
       "gt_object_ids": [
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.368
+      "iou": 0.9471
     },
     {
       "scene_id": 1072,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 5,
       "gt_object_ids": [
         5
       ],
@@ -26,18 +26,18 @@
     {
       "scene_id": 1072,
       "split": "split2",
+      "grasp_id": 8,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.9471
+    },
+    {
+      "scene_id": 1094,
+      "split": "split0",
       "grasp_id": 3,
       "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.368
-    },
-    {
-      "scene_id": 1094,
-      "split": "split0",
-      "grasp_id": 4,
-      "gt_object_ids": [
         4
       ],
       "best_gt_id": 4,
@@ -46,7 +46,7 @@
     {
       "scene_id": 1094,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
@@ -56,7 +56,7 @@
     {
       "scene_id": 1094,
       "split": "split2",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
@@ -66,45 +66,45 @@
     {
       "scene_id": 1101,
       "split": "split0",
-      "grasp_id": 1,
+      "grasp_id": 7,
       "gt_object_ids": [
         9,
         4
       ],
-      "best_gt_id": 4,
-      "iou": 0.9915
+      "best_gt_id": 9,
+      "iou": 0.9797
     },
     {
       "scene_id": 1101,
       "split": "split1",
-      "grasp_id": 1,
+      "grasp_id": 7,
       "gt_object_ids": [
         9,
         4
       ],
-      "best_gt_id": 4,
-      "iou": 0.9915
+      "best_gt_id": 9,
+      "iou": 0.9797
     },
     {
       "scene_id": 1101,
       "split": "split2",
-      "grasp_id": 1,
+      "grasp_id": 7,
       "gt_object_ids": [
         9,
         4
       ],
-      "best_gt_id": 4,
-      "iou": 0.9915
+      "best_gt_id": 9,
+      "iou": 0.9797
     },
     {
       "scene_id": 1109,
       "split": "split0",
-      "grasp_id": 1,
+      "grasp_id": 2,
       "gt_object_ids": [
         4
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 4,
+      "iou": 0.9982
     },
     {
       "scene_id": 1109,
@@ -129,103 +129,103 @@
     {
       "scene_id": 1365,
       "split": "split0",
-      "grasp_id": 4,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.8878
+      "iou": 0.758
     },
     {
       "scene_id": 1365,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.8878
+      "iou": 0.758
     },
     {
       "scene_id": 1365,
       "split": "split2",
-      "grasp_id": 4,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.8878
+      "iou": 0.758
     },
     {
       "scene_id": 1383,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         1,
         10,
         5
       ],
-      "best_gt_id": 5,
-      "iou": 0.9899
+      "best_gt_id": 1,
+      "iou": 0.9922
     },
     {
       "scene_id": 1383,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         1,
         10,
         5
       ],
-      "best_gt_id": 5,
-      "iou": 0.9899
+      "best_gt_id": 1,
+      "iou": 0.9922
     },
     {
       "scene_id": 1383,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         1,
         10,
         5
       ],
-      "best_gt_id": 5,
-      "iou": 0.9899
+      "best_gt_id": 1,
+      "iou": 0.9922
     },
     {
       "scene_id": 1394,
       "split": "split0",
-      "grasp_id": 8,
+      "grasp_id": 10,
       "gt_object_ids": [
         7
       ],
       "best_gt_id": 7,
-      "iou": 0.845
+      "iou": 0.9925
     },
     {
       "scene_id": 1394,
       "split": "split1",
-      "grasp_id": 8,
+      "grasp_id": 14,
       "gt_object_ids": [
         7
       ],
-      "best_gt_id": 7,
-      "iou": 0.845
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1394,
       "split": "split2",
-      "grasp_id": 8,
+      "grasp_id": 14,
       "gt_object_ids": [
         7
       ],
-      "best_gt_id": 7,
-      "iou": 0.845
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1419,
       "split": "split0",
-      "grasp_id": 1,
+      "grasp_id": 5,
       "gt_object_ids": [
         1,
         6
@@ -236,7 +236,7 @@
     {
       "scene_id": 1419,
       "split": "split1",
-      "grasp_id": 1,
+      "grasp_id": 5,
       "gt_object_ids": [
         1,
         6
@@ -247,7 +247,7 @@
     {
       "scene_id": 1419,
       "split": "split2",
-      "grasp_id": 1,
+      "grasp_id": 5,
       "gt_object_ids": [
         1,
         6
@@ -258,7 +258,7 @@
     {
       "scene_id": 1556,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 3,
       "gt_object_ids": [
         3
       ],
@@ -272,34 +272,35 @@
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.9902
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1556,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": null,
       "gt_object_ids": [
         3
       ],
-      "best_gt_id": 3,
-      "iou": 0.9902
+      "best_gt_id": -1,
+      "iou": 0.0,
+      "error": "reason_csv missing"
     },
     {
       "scene_id": 1657,
       "split": "split0",
-      "grasp_id": 8,
+      "grasp_id": 15,
       "gt_object_ids": [
         7,
         8
       ],
-      "best_gt_id": 8,
-      "iou": 0.274
+      "best_gt_id": 7,
+      "iou": 0.5545
     },
     {
       "scene_id": 1657,
       "split": "split1",
-      "grasp_id": 10,
+      "grasp_id": 15,
       "gt_object_ids": [
         7,
         8
@@ -310,18 +311,18 @@
     {
       "scene_id": 1657,
       "split": "split2",
-      "grasp_id": 8,
+      "grasp_id": 15,
       "gt_object_ids": [
         7,
         8
       ],
-      "best_gt_id": 8,
-      "iou": 0.274
+      "best_gt_id": 7,
+      "iou": 0.5545
     },
     {
       "scene_id": 1703,
       "split": "split0",
-      "grasp_id": 9,
+      "grasp_id": 4,
       "gt_object_ids": [
         9,
         11
@@ -332,7 +333,7 @@
     {
       "scene_id": 1703,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 4,
       "gt_object_ids": [
         9,
         11
@@ -354,7 +355,7 @@
     {
       "scene_id": 1709,
       "split": "split0",
-      "grasp_id": 5,
+      "grasp_id": 9,
       "gt_object_ids": [
         4,
         12
@@ -365,13 +366,13 @@
     {
       "scene_id": 1709,
       "split": "split1",
-      "grasp_id": 5,
+      "grasp_id": 13,
       "gt_object_ids": [
         4,
         12
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 12,
+      "iou": 0.9705
     },
     {
       "scene_id": 1709,
@@ -387,646 +388,649 @@
     {
       "scene_id": 1711,
       "split": "split0",
-      "grasp_id": 15,
+      "grasp_id": 6,
       "gt_object_ids": [
         14,
         7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.9851
+    },
+    {
+      "scene_id": 1711,
+      "split": "split1",
+      "grasp_id": 6,
+      "gt_object_ids": [
+        14,
+        7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.9851
+    },
+    {
+      "scene_id": 1711,
+      "split": "split2",
+      "grasp_id": 6,
+      "gt_object_ids": [
+        14,
+        7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.9851
+    },
+    {
+      "scene_id": 1842,
+      "split": "split0",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        11
       ],
       "best_gt_id": -1,
       "iou": 0.0
     },
     {
-      "scene_id": 1711,
+      "scene_id": 1842,
       "split": "split1",
-      "grasp_id": 12,
+      "grasp_id": 5,
       "gt_object_ids": [
-        14,
-        7
+        11
       ],
-      "best_gt_id": 14,
-      "iou": 0.729
+      "best_gt_id": 11,
+      "iou": 0.9931
     },
     {
-      "scene_id": 1711,
+      "scene_id": 1842,
       "split": "split2",
+      "grasp_id": 5,
+      "gt_object_ids": [
+        11
+      ],
+      "best_gt_id": 11,
+      "iou": 0.9931
+    },
+    {
+      "scene_id": 1958,
+      "split": "split0",
       "grasp_id": 9,
       "gt_object_ids": [
-        14,
-        7
+        8
       ],
       "best_gt_id": -1,
       "iou": 0.0
-    },
-    {
-      "scene_id": 1842,
-      "split": "split0",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        11
-      ],
-      "best_gt_id": 11,
-      "iou": 0.9931
-    },
-    {
-      "scene_id": 1842,
-      "split": "split1",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        11
-      ],
-      "best_gt_id": 11,
-      "iou": 0.9931
-    },
-    {
-      "scene_id": 1842,
-      "split": "split2",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        11
-      ],
-      "best_gt_id": 11,
-      "iou": 0.9931
-    },
-    {
-      "scene_id": 1958,
-      "split": "split0",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": 8,
-      "iou": 0.9786
     },
     {
       "scene_id": 1958,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 9,
       "gt_object_ids": [
         8
       ],
-      "best_gt_id": 8,
-      "iou": 0.9786
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 1958,
       "split": "split2",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": 8,
-      "iou": 0.9786
-    },
-    {
-      "scene_id": 1961,
-      "split": "split0",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": 8,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 1961,
-      "split": "split1",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": 8,
-      "iou": 0.9948
-    },
-    {
-      "scene_id": 1961,
-      "split": "split2",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2014,
-      "split": "split0",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2014,
-      "split": "split1",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2014,
-      "split": "split2",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2030,
-      "split": "split0",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        6
-      ],
-      "best_gt_id": 6,
-      "iou": 0.8603
-    },
-    {
-      "scene_id": 2030,
-      "split": "split1",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        6
-      ],
-      "best_gt_id": 6,
-      "iou": 0.8603
-    },
-    {
-      "scene_id": 2030,
-      "split": "split2",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        6
-      ],
-      "best_gt_id": 6,
-      "iou": 0.8603
-    },
-    {
-      "scene_id": 2035,
-      "split": "split0",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.8594
-    },
-    {
-      "scene_id": 2035,
-      "split": "split1",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.8594
-    },
-    {
-      "scene_id": 2035,
-      "split": "split2",
-      "grasp_id": 2,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.8594
-    },
-    {
-      "scene_id": 2096,
-      "split": "split0",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1,
-        2,
-        5
-      ],
-      "best_gt_id": 2,
-      "iou": 0.8506
-    },
-    {
-      "scene_id": 2096,
-      "split": "split1",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1,
-        2,
-        5
-      ],
-      "best_gt_id": 2,
-      "iou": 0.8506
-    },
-    {
-      "scene_id": 2096,
-      "split": "split2",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        1,
-        2,
-        5
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2186,
-      "split": "split0",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3,
-        7
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9927
-    },
-    {
-      "scene_id": 2186,
-      "split": "split1",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3,
-        7
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9927
-    },
-    {
-      "scene_id": 2186,
-      "split": "split2",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3,
-        7
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9927
-    },
-    {
-      "scene_id": 2310,
-      "split": "split0",
-      "grasp_id": 6,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2310,
-      "split": "split1",
-      "grasp_id": 6,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2310,
-      "split": "split2",
-      "grasp_id": 6,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2355,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3,
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.9969
-    },
-    {
-      "scene_id": 2355,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3,
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.9969
-    },
-    {
-      "scene_id": 2355,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3,
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.9969
-    },
-    {
-      "scene_id": 2357,
-      "split": "split0",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        11,
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.7599
-    },
-    {
-      "scene_id": 2357,
-      "split": "split1",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        11,
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.7599
-    },
-    {
-      "scene_id": 2357,
-      "split": "split2",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        11,
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.7599
-    },
-    {
-      "scene_id": 242,
-      "split": "split0",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 242,
-      "split": "split1",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 242,
-      "split": "split2",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 2804,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.4337
-    },
-    {
-      "scene_id": 2804,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.4337
-    },
-    {
-      "scene_id": 2804,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.4337
-    },
-    {
-      "scene_id": 2839,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.3492
-    },
-    {
-      "scene_id": 2839,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.3492
-    },
-    {
-      "scene_id": 2839,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.3492
-    },
-    {
-      "scene_id": 3486,
-      "split": "split0",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.967
-    },
-    {
-      "scene_id": 3486,
-      "split": "split1",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.967
-    },
-    {
-      "scene_id": 3486,
-      "split": "split2",
-      "grasp_id": 3,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.967
-    },
-    {
-      "scene_id": 3724,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.9799
-    },
-    {
-      "scene_id": 3724,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.9799
-    },
-    {
-      "scene_id": 3724,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        5
-      ],
-      "best_gt_id": 5,
-      "iou": 0.9799
-    },
-    {
-      "scene_id": 3727,
-      "split": "split0",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        7
-      ],
-      "best_gt_id": 7,
-      "iou": 0.5017
-    },
-    {
-      "scene_id": 3727,
-      "split": "split1",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        7
-      ],
-      "best_gt_id": 7,
-      "iou": 0.5017
-    },
-    {
-      "scene_id": 3727,
-      "split": "split2",
-      "grasp_id": 7,
-      "gt_object_ids": [
-        7
-      ],
-      "best_gt_id": 7,
-      "iou": 0.5017
-    },
-    {
-      "scene_id": 4015,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        2,
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 4015,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        2,
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 4015,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        2,
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 4018,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.977
-    },
-    {
-      "scene_id": 4018,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.977
-    },
-    {
-      "scene_id": 4018,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        4
-      ],
-      "best_gt_id": 4,
-      "iou": 0.977
-    },
-    {
-      "scene_id": 4109,
-      "split": "split0",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        6
-      ],
-      "best_gt_id": 6,
-      "iou": 0.9896
-    },
-    {
-      "scene_id": 4109,
-      "split": "split1",
       "grasp_id": null,
       "gt_object_ids": [
-        6
+        8
       ],
       "best_gt_id": -1,
       "iou": 0.0,
       "error": "reason_csv missing"
     },
     {
+      "scene_id": 1961,
+      "split": "split0",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        8
+      ],
+      "best_gt_id": 8,
+      "iou": 0.9948
+    },
+    {
+      "scene_id": 1961,
+      "split": "split1",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        8
+      ],
+      "best_gt_id": 8,
+      "iou": 0.9948
+    },
+    {
+      "scene_id": 1961,
+      "split": "split2",
+      "grasp_id": 6,
+      "gt_object_ids": [
+        8
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2014,
+      "split": "split0",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2014,
+      "split": "split1",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2014,
+      "split": "split2",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2030,
+      "split": "split0",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9295
+    },
+    {
+      "scene_id": 2030,
+      "split": "split1",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9295
+    },
+    {
+      "scene_id": 2030,
+      "split": "split2",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9295
+    },
+    {
+      "scene_id": 2035,
+      "split": "split0",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9467
+    },
+    {
+      "scene_id": 2035,
+      "split": "split1",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9467
+    },
+    {
+      "scene_id": 2035,
+      "split": "split2",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9467
+    },
+    {
+      "scene_id": 2096,
+      "split": "split0",
+      "grasp_id": null,
+      "gt_object_ids": [
+        1,
+        2,
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 2096,
+      "split": "split1",
+      "grasp_id": null,
+      "gt_object_ids": [
+        1,
+        2,
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 2096,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        1,
+        2,
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2186,
+      "split": "split0",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3,
+        7
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2186,
+      "split": "split1",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3,
+        7
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2186,
+      "split": "split2",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        3,
+        7
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9927
+    },
+    {
+      "scene_id": 2310,
+      "split": "split0",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2310,
+      "split": "split1",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2310,
+      "split": "split2",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 2355,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        3,
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.9969
+    },
+    {
+      "scene_id": 2355,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        3,
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.9969
+    },
+    {
+      "scene_id": 2355,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        3,
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.9969
+    },
+    {
+      "scene_id": 2357,
+      "split": "split0",
+      "grasp_id": 8,
+      "gt_object_ids": [
+        11,
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.7599
+    },
+    {
+      "scene_id": 2357,
+      "split": "split1",
+      "grasp_id": 8,
+      "gt_object_ids": [
+        11,
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.7599
+    },
+    {
+      "scene_id": 2357,
+      "split": "split2",
+      "grasp_id": 8,
+      "gt_object_ids": [
+        11,
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.7599
+    },
+    {
+      "scene_id": 242,
+      "split": "split0",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.5818
+    },
+    {
+      "scene_id": 242,
+      "split": "split1",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.5818
+    },
+    {
+      "scene_id": 242,
+      "split": "split2",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.5818
+    },
+    {
+      "scene_id": 2804,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.4337
+    },
+    {
+      "scene_id": 2804,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.4337
+    },
+    {
+      "scene_id": 2804,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.4337
+    },
+    {
+      "scene_id": 2839,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.3492
+    },
+    {
+      "scene_id": 2839,
+      "split": "split1",
+      "grasp_id": null,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0,
+      "error": "intent_no_target"
+    },
+    {
+      "scene_id": 2839,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.3492
+    },
+    {
+      "scene_id": 3486,
+      "split": "split0",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9733
+    },
+    {
+      "scene_id": 3486,
+      "split": "split1",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9733
+    },
+    {
+      "scene_id": 3486,
+      "split": "split2",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9733
+    },
+    {
+      "scene_id": 3724,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.9799
+    },
+    {
+      "scene_id": 3724,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.9799
+    },
+    {
+      "scene_id": 3724,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        5
+      ],
+      "best_gt_id": 5,
+      "iou": 0.9799
+    },
+    {
+      "scene_id": 3727,
+      "split": "split0",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.5017
+    },
+    {
+      "scene_id": 3727,
+      "split": "split1",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.5017
+    },
+    {
+      "scene_id": 3727,
+      "split": "split2",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        7
+      ],
+      "best_gt_id": 7,
+      "iou": 0.5017
+    },
+    {
+      "scene_id": 4015,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        2,
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9936
+    },
+    {
+      "scene_id": 4015,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        2,
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9936
+    },
+    {
+      "scene_id": 4015,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        2,
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.9936
+    },
+    {
+      "scene_id": 4018,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.977
+    },
+    {
+      "scene_id": 4018,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.977
+    },
+    {
+      "scene_id": 4018,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        4
+      ],
+      "best_gt_id": 4,
+      "iou": 0.977
+    },
+    {
+      "scene_id": 4109,
+      "split": "split0",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9896
+    },
+    {
+      "scene_id": 4109,
+      "split": "split1",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9896
+    },
+    {
       "scene_id": 4109,
       "split": "split2",
       "grasp_id": 4,
@@ -1039,37 +1043,37 @@
     {
       "scene_id": 4156,
       "split": "split0",
-      "grasp_id": 7,
+      "grasp_id": 4,
       "gt_object_ids": [
         7
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 7,
+      "iou": 0.5928
     },
     {
       "scene_id": 4156,
       "split": "split1",
-      "grasp_id": 7,
+      "grasp_id": 4,
       "gt_object_ids": [
         7
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 7,
+      "iou": 0.5928
     },
     {
       "scene_id": 4156,
       "split": "split2",
-      "grasp_id": 7,
+      "grasp_id": 4,
       "gt_object_ids": [
         7
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 7,
+      "iou": 0.5928
     },
     {
       "scene_id": 4232,
       "split": "split0",
-      "grasp_id": 5,
+      "grasp_id": 4,
       "gt_object_ids": [
         4
       ],
@@ -1079,7 +1083,7 @@
     {
       "scene_id": 4232,
       "split": "split1",
-      "grasp_id": 5,
+      "grasp_id": 4,
       "gt_object_ids": [
         4
       ],
@@ -1089,12 +1093,12 @@
     {
       "scene_id": 4232,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         4
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 4,
+      "iou": 0.5948
     },
     {
       "scene_id": 4570,
@@ -1129,7 +1133,7 @@
     {
       "scene_id": 5062,
       "split": "split0",
-      "grasp_id": 5,
+      "grasp_id": 3,
       "gt_object_ids": [
         1
       ],
@@ -1139,7 +1143,7 @@
     {
       "scene_id": 5062,
       "split": "split1",
-      "grasp_id": 5,
+      "grasp_id": 3,
       "gt_object_ids": [
         1
       ],
@@ -1149,7 +1153,7 @@
     {
       "scene_id": 5062,
       "split": "split2",
-      "grasp_id": 5,
+      "grasp_id": 3,
       "gt_object_ids": [
         1
       ],
@@ -1249,7 +1253,7 @@
     {
       "scene_id": 5359,
       "split": "split0",
-      "grasp_id": 9,
+      "grasp_id": 3,
       "gt_object_ids": [
         9,
         6
@@ -1260,7 +1264,7 @@
     {
       "scene_id": 5359,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 3,
       "gt_object_ids": [
         9,
         6
@@ -1271,7 +1275,7 @@
     {
       "scene_id": 5359,
       "split": "split2",
-      "grasp_id": 9,
+      "grasp_id": 3,
       "gt_object_ids": [
         9,
         6
@@ -1282,7 +1286,7 @@
     {
       "scene_id": 5368,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         2,
         5,
@@ -1290,13 +1294,13 @@
         12,
         13
       ],
-      "best_gt_id": 13,
-      "iou": 0.0003
+      "best_gt_id": 9,
+      "iou": 0.9932
     },
     {
       "scene_id": 5368,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         2,
         5,
@@ -1304,13 +1308,13 @@
         12,
         13
       ],
-      "best_gt_id": 13,
-      "iou": 0.0003
+      "best_gt_id": 9,
+      "iou": 0.9932
     },
     {
       "scene_id": 5368,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         2,
         5,
@@ -1318,8 +1322,8 @@
         12,
         13
       ],
-      "best_gt_id": 13,
-      "iou": 0.0003
+      "best_gt_id": 9,
+      "iou": 0.9932
     },
     {
       "scene_id": 5405,
@@ -1384,7 +1388,7 @@
     {
       "scene_id": 691,
       "split": "split0",
-      "grasp_id": 5,
+      "grasp_id": 3,
       "gt_object_ids": [
         8
       ],
@@ -1394,17 +1398,7 @@
     {
       "scene_id": 691,
       "split": "split1",
-      "grasp_id": 6,
-      "gt_object_ids": [
-        8
-      ],
-      "best_gt_id": 8,
-      "iou": 0.9695
-    },
-    {
-      "scene_id": 691,
-      "split": "split2",
-      "grasp_id": 6,
+      "grasp_id": 4,
       "gt_object_ids": [
         8
       ],
@@ -1412,39 +1406,49 @@
       "iou": 0.9695
     },
     {
+      "scene_id": 691,
+      "split": "split2",
+      "grasp_id": 4,
+      "gt_object_ids": [
+        8
+      ],
+      "best_gt_id": 8,
+      "iou": 0.9695
+    },
+    {
       "scene_id": 815,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.7662
+      "iou": 0.0001
     },
     {
       "scene_id": 815,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.7662
+      "iou": 0.0001
     },
     {
       "scene_id": 815,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.7662
+      "iou": 0.0001
     },
     {
       "scene_id": 823,
       "split": "split0",
-      "grasp_id": 7,
+      "grasp_id": 4,
       "gt_object_ids": [
         5
       ],
@@ -1454,17 +1458,17 @@
     {
       "scene_id": 823,
       "split": "split1",
-      "grasp_id": 7,
+      "grasp_id": 1,
       "gt_object_ids": [
         5
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 5,
+      "iou": 0.8725
     },
     {
       "scene_id": 823,
       "split": "split2",
-      "grasp_id": 7,
+      "grasp_id": 4,
       "gt_object_ids": [
         5
       ],

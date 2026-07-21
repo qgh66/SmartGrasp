@@ -23,7 +23,7 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 from SmartGrasp.perception._shared import _save_mask_png
-from SmartGrasp.perception.background import generate_background_exclusion_mask_from_source
+from SmartGrasp.perception.background import generate_background_exclusion_mask
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
 from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
@@ -739,10 +739,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             source_image_path=image_path,
         )
 
-    background_mask_source = args.mask
-    if instances_objects is None and background_mask_source == "gt":
-        background_mask_source = "depth"
-
     if args.mode == "vlm":
         from SmartGrasp.perception.occlusion_map import build_org_json
 
@@ -756,11 +752,9 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             bg_mask = None
             background_mask_path = None
             try:
-                bg_mask = generate_background_exclusion_mask_from_source(
-                    mask_source=background_mask_source,
+                bg_mask = generate_background_exclusion_mask(
                     depth_map=depth,
                     image=Image.open(image_path).convert("RGB"),
-                    instances_objects=instances_objects,
                     mask_clean_kernel=args.mask_clean_kernel,
                 )
                 background_mask_path = save_background_exclusion_mask(bg_mask, out_dir / "mask")
@@ -795,7 +789,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 "label_png": str(label_path.resolve()),
                 "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
                 "background_mask_path": background_mask_path,
-                "background_mask_source": background_mask_source,
+                "background_mask_source": "depth",
                 "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
                 "report": report,
             }
@@ -829,8 +823,6 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             depth_sam2_pred_iou_thresh=args.depth_sam2_pred_iou_thresh,
             depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
-            background_mask_source=background_mask_source,
-            gt_instances_objects=instances_objects if background_mask_source == "gt" else None,
             max_contact_background_ratio=args.max_contact_background_ratio,
         )
         # Graph PNG already saved by build_org_json with scene-image background
@@ -896,12 +888,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
     parser.add_argument("--query-obj-id", type=int, default=None, help="Optional target object id.")
     parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
-    parser.add_argument(
-        "--mask",
-        choices=["gt", "depth"],
-        default="depth",
-        help="Background exclusion mask source. gt uses the inverse union of GT object masks; depth uses per-pixel depth matching. Default: depth.",
-    )
     parser.add_argument("--review-model-id", default="gpt-5.5")
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--review-base-url", default=None)

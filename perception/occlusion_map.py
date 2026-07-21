@@ -15,9 +15,7 @@ from SmartGrasp.perception._shared import (
     _log_step, _prepare_mask_output_dir,
     _safe_label, _save_mask_png, _write_json, SMARTGRASP_ROOT,
 )
-from SmartGrasp.perception.background import (
-    generate_background_exclusion_mask_from_source,
-)
+from SmartGrasp.perception.background import generate_background_exclusion_mask
 
 try:
     import networkx as nx
@@ -510,8 +508,6 @@ def build_org_json(
     depth_sam2_crop_n_layers: int | None = None,
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
-    background_mask_source: str = "depth",
-    gt_instances_objects: np.ndarray | None = None,
     max_contact_background_ratio: float = 0.4,
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
@@ -520,11 +516,9 @@ def build_org_json(
     depth_map = _load_depth_map(depth_path)
     background_exclusion_mask: np.ndarray | None = None
     try:
-        background_exclusion_mask = generate_background_exclusion_mask_from_source(
-            mask_source=background_mask_source,
+        background_exclusion_mask = generate_background_exclusion_mask(
             depth_map=depth_map,
             image=Image.open(image_path).convert("RGB"),
-            instances_objects=gt_instances_objects,
             mask_clean_kernel=mask_clean_kernel,
         )
     except Exception as exc:
@@ -639,7 +633,7 @@ def build_org_json(
         "segmentation_backend": "anchor",
         "anchor_report": anchor_report,
         "background_mask_path": background_mask_path,
-        "background_mask_source": background_mask_source,
+        "background_mask_source": "depth",
         "save_candidates": bool(save_candidates),
         "graph": graph_payload,
     }
