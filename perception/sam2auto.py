@@ -389,31 +389,6 @@ def _is_tray_or_background_like_proposal(
         if background_overlap >= BACKGROUND_OVERLAP_REJECTION_THRESHOLD:
             return True
 
-    height, width = mask.shape
-    area = int(np.count_nonzero(mask))
-    bbox_area = bbox_width * bbox_height
-    fill = area / max(1, bbox_area)
-    aspect = bbox_width / max(1, bbox_height)
-    cx = (x + 0.5 * bbox_width) / max(1, width)
-    cy = (y + 0.5 * bbox_height) / max(1, height)
-
-    pixels = image_np[mask].astype(np.float32)
-    if pixels.size == 0:
-        return True
-    median_rgb = np.median(pixels, axis=0)
-    r, g, b = [float(value) for value in median_rgb]
-    greenish = g >= 85 and g >= r * 1.02 and g >= b * 0.92
-    low_saturation = (max(r, g, b) - min(r, g, b)) < 35
-    near_tray_wall = cx <= 0.18 or cx >= 0.82 or cy <= 0.12 or cy >= 0.88
-
-    if greenish and (near_tray_wall or fill >= 0.78):
-        return True
-    if greenish and cy >= 0.68 and aspect >= 1.45 and bbox_width / max(1, width) >= 0.25:
-        return True
-    if low_saturation and near_tray_wall and fill >= 0.72:
-        return True
-    if aspect >= 3.0 and bbox_width / max(1, width) >= 0.22 and bbox_height / max(1, height) <= 0.08:
-        return True
     return False
 
 

@@ -214,12 +214,6 @@ class ResponsesVLMClient:
         for image_path in image_paths:
             parts.append(
                 {
-                    "type": "text",
-                    "text": f"Attached image file: {image_path.name}",
-                }
-            )
-            parts.append(
-                {
                     "type": "image_url",
                     "image_url": {"url": _image_data_url(image_path), "detail": "high"},
                 }
@@ -248,12 +242,7 @@ def resolve_intent(
 
     objects = _objects_from_summary(summary)
     occlusion = _occlusion_from_scene(summary, graph)
-    scene_context = _scene_context(
-        summary,
-        objects,
-        occlusion,
-        occlusion_graph_available=graph is not None,
-    )
+    scene_context = _scene_context(summary, objects, occlusion)
     resolved_images = _resolve_image_paths(summary_file, summary, image_paths)
     vlm_client = client or ResponsesVLMClient.from_env(
         api_key_env=api_key_env,
@@ -325,27 +314,9 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "Step 1. Task analysis: understand the user's underlying intention and "
         "any implicit task requirements.\n"
         "Step 2. Relevant object identification: from the listed objects and "
-        "attached labeled images, select the object most relevant to the task. "
-        "When sam2_rgb_parts_sheet.png is available, its labels below each part are SAM2 part "
-        "IDs. Use sam2_part_id_to_object_id in the scene context to identify the "
-        "parent object of each part. You may use a part's visible appearance to "
-        "infer whether its parent object satisfies the request, but the final "
-        "selection must be the parent object ID, never a part ID.\n"
+        "attached labeled image, select the object most relevant to the task.\n"
         "Step 3. Spatial reasoning: if the instruction uses words such as top, "
-        "bottom, upper, and lower, as the location in 2D rgb image as default. "
-        "However, when mentioning 3D occlusion, you must consider the depth "
-        "or stacking order. If the instruction says that an object is "
-        "underneath another object, use the occlusion graph and its occlusion "
-        "relationships to determine their relative positions. Use occlusion data "
-        "and the occlusion graph for this disambiguation, not only 2D image "
-        "position.\n\n"
-
-        "Attached image guide:\n"
-        "- sam2_rgb_parts_sheet.png shows the scene's segmented parts and their "
-        "SAM2 part IDs. Resolve every part ID through "
-        "sam2_part_id_to_object_id before reasoning about the corresponding object.\n"
-        "- In occlusion_graph.png, an arrow points from the object that visibly "
-        "covers/occludes another object toward the object being covered/occluded.\n\n"
+        "bottom, upper, lower, front, or back, interpret them from 2D image position.\n\n"
 
         "Rules:\n"
         "- The target object must be one object id from summary.json.\n"
@@ -356,10 +327,6 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "- If no listed object can satisfy the instruction, set target_present=false.\n"
         "- If multiple objects are plausible, include them in candidate_object_ids "
         "but still choose the best target_object_id.\n"
-        "- IMPORTANT: If the user's description is ambiguous, combine the scene "
-        "object information with the object list. Compare the objects by shape, "
-        "color, function, and spatial position, then select the single object most "
-        "likely to satisfy the user's need as the target object.\n"
         "- Return a concise reason explaining the task interpretation and object choice.\n\n"
 
         "Required JSON shape:\n"
@@ -382,35 +349,19 @@ def _scene_context(
     summary: dict[str, Any],
     objects: list[SceneObject],
     occlusion: dict[int, set[int]],
-    *,
-    occlusion_graph_available: bool = False,
 ) -> dict[str, Any]:
-    context = {
+    return {
         "scene_id": summary.get("scene_id"),
         "objects": [obj.to_json() for obj in objects],
-        "sam2_part_id_to_object_id": summary.get("sam2_part_id_to_object_id") or {},
-        "occlusion_source": (
-            "occlusion_graph" if occlusion_graph_available else "occlusion_matrix"
-        ),
         "occlusion_direction": "source object occludes target object",
-        "occlusion_arrow_meaning": (
-            "an arrow points from the covering/occluding object toward the "
-            "object it visibly covers/occludes"
-        ),
         "occluded_by": {
             str(object_id): sorted(blockers) for object_id, blockers in sorted(occlusion.items())
         },
+        "matrix_labels": summary.get("matrix_labels", []),
+        "occlusion_matrix_direction": summary.get("occlusion_matrix_direction"),
+        "occlusion_matrix_metric": summary.get("occlusion_matrix_metric"),
+        "occlusion_matrix": summary.get("occlusion_matrix"),
     }
-    if not occlusion_graph_available:
-        context.update(
-            {
-                "matrix_labels": summary.get("matrix_labels", []),
-                "occlusion_matrix_direction": summary.get("occlusion_matrix_direction"),
-                "occlusion_matrix_metric": summary.get("occlusion_matrix_metric"),
-                "occlusion_matrix": summary.get("occlusion_matrix"),
-            }
-        )
-    return context
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -510,11 +461,9 @@ def _resolve_image_paths(
     summary_dir = summary_path.parent
     primary_candidates = [
         summary.get("perception_label_png"),
-        summary.get("sam2_rgb_parts_sheet_png"),
         summary.get("graph_png"),
         summary_dir / "label_3_final.png",
         summary_dir / "scene_labeled.png",
-        summary_dir / "sam2_rgb_parts_sheet.png",
         summary_dir / "occlusion_graph.png",
     ]
     fallback_candidates = [
