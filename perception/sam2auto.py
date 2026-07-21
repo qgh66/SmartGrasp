@@ -798,11 +798,6 @@ def _draw_sam2_auto_label_image(
 
             fig, ax = plt.subplots(figsize=(10, 8))
             ax.imshow(image)
-            for mask_index, mask in enumerate(masks):
-                color = plt.cm.tab20(mask_index % 20)
-                overlay = np.zeros((*mask.shape, 4), dtype=np.float32)
-                overlay[mask] = [color[0], color[1], color[2], 0.28]
-                ax.imshow(overlay)
             _overlay_mask_contours(ax, masks)
             for obj_id, x, y in points_with_ids:
                 ax.text(
