@@ -466,21 +466,42 @@ def _hard_filter_sam2_proposals(
                 metadata["area_before_background_exclusion"] = area_before_exclusion
                 metadata["background_exclusion_pixels_removed"] = removed
                 mask = cleaned
-                # Recompute every geometry-dependent field from the cleaned mask
-                area = int(np.count_nonzero(mask))
-                area_ratio = float(area / image_area)
-                border_fraction = _border_touch_fraction(mask)
-                background_overlap = background_overlap_fraction(mask, background_exclusion_mask)
-                bbox_xywh = _mask_bbox(mask)
-                bbox_xyxy = _box_xywh_to_xyxy(bbox_xywh)
-                cx, cy = _mask_centroid_xy(mask)
-                metadata["area"] = area
-                metadata["area_ratio"] = area_ratio
-                metadata["bbox"] = bbox_xywh
-                metadata["bbox_xyxy"] = bbox_xyxy
-                metadata["border_fraction"] = border_fraction
-                metadata["background_exclusion_overlap"] = background_overlap
-                metadata["centroid"] = {"x": int(cx), "y": int(cy)}
+
+        # Background removal can leave isolated specks around the object boundary.
+        if cv2 is not None and np.any(mask):
+            component_count, component_labels, component_stats, _ = cv2.connectedComponentsWithStats(
+                mask.astype(np.uint8),
+                connectivity=8,
+            )
+            cleaned = np.zeros_like(mask, dtype=bool)
+            for component_label in range(1, component_count):
+                component_area = int(component_stats[component_label, cv2.CC_STAT_AREA])
+                if component_area > 12:
+                    cleaned |= component_labels == component_label
+            removed_small = int(np.count_nonzero(mask)) - int(np.count_nonzero(cleaned))
+            if removed_small > 0:
+                metadata["small_components_pixels_removed"] = removed_small
+                mask = cleaned
+
+        # Recompute geometry after background and small-component removal.
+        area = int(np.count_nonzero(mask))
+        if area == 0:
+            metadata["rejection_reason"] = "empty_after_cleanup"
+            report.append(metadata)
+            continue
+        area_ratio = float(area / image_area)
+        border_fraction = _border_touch_fraction(mask)
+        background_overlap = background_overlap_fraction(mask, background_exclusion_mask)
+        bbox_xywh = _mask_bbox(mask)
+        bbox_xyxy = _box_xywh_to_xyxy(bbox_xywh)
+        cx, cy = _mask_centroid_xy(mask)
+        metadata["area"] = area
+        metadata["area_ratio"] = area_ratio
+        metadata["bbox"] = bbox_xywh
+        metadata["bbox_xyxy"] = bbox_xyxy
+        metadata["border_fraction"] = border_fraction
+        metadata["background_exclusion_overlap"] = background_overlap
+        metadata["centroid"] = {"x": int(cx), "y": int(cy)}
 
         metadata["selection_score"] = _proposal_score(proposal)
         metadata["mask"] = mask
