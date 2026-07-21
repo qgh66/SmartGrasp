@@ -366,24 +366,7 @@ def _resolve_overlaps_by_depth(
     return candidates
 
 
-def _is_support_like_horizontal_strip(mask: np.ndarray) -> bool:
-    height, width = mask.shape
-    x, y, bbox_width, bbox_height = _mask_bbox(mask)
-    if bbox_width <= 0 or bbox_height <= 0:
-        return False
-    aspect = bbox_width / max(1, bbox_height)
-    vertical_center = (y + 0.5 * bbox_height) / max(1, height)
-    horizontal_coverage = bbox_width / max(1, width)
-    thin_height = bbox_height / max(1, height)
-    return bool(
-        aspect >= 3.0
-        and vertical_center >= 0.86
-        and horizontal_coverage >= 0.22
-        and thin_height <= 0.08
-    )
-
-
-def _is_tray_or_background_like_proposal(
+def _is_background_like_proposal(
     image_np: np.ndarray,
     mask: np.ndarray,
     background_exclusion_mask: np.ndarray | None = None,
@@ -438,8 +421,8 @@ def _hard_filter_sam2_proposals(
             reason = "too_small"
         elif area_ratio > effective_max_area_ratio:
             reason = "too_large"
-        elif _is_support_like_horizontal_strip(mask) or _is_tray_or_background_like_proposal(image_np, mask, background_exclusion_mask):
-            reason = "support_or_tray_like"
+        elif _is_background_like_proposal(image_np, mask, background_exclusion_mask):
+            reason = "background_like"
         elif background_overlap > 0.5:
             reason = "overlaps_background_exclusion"
 
