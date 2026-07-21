@@ -275,22 +275,28 @@ def _internal_depth_edge_report(
 
 def _resolve_overlaps_by_depth(
     candidates: list[dict[str, Any]],
+    depth_map: np.ndarray | None,
 ) -> list[dict[str, Any]]:
-    """Resolve overlapping region between mask pairs using spatial k-NN voting.
-
-    The overlap region is sampled. Each sample finds its k nearest neighbors
-    from A's exclusive region and k nearest from B's exclusive region, then
-    votes for whichever side is closer. The entire overlap region is assigned
-    to the winner of the majority vote.
-    """
+    """Assign each pairwise overlap to the locally depth-consistent mask."""
     if len(candidates) < 2:
         return candidates
 
     n = len(candidates)
     masks = [np.asarray(c["mask"], dtype=bool).copy() for c in candidates]
+    depth = None if depth_map is None else np.asarray(depth_map, dtype=np.float32)
+    if depth is not None and depth.shape != masks[0].shape:
+        depth = None
     modified = False
-    n_sample = 500
-    k = 7
+    dilation_kernel = np.ones((11, 11), dtype=np.uint8)
+
+    def _mean_valid_depth(region: np.ndarray) -> float | None:
+        if depth is None:
+            return None
+        values = depth[region]
+        values = values[np.isfinite(values) & (values > 0)]
+        if values.size == 0:
+            return None
+        return float(np.mean(values))
 
     for i in range(n):
         for j in range(i + 1, n):
@@ -315,33 +321,36 @@ def _resolve_overlaps_by_depth(
                 modified = True
                 continue
 
-            # Sample exclusive region coords
-            coords_i = np.argwhere(excl_i).astype(np.float32)
-            coords_j = np.argwhere(excl_j).astype(np.float32)
+            if cv2 is None:
+                assign_to_i = n_i >= n_j
+                if assign_to_i:
+                    masks[j][overlap] = False
+                else:
+                    masks[i][overlap] = False
+                modified = True
+                continue
 
-            # Sample overlap coords for voting
-            coords_o = np.argwhere(overlap).astype(np.float32)
-            n_o_sample = min(n_sample, n_overlap)
-            sample_o = coords_o[np.random.choice(n_overlap, n_o_sample, replace=False)]
+            expanded_overlap = cv2.dilate(
+                overlap.astype(np.uint8),
+                dilation_kernel,
+                iterations=1,
+            ).astype(bool)
+            local_excl_i = expanded_overlap & excl_i
+            local_excl_j = expanded_overlap & excl_j
+            overlap_mean = _mean_valid_depth(overlap)
+            mean_i = _mean_valid_depth(local_excl_i)
+            mean_j = _mean_valid_depth(local_excl_j)
 
-            votes_i = 0
-            for p in sample_o:
-                # Find k nearest from A exclusive, mean distance
-                dist_i = np.sum((coords_i - p) ** 2, axis=1)
-                k_i = min(k, n_i) - 1
-                top_i = np.partition(dist_i, k_i)[:k_i + 1] if k_i >= 0 else np.array([float('inf')])
-                mean_i = np.mean(top_i) if len(top_i) > 0 else float('inf')
+            if overlap_mean is not None and mean_i is not None and mean_j is not None:
+                assign_to_i = abs(overlap_mean - mean_i) <= abs(overlap_mean - mean_j)
+            elif overlap_mean is not None and mean_i is not None:
+                assign_to_i = True
+            elif overlap_mean is not None and mean_j is not None:
+                assign_to_i = False
+            else:
+                assign_to_i = n_i >= n_j
 
-                # Find k nearest from B exclusive, mean distance
-                dist_j = np.sum((coords_j - p) ** 2, axis=1)
-                k_j = min(k, n_j) - 1
-                top_j = np.partition(dist_j, k_j)[:k_j + 1] if k_j >= 0 else np.array([float('inf')])
-                mean_j = np.mean(top_j) if len(top_j) > 0 else float('inf')
-
-                if mean_i <= mean_j:
-                    votes_i += 1
-
-            if votes_i > n_o_sample // 2:
+            if assign_to_i:
                 masks[j][overlap] = False
             else:
                 masks[i][overlap] = False
@@ -749,7 +758,7 @@ def _sam2_auto_candidate_pool(
         initial_kept=rgb_candidates,
         reject_internal_depth_edges=True,
     )
-    candidates = _resolve_overlaps_by_depth(candidates)
+    candidates = _resolve_overlaps_by_depth(candidates, depth_map=depth_map)
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
         for candidate in candidates:
