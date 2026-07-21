@@ -741,7 +741,7 @@ def _sam2_auto_candidate_pool(
         depth_gradient=depth_gradient,
         valid_depth_mask=valid_depth_mask,
         report=report,
-        reject_internal_depth_edges=True,
+        reject_internal_depth_edges=False,
     )
     candidates = _merge_candidates_with_depth_edges(
         candidates=depth_candidates,
