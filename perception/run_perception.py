@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from SmartGrasp.perception._shared import _save_mask_png
 from SmartGrasp.perception.background import generate_background_exclusion_mask_from_source
@@ -360,6 +360,91 @@ def safe_float(value: Any, digits: int = 6) -> float | None:
 
 def display_label(label: Any) -> str:
     return str(label).replace("_", " ")
+
+
+def save_final_objects_sheet(
+    image_path: Path,
+    graph_payload: dict[str, Any],
+    output_path: Path,
+    columns: int = 5,
+) -> Path:
+    """Save white-background crops of final assembled objects with object ids."""
+    image = Image.open(image_path).convert("RGB")
+    image_np = np.asarray(image)
+    items: list[tuple[int, str, Image.Image]] = []
+    nodes = sorted(
+        graph_payload.get("graph", {}).get("nodes", []),
+        key=lambda node: int(node.get("object_id", node.get("node_id", 0))),
+    )
+    for node in nodes:
+        mask_path_value = node.get("mask_path") or node.get("mask_file")
+        if not mask_path_value:
+            continue
+        mask_path = Path(str(mask_path_value))
+        if not mask_path.exists() or not mask_path.is_absolute():
+            candidate = output_path.parent / mask_path
+            if candidate.exists():
+                mask_path = candidate
+        if not mask_path.exists():
+            continue
+        mask = np.asarray(Image.open(mask_path).convert("L")) > 0
+        if mask.shape != image_np.shape[:2] or not np.any(mask):
+            continue
+        ys, xs = np.nonzero(mask)
+        width = int(xs.max() - xs.min() + 1)
+        height = int(ys.max() - ys.min() + 1)
+        pad = max(8, int(round(max(width, height) * 0.08)))
+        x0 = max(0, int(xs.min()) - pad)
+        y0 = max(0, int(ys.min()) - pad)
+        x1 = min(image_np.shape[1], int(xs.max()) + pad + 1)
+        y1 = min(image_np.shape[0], int(ys.max()) + pad + 1)
+        crop = image_np[y0:y1, x0:x1]
+        crop_mask = mask[y0:y1, x0:x1]
+        visible = np.where(crop_mask[..., None], crop, 255).astype(np.uint8)
+        object_id = int(node.get("object_id", node.get("node_id", 0)))
+        label = str(node.get("label") or node.get("description") or f"object_{object_id}")
+        items.append((object_id, label, Image.fromarray(visible, mode="RGB")))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not items:
+        Image.new("RGB", (256, 256), "white").save(output_path)
+        return output_path
+
+    try:
+        font = ImageFont.truetype("Arial.ttf", 42)
+    except Exception:
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 42)
+        except Exception:
+            font = ImageFont.load_default(size=42)
+    label_height = 60
+    rows = int(np.ceil(len(items) / columns))
+    cell_width = max(crop.width for _object_id, _label, crop in items)
+    cell_height = max(crop.height for _object_id, _label, crop in items)
+    sheet = Image.new(
+        "RGB",
+        (columns * cell_width, rows * (cell_height + label_height)),
+        "white",
+    )
+    draw = ImageDraw.Draw(sheet)
+    for index, (object_id, _label, crop) in enumerate(items):
+        row, col = divmod(index, columns)
+        cell_x = col * cell_width
+        cell_y = row * (cell_height + label_height)
+        x = cell_x + (cell_width - crop.width) // 2
+        y = cell_y + label_height + (cell_height - crop.height) // 2
+        text = str(object_id)
+        text_box = draw.textbbox((0, 0), text, font=font)
+        text_width = text_box[2] - text_box[0]
+        draw.text(
+            (cell_x + (cell_width - text_width) // 2, cell_y + 4),
+            text,
+            fill="black",
+            font=font,
+        )
+        sheet.paste(crop, (x, y))
+    sheet.save(output_path)
+    return output_path
 
 
 def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], scene_dir: Path) -> dict[str, Any]:
@@ -765,6 +850,11 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
         scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
+        final_objects_sheet_path = save_final_objects_sheet(
+            image_path,
+            graph_payload,
+            out_dir / "final_objects_sheet.png",
+        )
         summary = {
             "scene_id": scene_id,
             "query_obj_id": query_obj_id,
@@ -780,6 +870,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "background_mask_source": graph_payload.get("background_mask_source"),
             "sam2_auto_label_png": str((out_dir / "label_1_sam2auto.png").resolve()),
             "sam2_rgb_parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
+            "final_objects_sheet_png": str(final_objects_sheet_path.resolve()),
             "vlm_review_json": str((out_dir / "vlm.json").resolve()),
             "perception_label_png": str((out_dir / "label_2_vlm.png").resolve()),
             "num_nodes": len(graph_payload["graph"]["nodes"]),

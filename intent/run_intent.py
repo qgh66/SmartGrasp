@@ -83,6 +83,7 @@ def _resolve_from_summary(
             "mask_dir": str(perception_dir / "mask"),
             "sam2_auto_label_png": perception_summary.get("sam2_auto_label_png"),
             "sam2_rgb_parts_sheet_png": perception_summary.get("sam2_rgb_parts_sheet_png"),
+            "final_objects_sheet_png": perception_summary.get("final_objects_sheet_png"),
             "openai_sam2_review_json": perception_summary.get("openai_sam2_review_json"),
             "molmo_sam2_review_json": perception_summary.get("molmo_sam2_review_json"),
         },

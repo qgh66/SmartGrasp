@@ -857,11 +857,14 @@ def _save_sam2_rgb_parts_sheet(
         return sheet_path
 
     try:
-        label_font = ImageFont.truetype("Arial.ttf", 28)
+        label_font = ImageFont.truetype("Arial.ttf", 42)
     except Exception:
-        label_font = ImageFont.load_default()
+        try:
+            label_font = ImageFont.truetype("DejaVuSans.ttf", 42)
+        except Exception:
+            label_font = ImageFont.load_default(size=42)
 
-    label_height = 42
+    label_height = 60
     columns = 5
     rows = int(np.ceil(len(part_images) / columns))
     cell_width = max(part_image.width for _part_id, part_image in part_images)

@@ -314,7 +314,10 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "Step 1. Task analysis: understand the user's underlying intention and "
         "any implicit task requirements.\n"
         "Step 2. Relevant object identification: from the listed objects and "
-        "attached labeled image, select the object most relevant to the task.\n"
+        "attached images, select the object most relevant to the task. The scene "
+        "image shows spatial context; the final-object sheet shows each assembled "
+        "object isolated on white and labeled with its final object id. Use the "
+        "sheet to inspect object appearance and map it to summary.json ids.\n"
         "Step 3. Spatial reasoning: if the instruction uses words such as top, "
         "bottom, upper, lower, front, or back, interpret them from 2D image position.\n\n"
 
@@ -455,10 +458,17 @@ def _resolve_image_paths(
     summary: dict[str, Any],
     explicit_paths: Iterable[str | Path] | None,
 ) -> list[Path]:
-    if explicit_paths:
-        return [Path(path) for path in explicit_paths if Path(path).exists()]
-
     summary_dir = summary_path.parent
+    object_sheet_candidates = [
+        summary.get("final_objects_sheet_png"),
+        summary_dir / "final_objects_sheet.png",
+    ]
+    if explicit_paths:
+        return _existing_unique_paths(summary_dir, explicit_paths) + _existing_unique_paths(
+            summary_dir,
+            object_sheet_candidates,
+        )
+
     primary_candidates = [
         summary.get("perception_label_png"),
         summary.get("graph_png"),
@@ -474,8 +484,11 @@ def _resolve_image_paths(
 
     resolved = _existing_unique_paths(summary_dir, primary_candidates)
     if resolved:
-        return resolved
-    return _existing_unique_paths(summary_dir, fallback_candidates)
+        return resolved + _existing_unique_paths(summary_dir, object_sheet_candidates)
+    return (
+        _existing_unique_paths(summary_dir, fallback_candidates)
+        + _existing_unique_paths(summary_dir, object_sheet_candidates)
+    )
 
 
 def _existing_unique_paths(
