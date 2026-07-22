@@ -20,7 +20,16 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
         )
 
     target_label = perception.node_info[target_node].get("label", "")
-    graspability_payload = score_current_objects([target_mid], perception)
+    prompt_mode = getattr(perception, "prior_prompt_mode", "original")
+    if prompt_mode == "graspability":
+        graspability_payload = score_current_objects([target_mid], perception)
+    else:
+        graspability_payload = {
+            "graspability": {target_mid: 1.0},
+            "graspability_part_id": {target_mid: None},
+            "graspability_parts": {target_mid: {}},
+            "reason": "original mode; graspability disabled",
+        }
     graspability = graspability_payload.get("graspability", {}).get(target_mid, 1.0)
     graspability_part_id = graspability_payload.get("graspability_part_id", {}).get(target_mid)
     graspability_parts = graspability_payload.get("graspability_parts", {}).get(target_mid, {})

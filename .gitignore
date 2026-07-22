@@ -36,6 +36,8 @@ graspnet-workspace/
 /sample_data/
 /scene_details/
 /input
+/temp
+/temp/*
 /testcase
 /tests
 /outputs/

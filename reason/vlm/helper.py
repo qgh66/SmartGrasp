@@ -37,6 +37,9 @@ def _build_user_text_partial(
     lines.append("")
     lines.append(
         "Reminders:\n"
+        "  - Use the occlusion graph together with the labeled scene and the\n"
+        "    textual relations. In the graph, A -> B means A significantly\n"
+        "    covers B, and the arrow points to the covered object B.\n"
         "  - Score range is [0, 1]. Avoid only 0 or 1; use intermediate values.\n"
         "  - A candidate that blocks a DIRECT occluder of the target is an\n"
         "    INDIRECT occluder and deserves a moderate score (around 0.5-0.7),\n"
@@ -51,8 +54,10 @@ def _build_user_text_partial(
             "Also estimate graspability for the next removal grasp. Return both "
             "one integrated object-level graspability score for each candidate "
             "object and part-level graspability scores for every listed "
-            "sam2_part_id of that object. Use the labeled scene image and the "
-            "SAM2 part contact sheet when available. Assume the robot uses a "
+            "sam2_part_id of that object. Use the labeled scene image, the "
+            "occlusion graph, the object-ID sheet of complete assembled "
+            "objects, and the SAM2 part "
+            "contact sheet when available. Assume the robot uses a "
             "parallel gripper. Object-level graspability should still reflect "
             "whether grasping the best feasible visible part/region can move and "
             "remove the whole object safely. Part-level graspability should score "
@@ -97,14 +102,22 @@ def _build_user_text_invisible(
             part_text = f", sam2_part_ids={part_ids}"
         lines.append(f"  - mid={o['mid']}, label={o['label']}{part_text}")
     lines.append("")
+    lines.append(
+        "Use the occlusion graph together with the labeled scene. In the "
+        "graph, A -> B means Object A significantly covers Object B, and the "
+        "arrow points to the covered object B."
+    )
+    lines.append("")
     mids = [o["mid"] for o in occluders]
     if prompt_mode == "graspability":
         lines.append(
             "Also estimate graspability for the next removal grasp. Return both "
             "one integrated object-level graspability score for each visible "
             "top-layer candidate and part-level graspability scores for every "
-            "listed sam2_part_id of that object. Use the labeled scene image and "
-            "the SAM2 part contact sheet when available. Assume the robot uses a "
+            "listed sam2_part_id of that object. Use the labeled scene image, "
+            "the occlusion graph, the object-ID sheet of complete assembled "
+            "objects, and the SAM2 "
+            "part contact sheet when available. Assume the robot uses a "
             "parallel gripper. Object-level graspability should still reflect "
             "whether grasping the best feasible visible part/region can move and "
             "remove the whole object safely. Part-level graspability should score "
@@ -157,8 +170,10 @@ def _build_user_text_graspability(
     lines.append(
         "For each object, return one integrated object-level graspability "
         "score in [0, 1] and part-level graspability scores for every listed "
-        "sam2_part_id. Use the labeled scene image and SAM2 part contact "
-        "sheet when available. Assume a parallel gripper. Object-level "
+        "sam2_part_id. Use the labeled scene image, the occlusion graph, the "
+        "object-ID sheet of complete assembled objects, and the SAM2 part "
+        "contact sheet when "
+        "available. Assume a parallel gripper. Object-level "
         "graspability should reflect whether grasping the best feasible "
         "visible part/region can move and remove the whole object safely. "
         "Part-level graspability should score whether that exact SAM2 part is "

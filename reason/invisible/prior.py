@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 from typing import Any
 
+from ..graspability import score_current_objects
 from ..vlm import VLMClient, get_default_client
 
 
@@ -48,6 +49,41 @@ def compute_semantic_prior_payload(
     if not occluder_mids:
         print("[PRIOR-INV] no occluders -> empty")
         return {"scores": {}, "graspability": {}, "reason": "no occluders available"}
+
+    # With exactly one candidate, its semantic probability is deterministic.
+    # Avoid asking the VLM to estimate a probability that must be 1.0.  In
+    # graspability mode, make one graspability-only request so both the
+    # object-level coefficient and every part-level coefficient are retained.
+    if len(occluder_mids) == 1:
+        mid = occluder_mids[0]
+        prompt_mode = getattr(perception, "prior_prompt_mode", "original")
+        if prompt_mode == "graspability":
+            graspability_payload = score_current_objects(
+                [mid], perception, client=client
+            )
+            return {
+                "scores": {mid: 1.0},
+                "graspability": graspability_payload.get(
+                    "graspability", {mid: 1.0}
+                ),
+                "graspability_part_id": graspability_payload.get(
+                    "graspability_part_id", {mid: None}
+                ),
+                "graspability_parts": graspability_payload.get(
+                    "graspability_parts", {mid: {}}
+                ),
+                "reason": (
+                    "single candidate; assigned deterministic semantic prior. "
+                    + str(graspability_payload.get("reason") or "")
+                ).strip(),
+            }
+        return {
+            "scores": {mid: 1.0},
+            "graspability": {mid: 1.0},
+            "graspability_part_id": {mid: None},
+            "graspability_parts": {mid: {}},
+            "reason": "single candidate; assigned deterministic semantic prior",
+        }
 
     # The hidden target is usually described by the language annotation.
     target_label = "unknown target"
@@ -99,6 +135,8 @@ def compute_semantic_prior_payload(
         labeled_rgb=labeled_rgb,
         parts_sheet_rgb=getattr(perception, "sam2_rgb_parts_sheet", None),
         prompt_mode=prompt_mode,
+        object_sheet_rgb=getattr(perception, "final_objects_sheet", None),
+        occlusion_graph_rgb=getattr(perception, "occlusion_graph_rgb", None),
     )
 
     # Fill missing ids with a uniform fallback.

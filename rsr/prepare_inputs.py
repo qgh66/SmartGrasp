@@ -165,7 +165,9 @@ def export_scene(
     input_root: Path,
 ) -> dict[str, Any]:
     scene_id = int(item["scene_id"])
-    scene_dir = input_root / item["testcase"] / f"scene_{scene_id}"
+    scene_dir = input_root / item["testcase"] / item.get(
+        "case_directory", f"scene_{scene_id}"
+    )
     scene_dir.mkdir(parents=True, exist_ok=False)
 
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")

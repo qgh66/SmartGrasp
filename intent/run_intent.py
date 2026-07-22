@@ -90,7 +90,10 @@ def _resolve_from_summary(
             "openai_sam2_review_json": perception_summary.get("openai_sam2_review_json"),
             "molmo_sam2_review_json": perception_summary.get("molmo_sam2_review_json"),
         },
-        "perception_objects": perception_summary.get("molmo_points", []),
+        "perception_objects": (
+            perception_summary.get("object_points")
+            or perception_summary.get("molmo_points", [])
+        ),
         "intent": {
             "selected_perception_id": selected_id,
             "selected_object": result.target_object.to_json() if result.target_object else None,

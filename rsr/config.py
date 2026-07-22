@@ -47,10 +47,22 @@ class Algorithm:
 
 
 ALGORITHMS = (
-    Algorithm("information_gain", "ig_graspability"),
-    Algorithm("theory", "theory"),
+    Algorithm("information_gain_original", "ig", "original"),
+    Algorithm("information_gain_graspability", "ig_graspability", "graspability"),
+    Algorithm("theory_original", "theory", "original"),
+    Algorithm("theory_graspability", "theory", "graspability"),
 )
-ALGORITHM_BY_SLUG = {algorithm.slug: algorithm for algorithm in ALGORITHMS}
+
+# Keep the former names readable for existing cached results and old commands,
+# but do not include them in the new four-method default matrix.
+LEGACY_ALGORITHM_ALIASES = (
+    Algorithm("information_gain", "ig_graspability", "graspability"),
+    Algorithm("theory", "theory", "graspability"),
+)
+ALGORITHM_BY_SLUG = {
+    algorithm.slug: algorithm
+    for algorithm in (*ALGORITHMS, *LEGACY_ALGORITHM_ALIASES)
+}
 
 
 def parse_ground_truth_ids(value: object) -> list[int]:

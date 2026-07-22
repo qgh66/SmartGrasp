@@ -355,6 +355,12 @@ def _scene_context(
     objects: list[SceneObject],
     occlusion: dict[int, set[int]],
 ) -> dict[str, Any]:
+    """Build the compact object-level context sent to the Intent VLM.
+
+    The full numeric occlusion matrix stays in ``summary.json`` for Reason and
+    evaluation.  Intent receives object ids plus the derived ``occluded_by``
+    relations, while the attached occlusion graph provides the visual form.
+    """
     return {
         "scene_id": summary.get("scene_id"),
         "objects": [obj.to_json() for obj in objects],
@@ -363,9 +369,6 @@ def _scene_context(
             str(object_id): sorted(blockers) for object_id, blockers in sorted(occlusion.items())
         },
         "matrix_labels": summary.get("matrix_labels", []),
-        "occlusion_matrix_direction": summary.get("occlusion_matrix_direction"),
-        "occlusion_matrix_metric": summary.get("occlusion_matrix_metric"),
-        "occlusion_matrix": summary.get("occlusion_matrix"),
     }
 
 

@@ -144,7 +144,10 @@ def write_selection_result(
 def run_perception(input_scene: Path, output_category: Path, args: argparse.Namespace) -> Path:
     metadata = _load_json(input_scene / "metadata.json")
     scene_id = int(metadata["scene_id"])
-    output_scene = output_category / f"scene_{scene_id}"
+    # Keep every (scene_id, query_obj_id) case independent.  In the all
+    # hard-ambi set one source scene can occur with multiple query ids, so a
+    # plain ``scene_<id>`` output directory would overwrite another case.
+    output_scene = output_category / input_scene.name
     shared_perception = output_scene / "perception"
     if (shared_perception / "summary.json").exists() and not args.force_perception:
         print(f"[perception cached] scene={scene_id} -> {shared_perception}", flush=True)
@@ -164,10 +167,32 @@ def run_perception(input_scene: Path, output_category: Path, args: argparse.Name
     perception_args.review_base_url = args.perception_review_base_url
     perception_args.review_timeout = args.perception_review_timeout
     perception_args.device = args.device
+    perception_args.sam2_points_per_side = args.sam2_points_per_side
+    perception_args.sam2_pred_iou_thresh = args.sam2_pred_iou_thresh
+    perception_args.sam2_stability_score_thresh = args.sam2_stability_score_thresh
+    perception_args.sam2_crop_n_layers = args.sam2_crop_n_layers
+    perception_args.depth_sam2_crop_n_layers = args.depth_sam2_crop_n_layers
+    perception_args.depth_sam2_pred_iou_thresh = args.depth_sam2_pred_iou_thresh
+    perception_args.depth_sam2_stability_score_thresh = (
+        args.depth_sam2_stability_score_thresh
+    )
+    perception_args.kernel_size = args.kernel_size
+    perception_args.min_contact_pixels = args.min_contact_pixels
+    perception_args.min_contact_ratio = args.min_contact_ratio
+    perception_args.mask_clean_kernel = args.mask_clean_kernel
+    perception_args.proposal_min_area_ratio = args.proposal_min_area_ratio
+    perception_args.proposal_max_area_ratio = args.proposal_max_area_ratio
+    perception_args.proposal_border_fraction_threshold = (
+        args.proposal_border_fraction_threshold
+    )
 
     output_category.mkdir(parents=True, exist_ok=True)
-    perception_runner.OUT_ROOT = output_category
-    perception_runner.INPUT_ROOT = output_category / "__priority_input_disabled__"
+    runtime_root = output_category / "__runtime__" / input_scene.name
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root)
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    perception_runner.OUT_ROOT = runtime_root
+    perception_runner.INPUT_ROOT = runtime_root / "__priority_input_disabled__"
     source_npz = input_scene / "source.npz"
     original_find_npz_source = perception_runner.find_npz_source
     perception_runner.find_npz_source = lambda requested_scene_id: (source_npz, None)
@@ -188,6 +213,13 @@ def run_perception(input_scene: Path, output_category: Path, args: argparse.Name
             pass
     finally:
         perception_runner.find_npz_source = original_find_npz_source
+
+    generated_scene = runtime_root / f"scene_{scene_id}"
+    if generated_scene.exists():
+        if output_scene.exists():
+            shutil.rmtree(output_scene)
+        shutil.move(str(generated_scene), str(output_scene))
+    shutil.rmtree(runtime_root, ignore_errors=True)
 
     if args.perception_mode == "gt" and not (shared_perception / "summary.json").exists():
         gt_perception = output_scene / "gt"
@@ -401,6 +433,24 @@ def main() -> None:
     parser.add_argument("--perception-review-model", default="gpt-5.5")
     parser.add_argument("--perception-review-base-url", default=None)
     parser.add_argument("--perception-review-timeout", type=float, default=120.0)
+    parser.add_argument("--sam2-points-per-side", type=int, default=24)
+    parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.68)
+    parser.add_argument("--sam2-stability-score-thresh", type=float, default=0.83)
+    parser.add_argument("--sam2-crop-n-layers", type=int, default=0)
+    parser.add_argument("--depth-sam2-crop-n-layers", type=int, default=1)
+    parser.add_argument("--depth-sam2-pred-iou-thresh", type=float, default=0.58)
+    parser.add_argument(
+        "--depth-sam2-stability-score-thresh", type=float, default=0.73
+    )
+    parser.add_argument("--kernel-size", type=int, default=11)
+    parser.add_argument("--min-contact-pixels", type=int, default=50)
+    parser.add_argument("--min-contact-ratio", type=float, default=0.002)
+    parser.add_argument("--mask-clean-kernel", type=int, default=3)
+    parser.add_argument("--proposal-min-area-ratio", type=float, default=0.006)
+    parser.add_argument("--proposal-max-area-ratio", type=float, default=0.11)
+    parser.add_argument(
+        "--proposal-border-fraction-threshold", type=float, default=0.18
+    )
     parser.add_argument(
         "--reason-model",
         action="append",
@@ -412,7 +462,10 @@ def main() -> None:
         action="append",
         choices=sorted(ALGORITHM_BY_SLUG),
         default=None,
-        help="Repeatable; defaults to information_gain and theory. Both use the graspability prior.",
+        help=(
+            "Repeatable; defaults to the four original/graspability x "
+            "information-gain/theory comparison methods."
+        ),
     )
     parser.add_argument("--device", default=None)
     args = parser.parse_args()
@@ -432,7 +485,12 @@ def main() -> None:
         perception_category = output_root / "perception" / testcase.directory_name
         scene_dirs = sorted(input_category.glob("scene_*"))
         if allowed_scene_ids:
-            scene_dirs = [path for path in scene_dirs if int(path.name.removeprefix("scene_")) in allowed_scene_ids]
+            scene_dirs = [
+                path
+                for path in scene_dirs
+                if int(_load_json(path / "metadata.json")["scene_id"])
+                in allowed_scene_ids
+            ]
         if args.limit_scenes is not None:
             scene_dirs = scene_dirs[: args.limit_scenes]
 

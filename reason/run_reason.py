@@ -44,17 +44,7 @@ from reason.partially_visible import handle as handle_partially_visible
 from reason.invisible import handle as handle_fully_occluded
 from reason.closed_loop import run_closed_loop
 from reason.vlm import config as vlm_config
-_intent_mode = os.environ.get("SMARTGRASP_INTENT_MODE", "parts").strip().lower()
-if _intent_mode in {"combination", "combined", "parts_and_objects"}:
-    from reason.intent_handle.combination_intent_handler import resolve_intent
-elif _intent_mode in {
-    "object",
-    "objects",
-    "object_sheet",
-}:
-    from reason.intent_handle.object_intent_handler import resolve_intent
-else:
-    from reason.intent_handle import resolve_intent
+from reason.intent_handle import resolve_intent
 from intent.run_intent import (
     RUN_INTENT_API_KEY_ENV,
     RUN_INTENT_BASE_URL,

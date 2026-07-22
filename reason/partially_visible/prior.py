@@ -123,6 +123,8 @@ def compute_semantic_prior_all_ancestors(
         occlusion_relations=relations,
         parts_sheet_rgb=getattr(perception, "sam2_rgb_parts_sheet", None),
         prompt_mode=prompt_mode,
+        object_sheet_rgb=getattr(perception, "final_objects_sheet", None),
+        occlusion_graph_rgb=getattr(perception, "occlusion_graph_rgb", None),
     )
 
     # Fill missing ids with a neutral fallback.

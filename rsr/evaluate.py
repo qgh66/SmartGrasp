@@ -30,6 +30,26 @@ RESULT_CSV_FIELDS = [
 ]
 
 
+def selected_testcases(names: list[str] | None):
+    if not names:
+        return TEST_CASES
+    wanted = set(names)
+    selected = [
+        testcase
+        for testcase in TEST_CASES
+        if testcase.slug in wanted or testcase.directory_name in wanted
+    ]
+    known = {
+        name
+        for testcase in selected
+        for name in (testcase.slug, testcase.directory_name)
+    }
+    missing = wanted - known
+    if missing:
+        raise ValueError(f"Unknown testcase names: {sorted(missing)}")
+    return tuple(selected)
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -177,12 +197,13 @@ def evaluate_configuration(
     output_root: Path,
     model: str,
     algorithm: str,
+    testcases=TEST_CASES,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     category_summaries = []
     result_root = output_root / "results" / safe_model_name(model) / algorithm
     report_root = output_root / "reports" / safe_model_name(model) / algorithm
-    for testcase in TEST_CASES:
+    for testcase in testcases:
         input_category = input_root / testcase.directory_name
         perception_category = output_root / "perception" / testcase.directory_name
         result_category = result_root / testcase.directory_name
@@ -312,9 +333,16 @@ def evaluate_all(
     output_root: Path,
     models: list[str] | tuple[str, ...] = REASON_MODELS,
     algorithms: list[str] | tuple[str, ...] = tuple(item.slug for item in ALGORITHMS),
+    testcases=TEST_CASES,
 ) -> dict[str, Any]:
     configurations = [
-        evaluate_configuration(input_root, output_root, model, algorithm)
+        evaluate_configuration(
+            input_root,
+            output_root,
+            model,
+            algorithm,
+            testcases=testcases,
+        )
         for model in models
         for algorithm in algorithms
     ]
@@ -344,6 +372,12 @@ def main() -> None:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--model", action="append", default=None)
     parser.add_argument("--algorithm", action="append", choices=sorted(ALGORITHM_BY_SLUG), default=None)
+    parser.add_argument(
+        "--testcase",
+        action="append",
+        default=None,
+        help="Slug or numbered testcase directory; repeatable.",
+    )
     args = parser.parse_args()
     print(json.dumps(
         evaluate_all(
@@ -351,6 +385,7 @@ def main() -> None:
             args.output_root.resolve(),
             models=args.model or REASON_MODELS,
             algorithms=args.algorithm or [item.slug for item in ALGORITHMS],
+            testcases=selected_testcases(args.testcase),
         ),
         ensure_ascii=False,
         indent=2,

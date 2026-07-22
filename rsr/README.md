@@ -40,11 +40,13 @@ rsr/data/input/
 ## Execution
 
 Run the full fixed matrix. Perception runs once per scene and is reused by all
-three annotations, all models, and both algorithms:
+three annotations and all four methods. The current comparison fixes the model
+to GPT-5.5 when invoked with ``--reason-model gpt-5.5``:
 
-- models: `gpt-5.5`, `gpt-4o`
-- algorithms: `information_gain` (`ig_graspability`) and `theory`
-- both algorithms use `--prior-prompt graspability`
+- `information_gain_original`: original prompt + `ig`
+- `information_gain_graspability`: graspability prompt + `ig_graspability`
+- `theory_original`: original prompt + `theory` (graspability defaults to 1)
+- `theory_graspability`: graspability prompt + `theory`
 
 ```bash
 bash rsr/run_rsr.sh
@@ -70,10 +72,10 @@ Outputs are isolated per annotation while sharing one perception directory:
 rsr/data/output/
   perception/01_hard_ambiguous/scene_59/perception/  # generated once
   results/
-    gpt-5.5/information_gain/01_hard_ambiguous/scene_59/annotations/...
-    gpt-5.5/theory/...
-    gpt-4o/information_gain/...
-    gpt-4o/theory/...
+    gpt-5.5/information_gain_original/01_hard_ambiguous/scene_59/annotations/...
+    gpt-5.5/information_gain_graspability/...
+    gpt-5.5/theory_original/...
+    gpt-5.5/theory_graspability/...
 ```
 
 Each annotation-specific `perception/` is a lightweight view whose artifacts
@@ -86,7 +88,9 @@ SmartGrasp perception IDs are mapped to the FreeGrasp ground-truth instance ID
 by maximum mask overlap, with point lookup as a fallback. Parquet IDs are
 zero-based; NPZ labels are one-based because label zero is background.
 
-Missing or failed runs count as failures. Compute or recompute the metric with:
+Missing or failed runs count as failures and remain in the RSR denominator,
+following the current ``rsr/evaluate.py`` behavior. Compute or recompute the
+metric with:
 
 ```bash
 $HOME/anaconda3/envs/smartgrasp/bin/python -m rsr.evaluate
