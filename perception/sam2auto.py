@@ -1036,6 +1036,116 @@ def _save_sam2_rgb_parts_sheet(
     return sheet_path
 
 
+def _save_vlm_rgb_objects_sheet(
+    image_path: Path,
+    mask_records: list[dict[str, Any]],
+    out_dir: Path,
+    *,
+    columns: int = 5,
+    cell_size: int = 300,
+    label_height: int = 48,
+) -> tuple[Path, dict[str, str]]:
+    """Save final-object RGB cutouts and a sheet labeled with object IDs.
+
+    Unlike ``sam2_rgb_parts_sheet.png``, which visualizes individual SAM2
+    proposals, this sheet is built after VLM assignment and object-mask union.
+    Every tile therefore represents one final physical object.  The original
+    scene RGB is retained inside the final object mask and all other pixels are
+    white.  Object IDs are drawn below their corresponding cutouts.
+    """
+
+    with Image.open(image_path) as source:
+        image_np = np.asarray(source.convert("RGB"))
+
+    objects_dir = out_dir / "vlm_rgb_objects"
+    objects_dir.mkdir(parents=True, exist_ok=True)
+    for stale_path in objects_dir.glob("object_*.png"):
+        stale_path.unlink()
+
+    object_images: list[tuple[int, Image.Image]] = []
+    object_id_to_file: dict[str, str] = {}
+    for record in sorted(mask_records, key=lambda item: int(item["object_id"])):
+        object_id = int(record["object_id"])
+        mask = np.asarray(record.get("mask_array"), dtype=bool)
+        if mask.shape != image_np.shape[:2] or int(np.count_nonzero(mask)) == 0:
+            continue
+
+        x, y, width, height = _mask_bbox(mask)
+        if width <= 0 or height <= 0:
+            continue
+        pad = max(8, int(round(max(width, height) * 0.08)))
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(image_np.shape[1], x + width + pad)
+        y1 = min(image_np.shape[0], y + height + pad)
+
+        crop = image_np[y0:y1, x0:x1].copy()
+        crop_mask = mask[y0:y1, x0:x1]
+        white = np.full_like(crop, 255)
+        cutout = Image.fromarray(np.where(crop_mask[..., None], crop, white), mode="RGB")
+
+        relative_path = Path("vlm_rgb_objects") / f"object_{object_id:03d}.png"
+        cutout.save(out_dir / relative_path)
+        object_id_to_file[str(object_id)] = relative_path.as_posix()
+        object_images.append((object_id, cutout))
+
+    sheet_path = out_dir / "vlm_rgb_objects_sheet.png"
+    if not object_images:
+        Image.new("RGB", (cell_size, cell_size + label_height), "white").save(sheet_path)
+        return sheet_path, object_id_to_file
+
+    for font_name in ("DejaVuSans-Bold.ttf", "Arial.ttf"):
+        try:
+            label_font = ImageFont.truetype(font_name, 28)
+            break
+        except Exception:
+            label_font = None
+    if label_font is None:
+        label_font = ImageFont.load_default()
+
+    columns = max(1, min(int(columns), len(object_images)))
+    rows = int(np.ceil(len(object_images) / columns))
+    sheet = Image.new(
+        "RGB",
+        (columns * cell_size, rows * (cell_size + label_height)),
+        "white",
+    )
+    draw = ImageDraw.Draw(sheet)
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    image_margin = 16
+    max_render_size = cell_size - 2 * image_margin
+
+    for item_index, (object_id, cutout) in enumerate(object_images):
+        row = item_index // columns
+        col = item_index % columns
+        cell_x = col * cell_size
+        cell_y = row * (cell_size + label_height)
+
+        scale = min(max_render_size / cutout.width, max_render_size / cutout.height)
+        render_width = max(1, int(round(cutout.width * scale)))
+        render_height = max(1, int(round(cutout.height * scale)))
+        rendered = cutout.resize((render_width, render_height), resampling)
+        paste_x = cell_x + (cell_size - render_width) // 2
+        paste_y = cell_y + (cell_size - render_height) // 2
+        sheet.paste(rendered, (paste_x, paste_y))
+
+        label = f"Object {object_id}"
+        text_box = draw.textbbox((0, 0), label, font=label_font)
+        text_width = text_box[2] - text_box[0]
+        text_height = text_box[3] - text_box[1]
+        text_x = cell_x + (cell_size - text_width) // 2
+        text_y = cell_y + cell_size + (label_height - text_height) // 2
+        draw.text((text_x, text_y), label, fill="black", font=label_font)
+        draw.rectangle(
+            (cell_x, cell_y, cell_x + cell_size - 1, cell_y + cell_size + label_height - 1),
+            outline="#e0e0e0",
+            width=1,
+        )
+
+    sheet.save(sheet_path)
+    return sheet_path, object_id_to_file
+
+
 def generate_masks_with_sam2_vlm_pipeline(
     image_path: Path,
     output_mask_dir: Path,
