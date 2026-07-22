@@ -23,11 +23,8 @@ from reason.intent_handle import resolve_intent
 if load_dotenv is not None:
     load_dotenv()
 
-with open(ROOT / "api_config.json", encoding="utf-8") as _f:
-    _cfg = json.load(_f)
-
 RUN_INTENT_MODEL = "gpt-5.5"
-RUN_INTENT_BASE_URL: str = _cfg["base_url"]
+RUN_INTENT_BASE_URL = "https://yunwu.ai/v1"
 RUN_INTENT_API_KEY_ENV = "OPENAI_API_KEY"
 RUN_INTENT_TIMEOUT = 300.0
 

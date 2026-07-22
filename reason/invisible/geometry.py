@@ -4,6 +4,9 @@ import numpy as np
 from scipy.ndimage import binary_dilation
 
 
+EQUIVALENT_AREA_KEY = "equivalent_area_px"
+
+
 def precompute_geometry_cache(perception) -> dict:
     """Cache per-object area and height proxies for invisible reasoning."""
     if perception.depth is None:
@@ -51,9 +54,19 @@ def equivalent_area(
     perception,
     geom_cache: dict,
 ) -> float:
-    """Fixed area estimate: average of self + all objects pressing on top."""
+    """Return a persistent area proxy for one currently selectable object.
+
+    When an object becomes top-level after its sole direct occluder is removed,
+    ``simulate_remove`` records the estimate that was available immediately
+    before removal.  Reuse that estimate in later closed-loop steps instead of
+    falling back to the object's originally visible pixels only.
+    """
     g = perception.occlusion_graph
     node = perception.molmo_to_node[mid]
+
+    recorded = perception.node_info[node].get(EQUIVALENT_AREA_KEY)
+    if recorded is not None:
+        return float(recorded)
     
     # All objects pressing on top of this candidate (not filtered by removed)
     above_nodes = list(g.predecessors(node))
@@ -69,6 +82,40 @@ def equivalent_area(
     
     # New formula: average over self + all above
     return (visible_area + above_area_sum) / (len(above_nodes) + 1)
+
+
+def newly_exposed_equivalent_areas(
+    perception,
+    removed_mid: int,
+) -> dict[int, float]:
+    """Record area proxies for children exposed by removing ``removed_mid``.
+
+    A child becomes top-level only when the removed node was its sole direct
+    predecessor in the current graph.  Its saved area follows the existing
+    equivalent-area rule, which in this case is exactly
+    ``(visible_area(child) + visible_area(removed)) / 2``.
+    """
+    if removed_mid not in perception.molmo_to_node:
+        return {}
+
+    g = perception.occlusion_graph
+    removed_node = perception.molmo_to_node[removed_mid]
+    removed_info = perception.node_info[removed_node]
+    removed_area = float(np.asarray(removed_info["mask"], dtype=bool).sum())
+
+    exposed: dict[int, float] = {}
+    for child_node in g.successors(removed_node):
+        predecessors = list(g.predecessors(child_node))
+        remaining = [node for node in predecessors if node != removed_node]
+        if remaining:
+            continue
+
+        child_info = perception.node_info[child_node]
+        child_mid = int(child_info["molmo_id"])
+        child_area = float(np.asarray(child_info["mask"], dtype=bool).sum())
+        exposed[child_mid] = (child_area + removed_area) / 2.0
+
+    return exposed
 
 def equivalent_height(mid: int, geom_cache: dict) -> float:
     """Return the cached height proxy for one object."""

@@ -394,11 +394,14 @@ class OpenAIVisionClient(VLMClient):
         b64 = _encode_image_b64(labeled_rgb)
         content: list[dict[str, Any]] = [
             {"type": "text", "text": user_text},
-            *(
-                [{"type": "text", "text": "Labeled scene RGB: spatial layout and object labels."}]
-                if prompt_mode == "graspability"
-                else []
-            ),
+            {
+                "type": "text",
+                "text": (
+                    "Labeled scene RGB: use the full spatial layout, object "
+                    "outlines, and numeric object IDs. These labels are object "
+                    "mids, not SAM2 part IDs."
+                ),
+            },
             {
                 "type": "image_url",
                 "image_url": {
@@ -545,11 +548,14 @@ class OpenAIVisionClient(VLMClient):
         b64 = _encode_image_b64(labeled_rgb)
         content: list[dict[str, Any]] = [
             {"type": "text", "text": user_text},
-            *(
-                [{"type": "text", "text": "Labeled scene RGB: spatial layout and object labels."}]
-                if prompt_mode == "graspability"
-                else []
-            ),
+            {
+                "type": "text",
+                "text": (
+                    "Labeled scene RGB: use the full spatial layout, object "
+                    "outlines, and numeric object IDs. These labels are object "
+                    "mids, not SAM2 part IDs."
+                ),
+            },
             {
                 "type": "image_url",
                 "image_url": {

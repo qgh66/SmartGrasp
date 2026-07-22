@@ -453,7 +453,6 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], 
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
     edges = graph.get("edges", [])
     out_dir = scene_dir / "perception"
-    vlm_path = out_dir / "vlm.json"
 
     points_payload = load_json_file(points_path) if points_path.exists() else {}
     points_by_id: dict[int, dict[str, Any]] = {}
@@ -492,72 +491,16 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], 
             continue
         occlusion_matrix[source_index][target_index] = safe_float(edge.get("contact_ratio"), 6) or 0.0
 
-    # Build sam2_id → mask_path mapping
-    sam2_to_mask: dict[int, str] = {}
-    for node in nodes:
-        for sid in node.get("sam2_ids", []):
-            sam2_to_mask[int(sid)] = node.get("mask_path", "")
-
-    # Build object info from VLM
-    objects = []
-    if vlm_path.exists():
-        with open(vlm_path) as f:
-            vlm = json.load(f)
-        for obj in vlm.get("objects", []):
-            oid = obj["id"]
-            parts = []
-            for part in obj.get("visible_parts", []):
-                mask_paths = []
-                for sid in part.get("sam2_ids", []):
-                    mp = sam2_to_mask.get(int(sid))
-                    if mp:
-                        try:
-                            mask_paths.append(str(Path(mp).relative_to(out_dir)))
-                        except ValueError:
-                            mask_paths.append(mp)
-                parts.append({
-                    "description": part.get("description", ""),
-                    "sam2_ids": part.get("sam2_ids", []),
-                    "mask_paths": mask_paths,
-                })
-            centroid = {"x": 0, "y": 0}
-            for node in nodes:
-                if node.get("object_id") == oid:
-                    centroid = {"x": node["point"]["x"], "y": node["point"]["y"]}
-                    break
-            mask_rel = ""
-            for sid in obj.get("sam2_ids", []):
-                mp = sam2_to_mask.get(int(sid))
-                if mp:
-                    try:
-                        mask_rel = str(Path(mp).relative_to(out_dir))
-                    except ValueError:
-                        mask_rel = mp
-                    break
-            objects.append({
-                "object_id": oid,
-                "label": obj.get("description", ""),
-                "relative_position": obj.get("relative_position", ""),
-                "centroid": centroid,
-                "mask_path": mask_rel,
-                "sam2_ids": obj.get("sam2_ids", []),
-                "parts": parts,
-            })
-
     object_id_to_sam2_part_ids: dict[str, list[int]] = {}
     object_id_to_sam2_part_files: dict[str, list[str]] = {}
     sam2_part_id_to_object_id: dict[str, int] = {}
     sam2_part_file_to_object_id: dict[str, int] = {}
-    for obj in objects:
-        object_id = int(obj["object_id"])
-        part_ids: set[int] = set()
-        for sid in obj.get("sam2_ids", []) or []:
-            part_ids.add(int(sid))
-        for part in obj.get("parts", []) or []:
-            for sid in part.get("sam2_ids", []) or []:
-                part_ids.add(int(sid))
-
-        sorted_part_ids = sorted(part_ids)
+    # Build all object/part mappings from the final graph nodes.  Their
+    # object_ids have already been renumbered after invalid masks were
+    # removed, whereas vlm.json still contains the VLM's provisional ids.
+    for node in nodes:
+        object_id = int(node["object_id"])
+        sorted_part_ids = sorted({int(sid) for sid in node.get("sam2_ids", []) or []})
         object_id_to_sam2_part_ids[str(object_id)] = sorted_part_ids
         part_files: list[str] = []
         for sid in sorted_part_ids:
@@ -890,7 +833,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt", default=None, help="Prompt saved in output JSON.")
     parser.add_argument("--review-model-id", default="gpt-5.5")
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
-    parser.add_argument("--review-base-url", default=None)
+    parser.add_argument(
+        "--review-base-url",
+        default=os.environ.get("OPENAI_BASE_URL", "https://yunwu.ai/v1"),
+    )
     parser.add_argument("--review-timeout", type=float, default=120.0)
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)

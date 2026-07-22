@@ -431,7 +431,10 @@ def main() -> None:
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--perception-mode", choices=["vlm", "gt"], default="vlm")
     parser.add_argument("--perception-review-model", default="gpt-5.5")
-    parser.add_argument("--perception-review-base-url", default=None)
+    parser.add_argument(
+        "--perception-review-base-url",
+        default=os.environ.get("OPENAI_BASE_URL", "https://yunwu.ai/v1"),
+    )
     parser.add_argument("--perception-review-timeout", type=float, default=120.0)
     parser.add_argument("--sam2-points-per-side", type=int, default=24)
     parser.add_argument("--sam2-pred-iou-thresh", type=float, default=0.68)

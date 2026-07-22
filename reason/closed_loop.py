@@ -13,6 +13,7 @@ from .branch_judge.classifier import classify_branch
 from .fully_visible import handle as handle_fully_visible
 from .partially_visible import handle as handle_partially_visible
 from .invisible import handle as handle_fully_occluded
+from .invisible.geometry import EQUIVALENT_AREA_KEY, newly_exposed_equivalent_areas
 
 
 @dataclass
@@ -35,6 +36,11 @@ def simulate_remove(
 
     removed_node = perception.molmo_to_node[removed_mid]
 
+    # Preserve the current area estimate for each object that becomes
+    # top-level after this removal.  Otherwise the next step would discard the
+    # removed occluder's contribution and use visible mask area only.
+    exposed_areas = newly_exposed_equivalent_areas(perception, removed_mid)
+
     new_graph = perception.occlusion_graph.copy()
     new_graph.remove_node(removed_node)
 
@@ -43,9 +49,12 @@ def simulate_remove(
         if mid != removed_mid
     }
     new_node_info = {
-        n: info for n, info in perception.node_info.items()
+        n: dict(info) for n, info in perception.node_info.items()
         if n != removed_node
     }
+    for mid, area in exposed_areas.items():
+        node = new_molmo_to_node[mid]
+        new_node_info[node][EQUIVALENT_AREA_KEY] = area
 
     return replace(
         perception,

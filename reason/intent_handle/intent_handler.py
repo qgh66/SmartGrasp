@@ -19,9 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 DEFAULT_MODEL = "gpt-5.5"
-with open(Path(__file__).resolve().parents[2] / "api_config.json", encoding="utf-8") as _f:
-    _cfg = json.load(_f)
-DEFAULT_BASE_URL: str = _cfg["base_url"]
+DEFAULT_BASE_URL = "https://yunwu.ai/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT = 600.0
 
@@ -215,6 +213,9 @@ class ResponsesVLMClient:
         parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for image_path in image_paths:
             parts.append(
+                {"type": "text", "text": _image_caption(image_path)}
+            )
+            parts.append(
                 {
                     "type": "image_url",
                     "image_url": {"url": _image_data_url(image_path), "detail": "high"},
@@ -312,6 +313,18 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "analyze the user instruction, identify the task-relevant scene object, "
         "and return only the selected object information.\n\n"
 
+        "Attached visual references are introduced by a caption immediately "
+        "before each image. Use them as follows:\n"
+        "- Labeled scene RGB: understand the complete spatial layout and map "
+        "visible labels to object ids.\n"
+        "- Occlusion graph: determine covering relations; source -> target means "
+        "the source object covers/occludes the target object.\n"
+        "- Final-object ID sheet: inspect each complete assembled object isolated "
+        "on white and labeled with its object id.\n"
+        "The numeric labels in these three references are object ids from "
+        "summary.json, not SAM2 part ids. Cross-check the references instead of "
+        "inferring an id from only one image.\n\n"
+
         "Follow these reasoning steps internally:\n"
         "Step 1. Task analysis: understand the user's underlying intention and "
         "any implicit task requirements.\n"
@@ -320,8 +333,17 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "image shows spatial context; the final-object sheet shows each assembled "
         "object isolated on white and labeled with its final object id. Use the "
         "sheet to inspect object appearance and map it to summary.json ids.\n"
+        "IMPORTANT: If the user's description is ambiguous or incomplete, combine "
+        "the scene object information and object list, and reason from object shape, "
+        "color, function, and spatial position. You must still select the single "
+        "most likely object as target_object_id.\n"
         "Step 3. Spatial reasoning: if the instruction uses words such as top, "
-        "bottom, upper, lower, front, or back, interpret them from 2D image position.\n\n"
+        "bottom, upper, lower, front, or back, interpret them from 2D image position. "
+        "If the instruction says that the target is underneath, below, or covered by "
+        "another object, use both the attached occlusion graph and the occluded_by "
+        "relations in Scene context to determine the covering relationship. In the "
+        "occlusion graph, an arrow source -> target means that the source object has "
+        "a clear covering/occluding relationship over the target object.\n\n"
 
         "Rules:\n"
         "- The target object must be one object id from summary.json.\n"
@@ -477,6 +499,7 @@ def _resolve_image_paths(
     primary_candidates = [
         summary.get("perception_label_png"),
         summary.get("graph_png"),
+        summary_dir / "label_2_vlm.png",
         summary_dir / "label_3_final.png",
         summary_dir / "scene_labeled.png",
         summary_dir / "occlusion_graph.png",
@@ -552,6 +575,31 @@ def _image_data_url(path: Path) -> str:
     mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
+
+
+def _image_caption(path: Path) -> str:
+    """Describe an attached image so the VLM knows its role and ID namespace."""
+    name = path.name.lower()
+    if name in {"label_2_vlm.png", "label_3_final.png", "scene_labeled.png"}:
+        return (
+            "Labeled scene RGB: use the full scene layout, object outlines, and "
+            "numeric object IDs for spatial reasoning."
+        )
+    if "occlusion_graph" in name:
+        return (
+            "Occlusion graph: an arrow source -> target means the source object "
+            "significantly covers/occludes the target object."
+        )
+    if name in {"final_objects_sheet.png", "vlm_rgb_objects_sheet.png"}:
+        return (
+            "Final-object ID sheet: each cell shows one complete assembled object "
+            "isolated on white and labeled with its object ID."
+        )
+    if "sam2_rgb_parts_sheet" in name:
+        return (
+            "SAM2 part-ID sheet: these numbers are SAM2 part IDs, not object IDs."
+        )
+    return f"Additional scene visual reference: {path.name}."
 
 
 def _positive(value: Any) -> bool:
