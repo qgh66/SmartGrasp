@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import binary_dilation
 
+from perception.background import load_tray_interior_mask
+
 
 EQUIVALENT_AREA_KEY = "equivalent_area_px"
 
@@ -14,16 +16,26 @@ def precompute_geometry_cache(perception) -> dict:
 
     depth = perception.depth
 
-    # Estimate the table/ground depth from pixels outside all masks.
+    # Estimate the tray-floor depth only from valid, uncovered pixels inside
+    # the black rectangle enclosed by data/tray_border_mask.png.
     all_masks = np.zeros_like(depth, dtype=bool)
     for info in perception.node_info.values():
         all_masks |= np.asarray(info["mask"], dtype=bool)
-    table_region = ~all_masks
+    valid_depth = np.isfinite(depth) & (depth > 0)
+    tray_interior = load_tray_interior_mask(depth.shape)
+    if tray_interior is None:
+        table_region = (~all_masks) & valid_depth
+    else:
+        table_region = tray_interior & (~all_masks) & valid_depth
 
     if table_region.any():
         ground_level = float(np.median(depth[table_region]))
+    elif valid_depth.any():
+        # Exceptional fallback for a missing/fully covered tray region.  Keep
+        # the previous robust far-depth behavior rather than producing NaN.
+        ground_level = float(np.percentile(depth[valid_depth], 95))
     else:
-            ground_level = float(np.percentile(depth, 95))
+        raise ValueError("depth contains no finite positive values")
 
     cache: dict = {"__ground_level__": ground_level}
 
