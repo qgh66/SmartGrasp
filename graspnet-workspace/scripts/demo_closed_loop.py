@@ -27,9 +27,38 @@ from simulation.camera import VirtualCamera
 from simulation.gripper_factory import GRIPPER_MODELS, create_gripper
 from simulation.evaluator import GraspEvaluator
 from simulation.object_mapping import match_scene_object_by_mask
+from simulation.perception_input import (
+    export_perception_input,
+    generate_capture_scene_id,
+    run_perception_for_scene,
+    run_pipeline_for_scene,
+)
 from utils.collision_detector import ModelFreeCollisionDetector
 
 MAX_GRIPPER_OPENING = 0.085
+
+
+def load_graspnet_model(checkpoint_path, device):
+    """Load GraspNet only when its GPU memory is actually needed."""
+    net = GraspNet(
+        input_feature_dim=0,
+        num_view=300,
+        num_angle=12,
+        num_depth=4,
+        cylinder_radius=0.05,
+        hmin=-0.02,
+        hmax_list=[0.01, 0.02, 0.03, 0.04],
+        is_training=False,
+    )
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location='cpu',
+        weights_only=False,
+    )
+    net.load_state_dict(checkpoint['model_state_dict'])
+    net.to(device)
+    net.eval()
+    return net, checkpoint.get("epoch", "?")
 
 
 def _resolve_path(path, *, config_dir=None):
@@ -247,6 +276,14 @@ def parse_args():
                    help='Reason Object ID 对应的 Perception 整物体 mask；按可见 segmentation 最大 IoU 匹配目标')
     p.add_argument('--target-mask-min-iou', type=float, default=0.01,
                    help='Perception mask 与 PyBullet segmentation 匹配的最小 IoU')
+    p.add_argument('--scene-id', type=int, default=None,
+                   help='手工指定本次拍照 ID；不指定时按 1、2、3... 自动递增')
+    p.add_argument('--instruction', default=None,
+                   help='用户指令；提供后自动为本次拍照生成 ID 并保存 Perception 输入')
+    p.add_argument('--run-perception-after-capture', action='store_true',
+                   help='导出同帧输入后，把本次拍照 ID 传给 perception/run_perception.sh')
+    p.add_argument('--run-pipeline-after-capture', action='store_true',
+                   help='导出同帧输入后运行 Perception+Intent+Reason，并将 Reason Object ID 映射为当前 PyBullet 目标')
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
@@ -287,6 +324,38 @@ def parse_args():
 def main():
     args = parse_args()
 
+    instruction = str(args.instruction or "").strip()
+    if args.scene_id is not None and not instruction:
+        raise ValueError("--scene-id requires a non-empty --instruction")
+    if args.run_perception_after_capture and not instruction:
+        raise ValueError(
+            "--run-perception-after-capture requires a non-empty --instruction"
+        )
+    if args.run_pipeline_after_capture and not instruction:
+        raise ValueError(
+            "--run-pipeline-after-capture requires a non-empty --instruction"
+        )
+    if args.run_perception_after_capture and args.run_pipeline_after_capture:
+        raise ValueError(
+            "--run-perception-after-capture and "
+            "--run-pipeline-after-capture are mutually exclusive"
+        )
+    if args.run_pipeline_after_capture and args.target_mask:
+        raise ValueError(
+            "--run-pipeline-after-capture resolves its own target mask and "
+            "cannot be combined with --target-mask"
+        )
+    if args.run_pipeline_after_capture and args.target_object:
+        raise ValueError(
+            "--run-pipeline-after-capture resolves its own target object and "
+            "cannot be combined with --target-object"
+        )
+    if args.run_pipeline_after_capture and args.all_objects:
+        raise ValueError(
+            "--run-pipeline-after-capture is currently a single-target flow "
+            "and cannot be combined with --all-objects"
+        )
+
     if args.all_objects:
         from demo_all_objects import run_all_objects
         return run_all_objects(args)
@@ -318,14 +387,12 @@ def main():
     # 1. 加载 GraspNet
     # ==============================================================
     print('[1/5] 加载 GraspNet...')
-    net = GraspNet(input_feature_dim=0, num_view=300, num_angle=12, num_depth=4,
-                   cylinder_radius=0.05, hmin=-0.02,
-                   hmax_list=[0.01, 0.02, 0.03, 0.04], is_training=False)
-    ckpt_data = torch.load(ckpt, map_location='cpu', weights_only=False)
-    net.load_state_dict(ckpt_data['model_state_dict'])
-    net.to(device)
-    net.eval()
-    print(f'  ✅ epoch {ckpt_data.get("epoch", "?")}')
+    if args.run_pipeline_after_capture:
+        net = None
+        print('  ⏸️ 完整 Pipeline 模式：延后加载，避免与 SAM2 叠加显存')
+    else:
+        net, epoch = load_graspnet_model(ckpt, device)
+        print(f'  ✅ epoch {epoch}')
 
     # ==============================================================
     # 2. 创建 PyBullet 场景
@@ -340,12 +407,12 @@ def main():
     if args.scene_config:
         scene_config = load_scene_config(args.scene_config)
         scene.load_objects(scene_config["_resolved_objects"])
-        if args.target_mask:
+        if args.target_mask or args.run_pipeline_after_capture:
             obj_id = None
             target_object = None
             print(
                 f'  ✅ 场景加载完成: {len(scene.object_ids)} 个物体, '
-                '目标等待 Perception mask 映射'
+                '目标等待 Perception/Reason mask 映射'
             )
         else:
             obj_id, target_object = select_target_object(scene, args.target_object)
@@ -400,9 +467,74 @@ def main():
                         height=int(camera_cfg.get("height", 720)),
                         fov=float(camera_cfg.get("fov", 60.0)))
     rgb, depth, seg = cam.capture()
+    perception_input = None
+    perception_output_dir = None
+    reason_output_dir = None
+    reason_target = None
+    capture_scene_id = args.scene_id
+    if instruction and capture_scene_id is None:
+        capture_scene_id = generate_capture_scene_id()
+    if capture_scene_id is not None:
+        perception_input = export_perception_input(
+            scene_id=capture_scene_id,
+            rgb=rgb,
+            depth=depth,
+            segmentation=seg,
+            instruction=instruction,
+        )
+        print(
+            f'  💾 Perception 同帧输入: scene_id={capture_scene_id} '
+            f'-> {perception_input["input_dir"]}'
+        )
+        if args.run_perception_after_capture:
+            perception_output_dir = run_perception_for_scene(
+                capture_scene_id,
+                run_reason=False,
+            )
+            print(
+                f'  ✅ Perception 完成: scene_id={capture_scene_id} '
+                f'-> {perception_output_dir}'
+            )
+        elif args.run_pipeline_after_capture:
+            reason_target = run_pipeline_for_scene(capture_scene_id)
+            perception_output_dir = reason_target["perception_output_dir"]
+            reason_output_dir = reason_target["reason_output_dir"]
+            print(
+                f'  ✅ Perception + Intent + Reason 完成: '
+                f'scene_id={capture_scene_id}, '
+                f'branch={reason_target["branch"]}, '
+                f'object_id={reason_target["object_id"]}, '
+                f'label={reason_target["object_label"]}'
+            )
     pc = cam.generate_point_cloud(depth, num_points=20000).numpy()
     object_clouds = cam.generate_object_point_clouds(depth, seg, scene.object_ids)
-    if args.target_mask:
+    if reason_target is not None:
+        obj_id, target_object, target_selection = match_scene_object_by_mask(
+            scene,
+            seg,
+            reason_target["object_mask_path"],
+            minimum_iou=args.target_mask_min_iou,
+        )
+        target_selection.update(
+            {
+                "reason_scene_id": int(reason_target["scene_id"]),
+                "reason_branch": reason_target["branch"],
+                "reason_object_id": int(reason_target["object_id"]),
+                "reason_object_label": reason_target["object_label"],
+                "reason_summary_path": reason_target["reason_summary_path"],
+                "occlusion_graph_path": reason_target[
+                    "occlusion_graph_path"
+                ],
+            }
+        )
+        obj_pos, obj_orn = scene.get_object_pose(obj_id)
+        print(
+            f'  🔗 Reason Object {reason_target["object_id"]} '
+            f'-> PyBullet body_id={obj_id}, '
+            f'name={target_object.name}, '
+            f'IoU={target_selection["selected_iou"]:.4f}'
+        )
+    elif args.target_mask:
         obj_id, target_object, target_selection = match_scene_object_by_mask(
             scene,
             seg,
@@ -438,6 +570,9 @@ def main():
     # 4. GraspNet 推理
     # ==============================================================
     print('[4/5] GraspNet 推理...')
+    if net is None:
+        net, epoch = load_graspnet_model(ckpt, device)
+        print(f'  ✅ 延后加载完成, epoch {epoch}')
     camera_points = cam.world_to_camera_points(pc[0]).astype(np.float32)
     cloud_tensor = torch.from_numpy(camera_points[np.newaxis]).to(device)
     with torch.no_grad():
@@ -573,6 +708,18 @@ def main():
         'target_object_name': target_object.name,
         'target_body_id': int(obj_id),
         'target_selection': target_selection,
+        'perception_input': perception_input,
+        'perception_output_dir': (
+            str(perception_output_dir)
+            if perception_output_dir is not None
+            else None
+        ),
+        'reason_output_dir': (
+            str(reason_output_dir)
+            if reason_output_dir is not None
+            else None
+        ),
+        'reason_target': reason_target,
         'graspnet_input_frame': 'camera',
         'candidate_execution_frame': 'world',
         'objects': scene.get_object_poses(),
@@ -635,6 +782,18 @@ def main():
     with open(viz_path, 'wb') as _f:
         pickle.dump({'rgb': rgb, 'depth': depth, 'point_cloud': pc,
                      'seg': seg, 'object_point_counts': object_point_counts,
+                     'perception_input': perception_input,
+                     'perception_output_dir': (
+                         str(perception_output_dir)
+                         if perception_output_dir is not None
+                         else None
+                     ),
+                     'reason_output_dir': (
+                         str(reason_output_dir)
+                         if reason_output_dir is not None
+                         else None
+                     ),
+                     'reason_target': reason_target,
                      'objects': scene.get_object_poses(),
                       'grasp_filter': grasp_filter_stats,
                      'collision_filter': collision_filter_stats,
