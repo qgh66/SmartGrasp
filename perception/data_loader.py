@@ -13,13 +13,17 @@ from PIL import Image
 
 PERCEPTION_DIR = Path(__file__).resolve().parent
 SMARTGRASP_ROOT = PERCEPTION_DIR.parent
-DATA_DIR = SMARTGRASP_ROOT / 'data'
+DATA_DIR = Path(os.environ.get('SMARTGRASP_DATA_DIR', SMARTGRASP_ROOT / 'data')).expanduser()
 PARQUET_GLOB = str(DATA_DIR / '*.parquet')
 NPZ_DIR = DATA_DIR / 'npz_file'
 IMAGE_SAMPLE_DIR = DATA_DIR / 'image_samples'
 NPZ_VIZ_DIR = DATA_DIR / 'npz_visualizations'
-os.makedirs(IMAGE_SAMPLE_DIR, exist_ok=True)
-os.makedirs(NPZ_VIZ_DIR, exist_ok=True)
+
+
+def ensure_analysis_output_dirs():
+    """Create optional data-analysis output folders on demand."""
+    os.makedirs(IMAGE_SAMPLE_DIR, exist_ok=True)
+    os.makedirs(NPZ_VIZ_DIR, exist_ok=True)
 
 
 def format_size(size_bytes):
@@ -49,6 +53,7 @@ def describe_array(arr):
 
 def analyze_data_directory():
     """分析 ./data 目录结构"""
+    ensure_analysis_output_dirs()
     print('='*60)
     print(f'[1] data 目录结构分析: {DATA_DIR}')
     print('='*60)
@@ -68,7 +73,7 @@ def analyze_data_directory():
     # 检查 npz 压缩包
     npz_zip = DATA_DIR / 'npz_file.zip'
     if npz_zip.exists() and not NPZ_DIR.exists():
-        print(f'\n[提示] 发现 npz_file.zip 但未解压，检查压缩包内容...')
+        print('\n[提示] 发现 npz_file.zip 但未解压，检查压缩包内容...')
         try:
             with zipfile.ZipFile(npz_zip, 'r') as zip_ref:
                 file_list = zip_ref.namelist()
@@ -81,6 +86,7 @@ def analyze_data_directory():
 
 def analyze_parquet_files(example_count=3):
     """加载并分析 data 目录下的 parquet 文件。"""
+    ensure_analysis_output_dirs()
     print('\n' + '='*60)
     print('[2] Parquet 数据集分析')
     print('='*60)
@@ -94,7 +100,7 @@ def analyze_parquet_files(example_count=3):
     for pf in sorted(parquet_files):
         print(f'  - {os.path.basename(pf)}: {format_size(os.path.getsize(pf))}')
     
-    print(f'合并读取中...')
+    print('合并读取中...')
     dfs = [pd.read_parquet(f) for f in sorted(parquet_files)]
     df = pd.concat(dfs, ignore_index=True)
 
