@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 DEFAULT_MODEL = "gpt-5.5"
-with open(Path(__file__).resolve().parents[1] / "api_config.json", encoding="utf-8") as _f:
+with open(Path(__file__).resolve().parents[2] / "api_config.json", encoding="utf-8") as _f:
     _cfg = json.load(_f)
 DEFAULT_BASE_URL: str = _cfg["base_url"]
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"

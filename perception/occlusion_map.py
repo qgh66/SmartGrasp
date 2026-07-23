@@ -245,7 +245,7 @@ def build_occlusion_graph(
     band_lo: int = 2,
     band_hi: int = 9,
     background_mask: np.ndarray | None = None,
-    max_contact_background_ratio: float = 0.4,
+    max_contact_background_ratio: float = 0.3,
 ) -> tuple[nx.DiGraph, np.ndarray]:
     """Build an ORG from instance masks and a depth map.
 
@@ -508,7 +508,7 @@ def build_org_json(
     depth_sam2_crop_n_layers: int | None = None,
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
-    max_contact_background_ratio: float = 0.4,
+    max_contact_background_ratio: float = 0.3,
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
 

@@ -137,25 +137,25 @@ def review_and_assign_sam2(
     ])
 
     client = _openai_client(api_key_env, base_url, timeout)
-    response = client.responses.create(
+    response = client.chat.completions.create(
         model=model_id,
-        input=[{
+        messages=[{
             "role": "user",
             "content": [
-                {"type": "input_text", "text": prompt},
-                {"type": "input_image", "image_url": _image_data_url(image_path)},
-                {"type": "input_image", "image_url": _image_data_url(label_image_path)},
-                {"type": "input_image", "image_url": _image_data_url(parts_sheet_path)},
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": _image_data_url(image_path)}},
+                {"type": "image_url", "image_url": {"url": _image_data_url(label_image_path)}},
+                {"type": "image_url", "image_url": {"url": _image_data_url(parts_sheet_path)}},
             ],
         }],
-        max_output_tokens=3000,
-        #reasoning={"effort": "high"},
-        store=False,
+        temperature=0.0,
+        max_tokens=3000,
+        response_format={"type": "json_object"},
     )
 
     _log_step("  ②b vlm_review (3img)", t0)
 
-    payload = _extract_json_from_text(_response_text(response))
+    payload = _extract_json_from_text(response.choices[0].message.content or "")
     raw_objects = payload.get("objects")
     if not isinstance(raw_objects, list):
         raise ValueError("VLM response must contain an `objects` list.")
@@ -200,7 +200,7 @@ def review_and_assign_sam2(
 
     payload = {
         "model_id": model_id,
-        "review_backend": "openai_responses",
+        "review_backend": "openai_chat_completions",
         "image": {
             "path": str(image_path.resolve()),
             "sam2_label_path": str(label_image_path.resolve()),

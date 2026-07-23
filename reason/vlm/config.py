@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[2]
 with open(_ROOT / "api_config.json", encoding="utf-8") as _f:
     _cfg = json.load(_f)
 
