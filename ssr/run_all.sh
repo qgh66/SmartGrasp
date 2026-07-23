@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # 逐 scene 完整处理：perception → gt → intent ×3 → reason ×3 → 放入分类目录
-# 用法: bash ssr/run_all.sh [category] [scene_ids ...]
+# 用法:
+#   bash ssr/run_all.sh                  # 全部 6 类
+#   bash ssr/run_all.sh --all            # 全部 6 类
+#   bash ssr/run_all.sh easy             # 只跑 easy
+#   bash ssr/run_all.sh easy 0 20        # 只跑指定 scene
+#   bash ssr/run_all.sh --from 1556      # 全部类别，从 scene_1556 开始
+#   bash ssr/run_all.sh hard-ambi --from 1556  # hard-ambi，从 scene_1556 开始
 
 set -u
 
@@ -39,21 +45,28 @@ REASON_ARGS="
 REASON_ARGS_FLAT=$(echo $REASON_ARGS)
 
 export SAM2_ROOT="${SAM2_ROOT:-$HOME/miniconda3/envs/smartgrasp/lib/python3.12/site-packages/sam2}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-D3Kd8gupG4HqUgTMsawHZBPmlEolExOmFHgkUkPt6TKuhllT}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://www.highland-api.top/v1}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-1xiLt7t2zMJOv8YyOoS9zZqSk2FCoVI3Bd4j7wduM4ajjRvK}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://yunwu.ai/v1}"
 
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }
 
-CATEGORY="${1:-}"
-shift 2>/dev/null || true
-
+CATEGORY=""
 FROM_SCENE=""
 SCENE_IDS=""
+CATEGORY_SET=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --all) CATEGORY=""; CATEGORY_SET="1"; shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
-        *) SCENE_IDS="$SCENE_IDS $1"; shift ;;
+        *)
+            if [[ -z "$CATEGORY_SET" && "$1" != --* ]]; then
+                CATEGORY="$1"; CATEGORY_SET="1"
+            else
+                SCENE_IDS="$SCENE_IDS $1"
+            fi
+            shift
+            ;;
     esac
 done
 SCENE_IDS="${SCENE_IDS# }"  # trim leading space

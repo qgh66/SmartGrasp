@@ -29,6 +29,10 @@ bash ssr/run_all.sh easy
 
 # 4. 只跑某一个 scene
 bash ssr/run_all.sh easy 0
+
+# 5. 断点续跑（从指定 scene_id 开始）
+bash ssr/run_all.sh --from 1556           # 全部类别，从 scene_1556 开始
+bash ssr/run_all.sh hard-ambi --from 1556 # 指定类别，从 scene_1556 开始
 ```
 
 ### 只重跑 intent + reason（不重跑 perception）

@@ -54,8 +54,8 @@ export MPLBACKEND=Agg
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 export KMP_DUPLICATE_LIB_OK=TRUE
-export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-D3Kd8gupG4HqUgTMsawHZBPmlEolExOmFHgkUkPt6TKuhllT}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://www.highland-api.top/v1}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-1xiLt7t2zMJOv8YyOoS9zZqSk2FCoVI3Bd4j7wduM4ajjRvK}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://yunwu.ai/v1}"
 
 # ---- Pipeline 开关 ----
 RUN_INTENT="${RUN_INTENT:-1}"

@@ -1,127 +1,127 @@
 {
   "category": "easy",
   "total_splits": 150,
-  "ssr_mean_iou": 0.7708,
+  "ssr_mean_iou": 0.7957,
   "details": [
     {
       "scene_id": 0,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9942
+      "iou": 0.9969
     },
     {
       "scene_id": 0,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9942
+      "iou": 0.9969
     },
     {
       "scene_id": 0,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 4,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
+      "iou": 0.9969
+    },
+    {
+      "scene_id": 1189,
+      "split": "split0",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.9976
+    },
+    {
+      "scene_id": 1189,
+      "split": "split1",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.9976
+    },
+    {
+      "scene_id": 1189,
+      "split": "split2",
+      "grasp_id": 1,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
+      "iou": 0.9976
+    },
+    {
+      "scene_id": 1200,
+      "split": "split0",
+      "grasp_id": 5,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": 2,
+      "iou": 0.9972
+    },
+    {
+      "scene_id": 1200,
+      "split": "split1",
+      "grasp_id": 5,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": 2,
+      "iou": 0.9972
+    },
+    {
+      "scene_id": 1200,
+      "split": "split2",
+      "grasp_id": 5,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": 2,
+      "iou": 0.9972
+    },
+    {
+      "scene_id": 1350,
+      "split": "split0",
+      "grasp_id": 2,
+      "gt_object_ids": [
+        2
+      ],
+      "best_gt_id": 2,
       "iou": 0.9942
     },
     {
-      "scene_id": 1189,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": 1,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 1189,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": 1,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 1189,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": 1,
-      "iou": 0.9936
-    },
-    {
-      "scene_id": 1200,
-      "split": "split0",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": 2,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1200,
-      "split": "split1",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": 2,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1200,
-      "split": "split2",
-      "grasp_id": 5,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": 2,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 1350,
-      "split": "split0",
-      "grasp_id": 6,
-      "gt_object_ids": [
-        2
-      ],
-      "best_gt_id": 2,
-      "iou": 0.0797
-    },
-    {
       "scene_id": 1350,
       "split": "split1",
-      "grasp_id": 6,
+      "grasp_id": 2,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.0797
+      "iou": 0.9942
     },
     {
       "scene_id": 1350,
       "split": "split2",
-      "grasp_id": 6,
+      "grasp_id": 2,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.0797
+      "iou": 0.9942
     },
     {
       "scene_id": 1527,
@@ -131,7 +131,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.991
+      "iou": 0.9962
     },
     {
       "scene_id": 1527,
@@ -141,7 +141,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.991
+      "iou": 0.9962
     },
     {
       "scene_id": 1527,
@@ -151,67 +151,67 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.991
+      "iou": 0.9962
     },
     {
       "scene_id": 1599,
       "split": "split0",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9876
+      "iou": 0.9901
     },
     {
       "scene_id": 1599,
       "split": "split1",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9876
+      "iou": 0.9901
     },
     {
       "scene_id": 1599,
       "split": "split2",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9876
+      "iou": 0.9901
     },
     {
       "scene_id": 1758,
       "split": "split0",
-      "grasp_id": 1,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9829
+      "iou": 0.9846
     },
     {
       "scene_id": 1758,
       "split": "split1",
-      "grasp_id": 1,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9829
+      "iou": 0.9846
     },
     {
       "scene_id": 1758,
       "split": "split2",
-      "grasp_id": 1,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9829
+      "iou": 0.9846
     },
     {
       "scene_id": 1776,
@@ -221,7 +221,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9944
+      "iou": 0.995
     },
     {
       "scene_id": 1776,
@@ -231,7 +231,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9944
+      "iou": 0.995
     },
     {
       "scene_id": 1776,
@@ -241,57 +241,57 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9944
+      "iou": 0.995
     },
     {
       "scene_id": 1796,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 6,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9847
+      "iou": 0.993
     },
     {
       "scene_id": 1796,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 6,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9847
+      "iou": 0.993
     },
     {
       "scene_id": 1796,
       "split": "split2",
-      "grasp_id": 3,
+      "grasp_id": 6,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9847
+      "iou": 0.993
     },
     {
       "scene_id": 184,
       "split": "split0",
+      "grasp_id": 5,
+      "gt_object_ids": [
+        9
+      ],
+      "best_gt_id": -1,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 184,
+      "split": "split1",
       "grasp_id": 1,
       "gt_object_ids": [
         9
       ],
       "best_gt_id": 9,
-      "iou": 0.9925
-    },
-    {
-      "scene_id": 184,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        9
-      ],
-      "best_gt_id": 9,
-      "iou": 0.9925
+      "iou": 0.9947
     },
     {
       "scene_id": 184,
@@ -301,37 +301,37 @@
         9
       ],
       "best_gt_id": 9,
-      "iou": 0.9925
+      "iou": 0.9947
     },
     {
       "scene_id": 1868,
       "split": "split0",
-      "grasp_id": 8,
+      "grasp_id": 9,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.0001
+      "iou": 0.9933
     },
     {
       "scene_id": 1868,
       "split": "split1",
-      "grasp_id": 8,
+      "grasp_id": 9,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.0001
+      "iou": 0.9933
     },
     {
       "scene_id": 1868,
       "split": "split2",
-      "grasp_id": 8,
+      "grasp_id": 9,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.0001
+      "iou": 0.9933
     },
     {
       "scene_id": 1869,
@@ -341,7 +341,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.992
+      "iou": 0.9966
     },
     {
       "scene_id": 1869,
@@ -351,7 +351,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.992
+      "iou": 0.9966
     },
     {
       "scene_id": 1869,
@@ -361,67 +361,67 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.992
+      "iou": 0.9966
     },
     {
       "scene_id": 1947,
       "split": "split0",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.939
+      "iou": 0.989
     },
     {
       "scene_id": 1947,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.939
+      "iou": 0.989
     },
     {
       "scene_id": 1947,
       "split": "split2",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.939
+      "iou": 0.989
     },
     {
       "scene_id": 2168,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 1,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9858
+      "iou": 0.9918
     },
     {
       "scene_id": 2168,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 1,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9858
+      "iou": 0.9918
     },
     {
       "scene_id": 2168,
       "split": "split2",
-      "grasp_id": 3,
+      "grasp_id": 1,
       "gt_object_ids": [
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9858
+      "iou": 0.9918
     },
     {
       "scene_id": 2189,
@@ -431,7 +431,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9935
+      "iou": 0.9949
     },
     {
       "scene_id": 2189,
@@ -441,7 +441,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9935
+      "iou": 0.9949
     },
     {
       "scene_id": 2189,
@@ -451,7 +451,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9935
+      "iou": 0.9949
     },
     {
       "scene_id": 2473,
@@ -461,7 +461,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9906
+      "iou": 0.995
     },
     {
       "scene_id": 2473,
@@ -471,7 +471,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9906
+      "iou": 0.995
     },
     {
       "scene_id": 2473,
@@ -481,7 +481,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9906
+      "iou": 0.995
     },
     {
       "scene_id": 2581,
@@ -491,7 +491,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9959
+      "iou": 0.9976
     },
     {
       "scene_id": 2581,
@@ -501,7 +501,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9959
+      "iou": 0.9976
     },
     {
       "scene_id": 2581,
@@ -511,12 +511,12 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9959
+      "iou": 0.9976
     },
     {
       "scene_id": 2683,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 2,
       "gt_object_ids": [
         6
       ],
@@ -526,7 +526,7 @@
     {
       "scene_id": 2683,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 2,
       "gt_object_ids": [
         6
       ],
@@ -536,7 +536,7 @@
     {
       "scene_id": 2683,
       "split": "split2",
-      "grasp_id": 3,
+      "grasp_id": 2,
       "gt_object_ids": [
         6
       ],
@@ -551,7 +551,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9961
+      "iou": 0.9966
     },
     {
       "scene_id": 3143,
@@ -561,7 +561,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9961
+      "iou": 0.9966
     },
     {
       "scene_id": 3143,
@@ -571,7 +571,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9961
+      "iou": 0.9966
     },
     {
       "scene_id": 3298,
@@ -581,7 +581,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9952
+      "iou": 0.9964
     },
     {
       "scene_id": 3298,
@@ -591,7 +591,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9952
+      "iou": 0.9964
     },
     {
       "scene_id": 3298,
@@ -601,7 +601,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9952
+      "iou": 0.9964
     },
     {
       "scene_id": 374,
@@ -611,7 +611,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9964
+      "iou": 0.9995
     },
     {
       "scene_id": 374,
@@ -621,7 +621,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9964
+      "iou": 0.9995
     },
     {
       "scene_id": 374,
@@ -631,67 +631,67 @@
         2
       ],
       "best_gt_id": 2,
+      "iou": 0.9995
+    },
+    {
+      "scene_id": 381,
+      "split": "split0",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.368
+    },
+    {
+      "scene_id": 381,
+      "split": "split1",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.368
+    },
+    {
+      "scene_id": 381,
+      "split": "split2",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        3
+      ],
+      "best_gt_id": 3,
+      "iou": 0.368
+    },
+    {
+      "scene_id": 398,
+      "split": "split0",
+      "grasp_id": 3,
+      "gt_object_ids": [
+        1
+      ],
+      "best_gt_id": 1,
       "iou": 0.9964
     },
     {
-      "scene_id": 381,
-      "split": "split0",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9901
-    },
-    {
-      "scene_id": 381,
-      "split": "split1",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9901
-    },
-    {
-      "scene_id": 381,
-      "split": "split2",
-      "grasp_id": 1,
-      "gt_object_ids": [
-        3
-      ],
-      "best_gt_id": 3,
-      "iou": 0.9901
-    },
-    {
       "scene_id": 398,
-      "split": "split0",
-      "grasp_id": 1,
+      "split": "split1",
+      "grasp_id": 3,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
-    },
-    {
-      "scene_id": 398,
-      "split": "split1",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        1
-      ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 1,
+      "iou": 0.9964
     },
     {
       "scene_id": 398,
       "split": "split2",
-      "grasp_id": 4,
+      "grasp_id": 3,
       "gt_object_ids": [
         1
       ],
-      "best_gt_id": -1,
-      "iou": 0.0
+      "best_gt_id": 1,
+      "iou": 0.9964
     },
     {
       "scene_id": 4735,
@@ -701,7 +701,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9832
+      "iou": 0.9972
     },
     {
       "scene_id": 4735,
@@ -711,7 +711,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9832
+      "iou": 0.9972
     },
     {
       "scene_id": 4735,
@@ -721,7 +721,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9832
+      "iou": 0.9972
     },
     {
       "scene_id": 509,
@@ -731,7 +731,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9899
+      "iou": 0.9965
     },
     {
       "scene_id": 509,
@@ -741,7 +741,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9899
+      "iou": 0.9965
     },
     {
       "scene_id": 509,
@@ -751,37 +751,37 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9899
+      "iou": 0.9965
     },
     {
       "scene_id": 527,
       "split": "split0",
-      "grasp_id": 5,
+      "grasp_id": 1,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9908
+      "iou": 0.9943
     },
     {
       "scene_id": 527,
       "split": "split1",
-      "grasp_id": 5,
+      "grasp_id": 1,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9908
+      "iou": 0.9943
     },
     {
       "scene_id": 527,
       "split": "split2",
-      "grasp_id": 5,
+      "grasp_id": 1,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9908
+      "iou": 0.9943
     },
     {
       "scene_id": 5636,
@@ -791,7 +791,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9837
+      "iou": 0.9844
     },
     {
       "scene_id": 5636,
@@ -801,7 +801,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9837
+      "iou": 0.9844
     },
     {
       "scene_id": 5636,
@@ -811,7 +811,7 @@
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9837
+      "iou": 0.9844
     },
     {
       "scene_id": 564,
@@ -821,7 +821,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.978
+      "iou": 0.9925
     },
     {
       "scene_id": 564,
@@ -831,7 +831,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.978
+      "iou": 0.9925
     },
     {
       "scene_id": 564,
@@ -841,7 +841,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.978
+      "iou": 0.9925
     },
     {
       "scene_id": 646,
@@ -851,7 +851,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9901
+      "iou": 0.9931
     },
     {
       "scene_id": 646,
@@ -861,7 +861,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9901
+      "iou": 0.9931
     },
     {
       "scene_id": 646,
@@ -871,7 +871,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9901
+      "iou": 0.9931
     },
     {
       "scene_id": 6717,
@@ -881,7 +881,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9744
+      "iou": 0.9788
     },
     {
       "scene_id": 6717,
@@ -891,7 +891,7 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9744
+      "iou": 0.9788
     },
     {
       "scene_id": 6717,
@@ -901,42 +901,42 @@
         4
       ],
       "best_gt_id": 4,
-      "iou": 0.9744
+      "iou": 0.9788
     },
     {
       "scene_id": 6797,
       "split": "split0",
-      "grasp_id": 7,
+      "grasp_id": 3,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": 6,
-      "iou": 0.9638
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6797,
       "split": "split1",
-      "grasp_id": 7,
+      "grasp_id": 3,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": 6,
-      "iou": 0.9638
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6797,
       "split": "split2",
-      "grasp_id": 7,
+      "grasp_id": 3,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": 6,
-      "iou": 0.9638
+      "best_gt_id": -1,
+      "iou": 0.0
     },
     {
       "scene_id": 6811,
       "split": "split0",
-      "grasp_id": 9,
+      "grasp_id": 1,
       "gt_object_ids": [
         5
       ],
@@ -946,7 +946,7 @@
     {
       "scene_id": 6811,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 1,
       "gt_object_ids": [
         5
       ],
@@ -956,7 +956,7 @@
     {
       "scene_id": 6811,
       "split": "split2",
-      "grasp_id": 9,
+      "grasp_id": 1,
       "gt_object_ids": [
         5
       ],
@@ -1001,7 +1001,7 @@
         7
       ],
       "best_gt_id": 7,
-      "iou": 0.9936
+      "iou": 0.9957
     },
     {
       "scene_id": 6935,
@@ -1011,7 +1011,7 @@
         7
       ],
       "best_gt_id": 7,
-      "iou": 0.9936
+      "iou": 0.9957
     },
     {
       "scene_id": 6935,
@@ -1061,7 +1061,7 @@
         8
       ],
       "best_gt_id": 8,
-      "iou": 0.9804
+      "iou": 0.985
     },
     {
       "scene_id": 6998,
@@ -1071,7 +1071,7 @@
         8
       ],
       "best_gt_id": 8,
-      "iou": 0.9804
+      "iou": 0.985
     },
     {
       "scene_id": 6998,
@@ -1081,7 +1081,7 @@
         8
       ],
       "best_gt_id": 8,
-      "iou": 0.9804
+      "iou": 0.985
     },
     {
       "scene_id": 7020,
@@ -1121,7 +1121,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9797
+      "iou": 0.9948
     },
     {
       "scene_id": 7022,
@@ -1131,7 +1131,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9797
+      "iou": 0.9948
     },
     {
       "scene_id": 7022,
@@ -1141,37 +1141,37 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9797
+      "iou": 0.9948
     },
     {
       "scene_id": 7032,
       "split": "split0",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9826
+      "iou": 0.9842
     },
     {
       "scene_id": 7032,
       "split": "split1",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9826
+      "iou": 0.9842
     },
     {
       "scene_id": 7032,
       "split": "split2",
-      "grasp_id": 9,
+      "grasp_id": 10,
       "gt_object_ids": [
         2
       ],
       "best_gt_id": 2,
-      "iou": 0.9826
+      "iou": 0.9842
     },
     {
       "scene_id": 7034,
@@ -1211,7 +1211,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9961
+      "iou": 0.9983
     },
     {
       "scene_id": 7071,
@@ -1221,7 +1221,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9961
+      "iou": 0.9983
     },
     {
       "scene_id": 7071,
@@ -1231,27 +1231,27 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.9961
+      "iou": 0.9983
     },
     {
       "scene_id": 7101,
       "split": "split0",
-      "grasp_id": 8,
+      "grasp_id": 7,
       "gt_object_ids": [
         6
       ],
       "best_gt_id": 6,
-      "iou": 0.9078
+      "iou": 0.9941
     },
     {
       "scene_id": 7101,
       "split": "split1",
-      "grasp_id": 8,
+      "grasp_id": 7,
       "gt_object_ids": [
         6
       ],
       "best_gt_id": 6,
-      "iou": 0.9078
+      "iou": 0.9941
     },
     {
       "scene_id": 7101,
@@ -1271,7 +1271,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9908
+      "iou": 0.9965
     },
     {
       "scene_id": 7106,
@@ -1281,7 +1281,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9908
+      "iou": 0.9965
     },
     {
       "scene_id": 7106,
@@ -1291,7 +1291,7 @@
         5
       ],
       "best_gt_id": 5,
-      "iou": 0.9908
+      "iou": 0.9965
     },
     {
       "scene_id": 7176,
@@ -1301,7 +1301,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.993
+      "iou": 0.9985
     },
     {
       "scene_id": 7176,
@@ -1311,7 +1311,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.993
+      "iou": 0.9985
     },
     {
       "scene_id": 7176,
@@ -1321,7 +1321,7 @@
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.993
+      "iou": 0.9985
     },
     {
       "scene_id": 7192,
@@ -1331,7 +1331,7 @@
         9
       ],
       "best_gt_id": 9,
-      "iou": 0.9954
+      "iou": 0.9975
     },
     {
       "scene_id": 7192,
@@ -1341,7 +1341,7 @@
         9
       ],
       "best_gt_id": 9,
-      "iou": 0.9954
+      "iou": 0.9975
     },
     {
       "scene_id": 7192,
@@ -1351,12 +1351,12 @@
         9
       ],
       "best_gt_id": 9,
-      "iou": 0.9954
+      "iou": 0.9975
     },
     {
       "scene_id": 7201,
       "split": "split0",
-      "grasp_id": 16,
+      "grasp_id": 3,
       "gt_object_ids": [
         3
       ],
@@ -1366,7 +1366,7 @@
     {
       "scene_id": 7201,
       "split": "split1",
-      "grasp_id": 16,
+      "grasp_id": 3,
       "gt_object_ids": [
         3
       ],
@@ -1376,7 +1376,7 @@
     {
       "scene_id": 7201,
       "split": "split2",
-      "grasp_id": 16,
+      "grasp_id": 3,
       "gt_object_ids": [
         3
       ],
@@ -1386,32 +1386,32 @@
     {
       "scene_id": 7265,
       "split": "split0",
+      "grasp_id": 7,
+      "gt_object_ids": [
+        6
+      ],
+      "best_gt_id": 6,
+      "iou": 0.9949
+    },
+    {
+      "scene_id": 7265,
+      "split": "split1",
       "grasp_id": 6,
       "gt_object_ids": [
         6
       ],
-      "best_gt_id": 6,
-      "iou": 0.9892
-    },
-    {
-      "scene_id": 7265,
-      "split": "split1",
-      "grasp_id": 4,
-      "gt_object_ids": [
-        6
-      ],
       "best_gt_id": -1,
       "iou": 0.0
     },
     {
       "scene_id": 7265,
       "split": "split2",
-      "grasp_id": 6,
+      "grasp_id": 7,
       "gt_object_ids": [
         6
       ],
       "best_gt_id": 6,
-      "iou": 0.9892
+      "iou": 0.9949
     },
     {
       "scene_id": 834,
@@ -1421,7 +1421,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9926
+      "iou": 0.9955
     },
     {
       "scene_id": 834,
@@ -1431,7 +1431,7 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9926
+      "iou": 0.9955
     },
     {
       "scene_id": 834,
@@ -1441,12 +1441,12 @@
         1
       ],
       "best_gt_id": 1,
-      "iou": 0.9926
+      "iou": 0.9955
     },
     {
       "scene_id": 842,
       "split": "split0",
-      "grasp_id": 3,
+      "grasp_id": 2,
       "gt_object_ids": [
         1
       ],
@@ -1456,7 +1456,7 @@
     {
       "scene_id": 842,
       "split": "split1",
-      "grasp_id": 3,
+      "grasp_id": 5,
       "gt_object_ids": [
         1
       ],
@@ -1466,7 +1466,7 @@
     {
       "scene_id": 842,
       "split": "split2",
-      "grasp_id": 3,
+      "grasp_id": 5,
       "gt_object_ids": [
         1
       ],
@@ -1476,32 +1476,32 @@
     {
       "scene_id": 961,
       "split": "split0",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.99
+      "iou": 0.9927
     },
     {
       "scene_id": 961,
       "split": "split1",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.99
+      "iou": 0.9927
     },
     {
       "scene_id": 961,
       "split": "split2",
-      "grasp_id": 2,
+      "grasp_id": 1,
       "gt_object_ids": [
         3
       ],
       "best_gt_id": 3,
-      "iou": 0.99
+      "iou": 0.9927
     }
   ]
 }
