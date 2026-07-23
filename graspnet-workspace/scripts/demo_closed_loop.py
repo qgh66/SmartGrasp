@@ -26,6 +26,7 @@ from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
 from simulation.gripper_factory import GRIPPER_MODELS, create_gripper
 from simulation.evaluator import GraspEvaluator
+from simulation.object_mapping import match_scene_object_by_mask
 from utils.collision_detector import ModelFreeCollisionDetector
 
 MAX_GRIPPER_OPENING = 0.085
@@ -242,6 +243,10 @@ def parse_args():
                    help='多物体工业场景 JSON 配置；指定后优先使用配置中的 objects')
     p.add_argument('--target-object', default=None,
                    help='多物体场景中的目标物体 name；不指定时使用 metadata.role=target 或第一个物体')
+    p.add_argument('--target-mask', default=None,
+                   help='Reason Object ID 对应的 Perception 整物体 mask；按可见 segmentation 最大 IoU 匹配目标')
+    p.add_argument('--target-mask-min-iou', type=float, default=0.01,
+                   help='Perception mask 与 PyBullet segmentation 匹配的最小 IoU')
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
@@ -331,11 +336,25 @@ def main():
     scene.load_plane()
 
     scene_config = None
+    target_selection = None
     if args.scene_config:
         scene_config = load_scene_config(args.scene_config)
         scene.load_objects(scene_config["_resolved_objects"])
-        obj_id, target_object = select_target_object(scene, args.target_object)
-        print(f'  ✅ 场景加载完成: {len(scene.object_ids)} 个物体, 目标: {target_object.name}')
+        if args.target_mask:
+            obj_id = None
+            target_object = None
+            print(
+                f'  ✅ 场景加载完成: {len(scene.object_ids)} 个物体, '
+                '目标等待 Perception mask 映射'
+            )
+        else:
+            obj_id, target_object = select_target_object(scene, args.target_object)
+            target_selection = {
+                "source": "object_name_or_scene_default",
+                "selected_body_id": int(obj_id),
+                "selected_object_name": target_object.name,
+            }
+            print(f'  ✅ 场景加载完成: {len(scene.object_ids)} 个物体, 目标: {target_object.name}')
     else:
         # 单物体兼容路径：保留旧的 --obj 用法，方便单模型调试。
         from scipy.spatial.transform import Rotation as R
@@ -352,13 +371,21 @@ def main():
             metadata={"role": "target"},
         )
         target_object = scene.get_object_info(obj_id)
+        target_selection = {
+            "source": "single_object_scene",
+            "selected_body_id": int(obj_id),
+            "selected_object_name": target_object.name,
+        }
 
     # 等待物体稳定
     settle_steps = int(scene_config.get("settle_steps", 300)) if scene_config else 300
     for _ in range(settle_steps):
         scene.step()
-    obj_pos, obj_orn = scene.get_object_pose(obj_id)
-    print(f'  ✅ 目标物体稳定, 位置: {np.round(obj_pos, 3)}')
+    if obj_id is not None:
+        obj_pos, obj_orn = scene.get_object_pose(obj_id)
+        print(f'  ✅ 目标物体稳定, 位置: {np.round(obj_pos, 3)}')
+    else:
+        print('  ✅ 场景稳定，等待相机 segmentation 完成目标映射')
 
     # ==============================================================
     # 3. 虚拟相机 + 点云
@@ -375,6 +402,19 @@ def main():
     rgb, depth, seg = cam.capture()
     pc = cam.generate_point_cloud(depth, num_points=20000).numpy()
     object_clouds = cam.generate_object_point_clouds(depth, seg, scene.object_ids)
+    if args.target_mask:
+        obj_id, target_object, target_selection = match_scene_object_by_mask(
+            scene,
+            seg,
+            args.target_mask,
+            minimum_iou=args.target_mask_min_iou,
+        )
+        obj_pos, obj_orn = scene.get_object_pose(obj_id)
+        print(
+            f'  🔗 Reason Object Mask -> body_id={obj_id}, '
+            f'name={target_object.name}, '
+            f'IoU={target_selection["selected_iou"]:.4f}'
+        )
     object_point_counts = {body_id: int(len(pts)) for body_id, pts in object_clouds.items()}
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✅ 点云: {pc.shape}, 物体点数: {n_obj_pts}')
@@ -532,6 +572,7 @@ def main():
         'scene_config': scene_config.get("_path") if scene_config else None,
         'target_object_name': target_object.name,
         'target_body_id': int(obj_id),
+        'target_selection': target_selection,
         'graspnet_input_frame': 'camera',
         'candidate_execution_frame': 'world',
         'objects': scene.get_object_poses(),

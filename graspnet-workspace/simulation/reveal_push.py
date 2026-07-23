@@ -21,6 +21,7 @@ from execution.reveal_api import execute_reveal_action
 from simulation.camera import VirtualCamera
 from simulation.robot_gripper import JakaZu3Robotiq85Gripper
 from simulation.scene import SimulationScene
+from simulation.object_mapping import match_scene_object_by_mask
 
 
 TABLE_CLEARANCE = 0.005
@@ -291,6 +292,8 @@ def run_reveal_push_scene(
     *,
     scene_config: str | os.PathLike[str],
     object_name: str | None,
+    object_mask_path: str | os.PathLike[str] | None = None,
+    target_mask_min_iou: float = 0.01,
     center_point=None,
     direction=(1.0, 0.0, 0.0),
     move_distance: float = 0.05,
@@ -307,8 +310,26 @@ def run_reveal_push_scene(
         scene.connect()
         scene.load_plane()
         scene.load_objects(config["_resolved_objects"])
-        target_body_id, target_object = select_scene_object(scene, object_name)
         scene.step(int(config.get("settle_steps", 300)))
+
+        camera = make_virtual_camera(config)
+        before_rgb, before_depth, before_seg = camera.capture()
+        before_pc = camera.generate_point_cloud(before_depth, num_points=20000).numpy()
+        before_object_clouds = camera.generate_object_point_clouds(before_depth, before_seg, scene.object_ids)
+        if object_mask_path is not None:
+            target_body_id, target_object, target_selection = match_scene_object_by_mask(
+                scene,
+                before_seg,
+                object_mask_path,
+                minimum_iou=target_mask_min_iou,
+            )
+        else:
+            target_body_id, target_object = select_scene_object(scene, object_name)
+            target_selection = {
+                "source": "object_name_or_scene_default",
+                "selected_body_id": int(target_body_id),
+                "selected_object_name": target_object.name,
+            }
 
         measured_center = object_center_from_aabb(target_body_id)
         if center_point is None:
@@ -333,11 +354,6 @@ def run_reveal_push_scene(
         if np.linalg.norm(push_direction) < 1e-8:
             push_direction = push_vector
         push_direction = push_direction / max(np.linalg.norm(push_direction), 1e-8)
-
-        camera = make_virtual_camera(config)
-        before_rgb, before_depth, before_seg = camera.capture()
-        before_pc = camera.generate_point_cloud(before_depth, num_points=20000).numpy()
-        before_object_clouds = camera.generate_object_point_clouds(before_depth, before_seg, scene.object_ids)
 
         pose_before = scene.get_object_poses()
         object_pose_before = pose_before[int(target_body_id)]
@@ -367,6 +383,7 @@ def run_reveal_push_scene(
             "scene_config": config["_path"],
             "target_object_name": target_object.name,
             "target_body_id": int(target_body_id),
+            "target_selection": target_selection,
             "obj_path": target_object.path,
             "object_position": object_pose_before["position"],
             "object_orientation": object_pose_before["orientation"],

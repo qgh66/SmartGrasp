@@ -1,0 +1,14 @@
+{
+  "request_id": "scene_0059_reason_object",
+  "reason_summary_path": "data/scene_59/reason/summary.json",
+  "scene": {
+    "scene_config": "graspnet-workspace/config/industrial_scene.json"
+  },
+  "execution": {
+    "top_k": 5,
+    "target_mask_min_iou": 0.01,
+    "device": "cuda:0",
+    "output": "graspnet-workspace/results/scene_0059_reason_object.json",
+    "gui": true
+  }
+}

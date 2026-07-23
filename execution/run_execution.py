@@ -63,6 +63,119 @@ def default_raw_output(request: dict[str, Any], action_type: str) -> str:
     return f"results/{request_id}_{action_type}.json"
 
 
+def load_reason_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Populate an execution request from one Reason scene summary."""
+    reason_config = request.get("reason") or {}
+    summary_value = (
+        request.get("reason_summary_path")
+        or reason_config.get("summary_path")
+    )
+    if not summary_value:
+        return request
+
+    summary_path = resolve_repo_path(summary_value)
+    summary = load_json(summary_path)
+    grasp_object = summary.get("grasp_object") or {}
+    if grasp_object.get("id") is None:
+        raise ValueError(
+            f"Reason summary has no grasp_object.id: {summary_path}"
+        )
+
+    hydrated = dict(request)
+    hydrated["reason_summary_path"] = str(summary_path)
+    hydrated["branch"] = hydrated.get("branch") or summary.get("branch")
+    if not hydrated.get("task_type"):
+        hydrated["task_type"] = (
+            "grasp"
+            if hydrated.get("branch") == "fully_visible"
+            else "reveal"
+        )
+
+    obj = dict(hydrated.get("object") or {})
+    if obj.get("id") is None:
+        obj["id"] = grasp_object.get("id")
+    if not obj.get("category"):
+        obj["category"] = grasp_object.get("label")
+    obj.setdefault(
+        "role",
+        "target" if hydrated["task_type"] == "grasp" else "occluder",
+    )
+    hydrated["object"] = obj
+
+    scene = dict(hydrated.get("scene") or {})
+    if not scene.get("occlusion_graph_path"):
+        default_graph = (
+            summary_path.parent.parent
+            / "perception"
+            / "occlusion_graph.json"
+        )
+        scene["occlusion_graph_path"] = str(default_graph)
+    hydrated["scene"] = scene
+    return hydrated
+
+
+def resolve_reason_object_mask(request: dict[str, Any]) -> Path | None:
+    """Resolve object.id to its whole-object Perception mask."""
+    obj = request.get("object") or {}
+    scene = request.get("scene") or {}
+    object_id = obj.get("id")
+
+    direct_mask = scene.get("object_mask_path") or scene.get("mask_path")
+    if direct_mask:
+        path = resolve_repo_path(direct_mask)
+        if not path.exists():
+            raise FileNotFoundError(f"Execution object mask not found: {path}")
+        return path
+
+    graph_value = (
+        scene.get("occlusion_graph_path")
+        or scene.get("perception_graph_path")
+    )
+    if graph_value is None or object_id is None:
+        return None
+
+    graph_path = resolve_repo_path(graph_value)
+    graph_data = load_json(graph_path)
+    nodes = (graph_data.get("graph") or {}).get("nodes") or []
+    matching_node = next(
+        (
+            node
+            for node in nodes
+            if int(node.get("object_id", node.get("node_id", -1)))
+            == int(object_id)
+        ),
+        None,
+    )
+    if matching_node is None:
+        raise ValueError(
+            f"Reason object_id={object_id} is absent from {graph_path}"
+        )
+
+    mask_value = matching_node.get("mask_path") or matching_node.get("mask_file")
+    if not mask_value:
+        raise ValueError(
+            f"Perception node object_id={object_id} has no mask path"
+        )
+
+    raw_mask = Path(os.path.expanduser(str(mask_value)))
+    candidates = (
+        [raw_mask]
+        if raw_mask.is_absolute()
+        else [
+            graph_path.parent / raw_mask,
+            graph_path.parent.parent / raw_mask,
+            REPO_ROOT / raw_mask,
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    raise FileNotFoundError(
+        f"Mask for Reason object_id={object_id} not found; "
+        f"graph={graph_path}, mask_path={mask_value!r}"
+    )
+
+
 def normalize_result(
     request: dict[str, Any],
     *,
@@ -100,8 +213,12 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
     execution = request.get("execution", {})
 
     target_name = obj.get("name")
-    if not target_name:
-        raise ValueError("fully_visible/grasp request requires object.name")
+    target_mask = resolve_reason_object_mask(request)
+    if not target_name and target_mask is None:
+        raise ValueError(
+            "fully_visible/grasp request requires object.name or "
+            "object.id plus scene.occlusion_graph_path"
+        )
 
     scene_config = scene.get("scene_config") or "graspnet-workspace/config/industrial_scene.json"
     raw_output = execution.get("output") or default_raw_output(request, "grasp")
@@ -113,8 +230,6 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
         str(REPO_ROOT / "run_grasp_simulation.sh"),
         "--scene-config",
         workspace_arg(scene_config),
-        "--target-object",
-        str(target_name),
         "--top_k",
         top_k,
         "--device",
@@ -122,6 +237,16 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
         "--output",
         workspace_arg(raw_output),
     ]
+    if target_mask is not None:
+        cmd.extend(["--target-mask", str(target_mask)])
+        cmd.extend(
+            [
+                "--target-mask-min-iou",
+                str(execution.get("target_mask_min_iou", 0.01)),
+            ]
+        )
+    elif target_name:
+        cmd.extend(["--target-object", str(target_name)])
     env = os.environ.copy()
     if execution.get("gui"):
         env["PYBULLET_GUI"] = "1"
@@ -143,6 +268,9 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
     raw_result: dict[str, Any] = {}
     if raw_output_path.exists():
         raw_result = load_json(raw_output_path)
+    mapped_name = raw_result.get("target_object_name")
+    if mapped_name:
+        request.setdefault("object", {})["name"] = mapped_name
 
     success_count = int(raw_result.get("success", 0) or 0)
     total = int(raw_result.get("total", 0) or 0)
@@ -156,6 +284,8 @@ def run_grasp(request: dict[str, Any]) -> dict[str, Any]:
         "log_tail": completed.stdout.splitlines()[-80:],
         "grasp_filter": raw_result.get("grasp_filter"),
         "object_point_counts": raw_result.get("object_point_counts"),
+        "reason_object_id": obj.get("id"),
+        "target_selection": raw_result.get("target_selection"),
     }
     artifacts = {
         "result_json": str(raw_output_path),
@@ -218,9 +348,19 @@ def run_reveal(request: dict[str, Any]) -> dict[str, Any]:
 
     scene_config = scene.get("scene_config") or "graspnet-workspace/config/industrial_scene.json"
     raw_output = execution.get("output") or default_raw_output(request, "reveal")
+    target_mask = resolve_reason_object_mask(request)
+    if not obj.get("name") and target_mask is None:
+        raise ValueError(
+            "reveal request requires object.name or "
+            "object.id plus scene.occlusion_graph_path"
+        )
     run_data = run_reveal_push_scene(
         scene_config=scene_config,
         object_name=obj.get("name"),
+        object_mask_path=target_mask,
+        target_mask_min_iou=float(
+            execution.get("target_mask_min_iou", 0.01)
+        ),
         center_point=reveal.get("center_point"),
         direction=reveal.get("direction", [1.0, 0.0, 0.0]),
         move_distance=float(reveal.get("move_distance", 0.05)),
@@ -228,6 +368,9 @@ def run_reveal(request: dict[str, Any]) -> dict[str, Any]:
         gui=bool(execution.get("gui", False)),
     )
     raw_result = run_data["result"]
+    mapped_name = raw_result.get("target_object_name")
+    if mapped_name:
+        request.setdefault("object", {})["name"] = mapped_name
     push_result = (raw_result.get("grasps") or [{}])[0]
     diagnostics = {
         "physical_simulation": "pybullet_jaka_push",
@@ -235,6 +378,8 @@ def run_reveal(request: dict[str, Any]) -> dict[str, Any]:
         "success_threshold": push_result.get("success_threshold"),
         "object_point_counts_before": raw_result.get("object_point_counts_before"),
         "object_point_counts_after": raw_result.get("object_point_counts_after"),
+        "reason_object_id": obj.get("id"),
+        "target_selection": raw_result.get("target_selection"),
     }
     artifacts = {
         "result_json": run_data["result_json"],
@@ -289,7 +434,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    request = load_json(resolve_repo_path(args.input))
+    request = load_reason_request(load_json(resolve_repo_path(args.input)))
     try:
         response = run_request(request)
     except Exception as exc:
