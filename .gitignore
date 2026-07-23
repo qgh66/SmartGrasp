@@ -4,6 +4,7 @@
 # --- Local environment / editor files ---
 .env
 .env.*
+api_config.json
 !.env.example
 .DS_Store
 .vscode/

@@ -45,8 +45,8 @@ REASON_ARGS="
 REASON_ARGS_FLAT=$(echo $REASON_ARGS)
 
 export SAM2_ROOT="${SAM2_ROOT:-$HOME/miniconda3/envs/smartgrasp/lib/python3.12/site-packages/sam2}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-1xiLt7t2zMJOv8YyOoS9zZqSk2FCoVI3Bd4j7wduM4ajjRvK}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://yunwu.ai/v1}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['api_key'])")}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['base_url'])")}"
 
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }

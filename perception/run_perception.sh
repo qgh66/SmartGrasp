@@ -46,8 +46,8 @@ export MPLBACKEND=Agg
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 export KMP_DUPLICATE_LIB_OK=TRUE
-export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-D3Kd8gupG4HqUgTMsawHZBPmlEolExOmFHgkUkPt6TKuhllT}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://www.highland-api.top/v1}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['api_key'])")}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['base_url'])")}"
 
 # ---- 参数 ----
 MODE="${MODE:-vlm}"

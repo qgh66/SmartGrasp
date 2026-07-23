@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 DEFAULT_MODEL = "gpt-5.5"
-DEFAULT_BASE_URL = "https://www.highland-api.top/v1"
+with open(Path(__file__).resolve().parents[1] / "api_config.json", encoding="utf-8") as _f:
+    _cfg = json.load(_f)
+DEFAULT_BASE_URL: str = _cfg["base_url"]
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT = 600.0
 
