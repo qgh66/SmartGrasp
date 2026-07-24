@@ -1,0 +1,76 @@
+{
+  "metric": "RSR",
+  "model": "gpt-4o",
+  "algorithm": "information_gain_graspability",
+  "ranking_score": "ig_graspability",
+  "prior_prompt": "graspability",
+  "definition": "predicted first-grasp object maps to one of groundTruthObjIds",
+  "failed_or_missing_runs_count_as_zero": true,
+  "num_rows": 600,
+  "categories": [
+    {
+      "testcase": "01_hard_ambiguous",
+      "difficulty": "Hard",
+      "ambiguous": true,
+      "num_scenes": 50,
+      "num_annotation_runs": 150,
+      "split_rsr": {
+        "0": 0.68,
+        "1": 0.64,
+        "2": 0.64
+      },
+      "ssr_mean_iou": 0.5904807631496528,
+      "rsr_mean": 0.6533333333333333,
+      "rsr_std": 0.018856180831641284,
+      "rsr_pooled": 0.6533333333333333
+    },
+    {
+      "testcase": "02_medium_ambiguous",
+      "difficulty": "Medium",
+      "ambiguous": true,
+      "num_scenes": 50,
+      "num_annotation_runs": 150,
+      "split_rsr": {
+        "0": 0.74,
+        "1": 0.72,
+        "2": 0.72
+      },
+      "ssr_mean_iou": 0.6318920031959242,
+      "rsr_mean": 0.7266666666666666,
+      "rsr_std": 0.009428090415820642,
+      "rsr_pooled": 0.7266666666666667
+    },
+    {
+      "testcase": "05_medium_unambiguous",
+      "difficulty": "Medium",
+      "ambiguous": false,
+      "num_scenes": 50,
+      "num_annotation_runs": 150,
+      "split_rsr": {
+        "0": 0.66,
+        "1": 0.68,
+        "2": 0.7
+      },
+      "ssr_mean_iou": 0.6891166389306118,
+      "rsr_mean": 0.68,
+      "rsr_std": 0.01632993161855449,
+      "rsr_pooled": 0.68
+    },
+    {
+      "testcase": "06_hard_unambiguous",
+      "difficulty": "Hard",
+      "ambiguous": false,
+      "num_scenes": 50,
+      "num_annotation_runs": 150,
+      "split_rsr": {
+        "0": 0.72,
+        "1": 0.7,
+        "2": 0.66
+      },
+      "ssr_mean_iou": 0.6677009522894033,
+      "rsr_mean": 0.6933333333333334,
+      "rsr_std": 0.024944382578492914,
+      "rsr_pooled": 0.6933333333333334
+    }
+  ]
+}

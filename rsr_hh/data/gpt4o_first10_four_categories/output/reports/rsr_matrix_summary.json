@@ -1,0 +1,323 @@
+{
+  "metric": "RSR",
+  "models": [
+    "gpt-4o"
+  ],
+  "algorithms": [
+    "information_gain_original",
+    "information_gain_graspability",
+    "theory_original",
+    "theory_graspability"
+  ],
+  "same_input_manifest_for_all_configurations": "/home/admin128/hanhuang/SmartGrasp/rsr/data/gpt4o_first10_four_categories/input/manifest.json",
+  "num_configurations": 4,
+  "detail_csv": "/home/admin128/hanhuang/SmartGrasp/rsr/data/gpt4o_first10_four_categories/output/reports/rsr_summary_table.csv",
+  "aggregate_csv": "/home/admin128/hanhuang/SmartGrasp/rsr/data/gpt4o_first10_four_categories/output/reports/rsr_aggregate_summary.csv",
+  "timeout_csv": "/home/admin128/hanhuang/SmartGrasp/rsr/data/gpt4o_first10_four_categories/output/reports/timeout_failures.csv",
+  "configurations": [
+    {
+      "metric": "RSR",
+      "model": "gpt-4o",
+      "algorithm": "information_gain_original",
+      "ranking_score": "ig",
+      "prior_prompt": "original",
+      "definition": "predicted first-grasp object maps to one of groundTruthObjIds",
+      "failed_or_missing_runs_count_as_zero": true,
+      "num_rows": 600,
+      "categories": [
+        {
+          "testcase": "01_hard_ambiguous",
+          "difficulty": "Hard",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.64,
+            "2": 0.62
+          },
+          "ssr_mean_iou": 0.5650061091147427,
+          "rsr_mean": 0.64,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.64
+        },
+        {
+          "testcase": "02_medium_ambiguous",
+          "difficulty": "Medium",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.78,
+            "1": 0.74,
+            "2": 0.76
+          },
+          "ssr_mean_iou": 0.6608335774122401,
+          "rsr_mean": 0.7600000000000001,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.76
+        },
+        {
+          "testcase": "05_medium_unambiguous",
+          "difficulty": "Medium",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.68,
+            "2": 0.7
+          },
+          "ssr_mean_iou": 0.6736607040544444,
+          "rsr_mean": 0.68,
+          "rsr_std": 0.01632993161855449,
+          "rsr_pooled": 0.68
+        },
+        {
+          "testcase": "06_hard_unambiguous",
+          "difficulty": "Hard",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.64,
+            "1": 0.64,
+            "2": 0.6
+          },
+          "ssr_mean_iou": 0.6015246804817752,
+          "rsr_mean": 0.6266666666666666,
+          "rsr_std": 0.018856180831641284,
+          "rsr_pooled": 0.6266666666666667
+        }
+      ]
+    },
+    {
+      "metric": "RSR",
+      "model": "gpt-4o",
+      "algorithm": "information_gain_graspability",
+      "ranking_score": "ig_graspability",
+      "prior_prompt": "graspability",
+      "definition": "predicted first-grasp object maps to one of groundTruthObjIds",
+      "failed_or_missing_runs_count_as_zero": true,
+      "num_rows": 600,
+      "categories": [
+        {
+          "testcase": "01_hard_ambiguous",
+          "difficulty": "Hard",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.68,
+            "1": 0.64,
+            "2": 0.64
+          },
+          "ssr_mean_iou": 0.5904807631496528,
+          "rsr_mean": 0.6533333333333333,
+          "rsr_std": 0.018856180831641284,
+          "rsr_pooled": 0.6533333333333333
+        },
+        {
+          "testcase": "02_medium_ambiguous",
+          "difficulty": "Medium",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.74,
+            "1": 0.72,
+            "2": 0.72
+          },
+          "ssr_mean_iou": 0.6318920031959242,
+          "rsr_mean": 0.7266666666666666,
+          "rsr_std": 0.009428090415820642,
+          "rsr_pooled": 0.7266666666666667
+        },
+        {
+          "testcase": "05_medium_unambiguous",
+          "difficulty": "Medium",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.68,
+            "2": 0.7
+          },
+          "ssr_mean_iou": 0.6891166389306118,
+          "rsr_mean": 0.68,
+          "rsr_std": 0.01632993161855449,
+          "rsr_pooled": 0.68
+        },
+        {
+          "testcase": "06_hard_unambiguous",
+          "difficulty": "Hard",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.72,
+            "1": 0.7,
+            "2": 0.66
+          },
+          "ssr_mean_iou": 0.6677009522894033,
+          "rsr_mean": 0.6933333333333334,
+          "rsr_std": 0.024944382578492914,
+          "rsr_pooled": 0.6933333333333334
+        }
+      ]
+    },
+    {
+      "metric": "RSR",
+      "model": "gpt-4o",
+      "algorithm": "theory_original",
+      "ranking_score": "theory",
+      "prior_prompt": "original",
+      "definition": "predicted first-grasp object maps to one of groundTruthObjIds",
+      "failed_or_missing_runs_count_as_zero": true,
+      "num_rows": 600,
+      "categories": [
+        {
+          "testcase": "01_hard_ambiguous",
+          "difficulty": "Hard",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.64,
+            "2": 0.62
+          },
+          "ssr_mean_iou": 0.5650485351990499,
+          "rsr_mean": 0.64,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.64
+        },
+        {
+          "testcase": "02_medium_ambiguous",
+          "difficulty": "Medium",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.78,
+            "1": 0.74,
+            "2": 0.76
+          },
+          "ssr_mean_iou": 0.6611718736833495,
+          "rsr_mean": 0.7600000000000001,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.76
+        },
+        {
+          "testcase": "05_medium_unambiguous",
+          "difficulty": "Medium",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.66,
+            "2": 0.68
+          },
+          "ssr_mean_iou": 0.6705851090303523,
+          "rsr_mean": 0.6666666666666666,
+          "rsr_std": 0.009428090415820642,
+          "rsr_pooled": 0.6666666666666666
+        },
+        {
+          "testcase": "06_hard_unambiguous",
+          "difficulty": "Hard",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.68,
+            "1": 0.68,
+            "2": 0.64
+          },
+          "ssr_mean_iou": 0.6363077716862099,
+          "rsr_mean": 0.6666666666666666,
+          "rsr_std": 0.018856180831641284,
+          "rsr_pooled": 0.6666666666666666
+        }
+      ]
+    },
+    {
+      "metric": "RSR",
+      "model": "gpt-4o",
+      "algorithm": "theory_graspability",
+      "ranking_score": "theory",
+      "prior_prompt": "graspability",
+      "definition": "predicted first-grasp object maps to one of groundTruthObjIds",
+      "failed_or_missing_runs_count_as_zero": true,
+      "num_rows": 600,
+      "categories": [
+        {
+          "testcase": "01_hard_ambiguous",
+          "difficulty": "Hard",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.66,
+            "1": 0.64,
+            "2": 0.62
+          },
+          "ssr_mean_iou": 0.5635836278087945,
+          "rsr_mean": 0.64,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.64
+        },
+        {
+          "testcase": "02_medium_ambiguous",
+          "difficulty": "Medium",
+          "ambiguous": true,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.78,
+            "1": 0.76,
+            "2": 0.74
+          },
+          "ssr_mean_iou": 0.6634333434205684,
+          "rsr_mean": 0.7600000000000001,
+          "rsr_std": 0.016329931618554536,
+          "rsr_pooled": 0.76
+        },
+        {
+          "testcase": "05_medium_unambiguous",
+          "difficulty": "Medium",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.68,
+            "1": 0.7,
+            "2": 0.7
+          },
+          "ssr_mean_iou": 0.6966634390767039,
+          "rsr_mean": 0.6933333333333334,
+          "rsr_std": 0.00942809041582059,
+          "rsr_pooled": 0.6933333333333334
+        },
+        {
+          "testcase": "06_hard_unambiguous",
+          "difficulty": "Hard",
+          "ambiguous": false,
+          "num_scenes": 50,
+          "num_annotation_runs": 150,
+          "split_rsr": {
+            "0": 0.7,
+            "1": 0.68,
+            "2": 0.66
+          },
+          "ssr_mean_iou": 0.6495297048137653,
+          "rsr_mean": 0.68,
+          "rsr_std": 0.01632993161855449,
+          "rsr_pooled": 0.68
+        }
+      ]
+    }
+  ]
+}

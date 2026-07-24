@@ -57,7 +57,13 @@ results.csv
 branch_results.json
 reason.txt
 /rsr/data
-/rsr_hh/data/
+# Keep HH experiment data local, except the compact aggregate reports that are
+# intentionally versioned for comparison and publication.
+/rsr_hh/data/**
+!/rsr_hh/data/gpt4o_first10_four_categories/
+!/rsr_hh/data/gpt4o_first10_four_categories/output/
+!/rsr_hh/data/gpt4o_first10_four_categories/output/reports/
+!/rsr_hh/data/gpt4o_first10_four_categories/output/reports/**
 /rsr_hh/results*/
 /ssr_hh/results*/
 /ssr_hh/plots/
