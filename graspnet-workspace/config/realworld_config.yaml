@@ -23,14 +23,14 @@ calibration:
     - [0.0, -1.0, 0.0, 67.0]
     - [0.0, 0.0, -1.0, 0.0]
     - [0.0, 0.0, 0.0, 1.0]
-  tcp_target_translation_offset_mm: [-23.0, -30.0, 10.0]
+  tcp_target_translation_offset_mm: [-23.0, -27.0, 10.0]
 
 robot:
   jaka_ip: 192.168.1.199
   ready_pose: [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0]
   capture_joint_pose_deg: [0.0, 90.0, 45.0, 135.0, 270.0, 72.0]
   place_target_joint_pose_deg: [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0]
-  place_release_lower_mm: 50.0
+  place_release_lower_mm: 100.0
   joint_velocity_rad_s: 0.5
 
 gripper:

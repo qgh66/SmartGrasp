@@ -45,6 +45,7 @@ from simulation.candidate_visualizer import export_candidate_html, export_candid
 from utils.camera import build_grasp_point_cloud, capture_realsense, load_captured_frame  # noqa: E402
 from utils.data_loader import json_safe as _json_safe, sample_points  # noqa: E402
 from utils.grasp_processing import (  # noqa: E402
+    build_pca_fallback_grasp,
     compute_robot_targets,
     filter_grasp_center_outliers,
     filter_grasp_centers_in_target_mask,
@@ -204,10 +205,14 @@ def save_outputs(
     ply_cloud: np.ndarray | None = None,
     ply_cloud_rgb: np.ndarray | None = None,
     obstacle_cloud: np.ndarray | None = None,
+    candidate_source: str = "graspnet",
+    pca_fallback_info: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     top_count = min(top_k, len(grasps))
     top_grasps = grasps[:top_count]
     records = [grasp_to_record(top_grasps[index], index) for index in range(top_count)]
+    for record in records:
+        record["candidate_source"] = candidate_source
     target_mask = None if point_cloud_info is None else point_cloud_info.get("object_mask_array")
     intrinsics = None if point_cloud_info is None else point_cloud_info.get("camera_intrinsics")
     records, target_mask_filter_info = filter_grasp_centers_in_target_mask(records, target_mask, intrinsics, args)
@@ -281,6 +286,8 @@ def save_outputs(
     payload = {
         "frame": "camera",
         "top_k": top_count,
+        "candidate_source": candidate_source,
+        "pca_fallback": pca_fallback_info,
         "num_candidates_after_filter": len(records),
         "grasp_candidates_ply": str((output_dir / "grasp_candidates.ply").resolve()),
         "target_mask_center_filter": target_mask_filter_info,
@@ -554,6 +561,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ckpt", default=str(DEFAULT_CHECKPOINT), help="GraspNet checkpoint path.")
     parser.add_argument("--device", default="cuda:0", help="Inference device, e.g. cuda:0 or cpu.")
     parser.add_argument("--num-points", type=int, default=20000, help="Point count sampled for GraspNet.")
+    parser.add_argument(
+        "--if-pca",
+        "--if_pca",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "If GraspNet returns zero raw candidates, generate one fallback grasp by applying PCA "
+            "to the SAM-masked object point cloud. Disabled by default."
+        ),
+    )
     parser.add_argument("--top-k", type=int, default=50, help="Number of candidates to save and visualize.")
     parser.add_argument("--viz-max-points", type=int, default=18000, help="Maximum points rendered in grasp_candidates.png.")
     parser.add_argument("--plotly-max-points", type=int, default=30000, help="Maximum points rendered in grasp_candidates_3d.html.")
@@ -649,7 +666,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-target-tcp-z-mm",
         type=float,
-        default=175.0,
+        default=165.0,
         help="Minimum allowed final TCP z in JAKA base frame, in millimeters.",
     )
     parser.add_argument(
@@ -883,6 +900,14 @@ def run_one_cycle(
         np.save(output_dir / "point_cloud_camera_rgb.npy", full_cloud_rgb.astype(np.uint8, copy=False))
 
         grasps = run_graspnet(cloud_sampled, checkpoint_path, args.device)
+        candidate_source = "graspnet"
+        pca_fallback_info = None
+        if len(grasps) == 0 and args.if_pca:
+            object_cloud_path = point_cloud_info.get("object_point_cloud_path")
+            if object_cloud_path is None:
+                raise ValueError("--if-pca requires --use-sam-mask and its masked object point cloud")
+            grasps, pca_fallback_info = build_pca_fallback_grasp(np.load(object_cloud_path))
+            candidate_source = "pca_fallback"
         records = save_outputs(
             output_dir,
             grasp_cloud,
@@ -895,6 +920,8 @@ def run_one_cycle(
             ply_cloud=full_cloud,
             ply_cloud_rgb=full_cloud_rgb,
             obstacle_cloud=obstacle_cloud,
+            candidate_source=candidate_source,
+            pca_fallback_info=pca_fallback_info,
         )
 
         summary = {
@@ -919,6 +946,8 @@ def run_one_cycle(
             "grasp_candidates_3d_html": str(output_dir / "grasp_candidates_3d.html"),
             "grasp_candidates_json": str(output_dir / "grasp_candidates.json"),
             "num_candidates": len(records),
+            "candidate_source": candidate_source,
+            "pca_fallback_used": candidate_source == "pca_fallback",
             "calibration_mode": args.calibration_mode,
             "camera_coordinates_dir": str(camera_coordinates_dir),
             "hand_eye_calibration": str(Path(args.hand_eye_calibration).expanduser().resolve()),

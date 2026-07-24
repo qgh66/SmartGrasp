@@ -1,2 +1,0 @@
-[console_scripts]
-molmo-annotate = molmo_annotator.cli:main

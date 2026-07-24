@@ -1,17 +1,20 @@
 # SmartGrasp Grasp Execution Module
 
-这个分支保存了当前的 milestone 版本：基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及用于查看结果和播放抓取动画的 **Dash GUI**。
+这个分支保存了当前的 GraspNet 抓取模块：包括基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及基于 **JAKA Zu3 + Robotiq-85 + RealSense** 的真实抓取流程。仿真结果可通过 Dash GUI 查看，真实抓取结果可通过 PNG、HTML、PLY 和 JSON 工件检查。
 
 当前抓取执行采用 **JAKA Zu3 机械臂 + Robotiq-85 二指夹爪**，用 PyBullet IK 驱动机械臂、Robotiq-85 欠驱动夹爪做**真实摩擦夹持**（不再用固定约束“吸附”物体），整体流程对齐参考实现 `environment_sim.py` 的 `grasp()` 原语：张开 → 移到目标上方 → 直线下插 → 闭合 → 直线抬回 → 按夹爪关节角判定是否夹到实体。当前只抓**单个物体**，不含 VLM / LangSAM。
 
-当前重点代码在 `graspnet-workspace/` 下面。`perception/` 是 SmartGrasp 原有感知模块，本 README 主要说明 grasp execution 这部分如何运行。
+当前重点代码在 `graspnet-workspace/` 下面。`perception/` 是 SmartGrasp 原有感知模块，本 README 主要说明 GraspNet 仿真、真实抓取和相关工具。
 
 ## 目录结构
 
 ```text
-SG_graspmodule/
-├── perception/                 # SmartGrasp 原有感知 pipeline
-├── graspnet-workspace/         # GraspNet + PyBullet 仿真和 GUI
+SmartGrasp/
+├── perception/                 # 感知 pipeline（Molmo/SAM 等）
+├── execution/                  # 执行层入口和请求处理
+├── graspnet-workspace/         # GraspNet 仿真、真实抓取、标定和可视化
+├── result/                     # 当前真实抓取输出（候选 JSON/PNG/HTML/PLY）
+├── realworld_data/             # RealSense 多步骤采集数据
 ├── smartgrasp.full.yml         # conda 环境导出文件
 └── smartgrasp.full.no_pip.yml
 ```
@@ -20,19 +23,42 @@ SG_graspmodule/
 
 ```text
 graspnet-workspace/
-├── scripts/demo_closed_loop.py # 主入口：建场景 -> 拍 RGB-D -> 裁剪点云 -> GraspNet -> JAKA 仿真评估
+├── scripts/
+│   ├── demo_closed_loop.py     # 闭环仿真主入口
+│   ├── realworld_grasp.py      # 真实 RGB-D -> GraspNet -> 可选 JAKA 执行
+│   ├── demo_inference.py       # 单次 GraspNet 推理示例
+│   ├── test_scripted_grasp.py  # PyBullet 脚本抓取测试
+│   ├── collect_handeye_chessboard.py # 手眼标定数据采集
+│   ├── solve_handeye_chessboard.py   # 手眼标定求解
+│   ├── check_chessboard_height.py    # 检查棋盘高度
+│   ├── print_jaka_tcp_pose.py        # 读取 JAKA TCP 位姿
+│   └── jaka_motion_worker.py          # JAKA/夹爪动作 worker
+├── capture_realsense.py         # 单帧 RealSense RGB-D 采集
+├── capture_realsense_scenes.py  # 多步骤场景采集
+├── visualize_ply.py             # Open3D 查看 grasp_candidates.ply
 ├── simulation/
-│   ├── scene.py                # PyBullet 场景：桌面、加载 .obj（支持缩放）
-│   ├── camera.py               # 虚拟 RGB-D 相机（1280x720）+ 点云反投影
-│   ├── robot_gripper.py        # JAKA Zu3 + Robotiq-85 适配器（IK、欠驱动夹持、is_gripper_closed）
-│   ├── evaluator.py            # 抓取执行与物理评估（approach/close/lift，逐帧轨迹）
-│   └── planning/moveit_bridge.py # 可选的 ROS2/MoveIt 规划桥接（默认不启用）
-├── gui/app.py                  # Dash GUI，读取结果文件并展示动画
-├── gui/README.md               # GUI 快速启动说明
-├── models/                     # GraspNet 网络
-├── utils/                      # 点云、碰撞检测、数据处理工具
-├── pointnet2/, knn/            # CUDA extension 源码
-└── graspnet_api/               # GraspGroup 等接口
+│   ├── run_sim.py               # 直接运行 GraspNet + PyBullet 仿真
+│   ├── scene.py                 # PyBullet 场景和物体 mesh
+│   ├── camera.py                # 虚拟 RGB-D 相机和点云反投影
+│   ├── robot_gripper.py         # JAKA Zu3 + Robotiq-85 适配器
+│   ├── evaluator.py             # 抓取执行与物理评估
+│   ├── candidate_visualizer.py  # PNG/HTML/PLY 候选可视化导出
+│   └── planning/moveit_bridge.py # 可选 ROS2/MoveIt 规划桥接
+├── config/
+│   ├── realworld_config.yaml    # 真实抓取、相机和机器人默认配置
+│   └── industrial_scene.json    # 工业场景配置
+├── calibration/
+│   └── hand_eye_tcp_camera.json # 当前手眼标定结果
+├── assets/                      # 物体和机器人 mesh/URDF
+├── checkpoints/                 # GraspNet checkpoint
+├── log/                         # 真实抓取试验日志
+├── results/                     # 仿真结果和 GUI 数据
+├── models/, pointnet2/, knn/    # GraspNet 网络及 CUDA/PyTorch 扩展
+├── graspnet_api/                # GraspGroup 等接口
+├── utils/                       # 点云、标定、夹爪和运动工具
+├── gui/app.py                   # Dash GUI
+├── ros2_moveit/                 # JAKA Zu3 MoveIt 规划脚本
+└── vendor/                      # Robotiq/串口等 vendored 依赖
 ```
 
 ## 环境准备
@@ -41,7 +67,7 @@ graspnet-workspace/
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 ```
 
 检查 GUI 和仿真依赖是否可导入：
@@ -60,22 +86,21 @@ python -c "import pybullet, dash, plotly, trimesh, scipy; print('deps OK')"
 
 
 ```text
-/home/qiuguanhe/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
+/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
 ```
 
 2. 一个待抓取物体 mesh，例如：
 
 ```text
-/home/qiuguanhe/SmartGrasp/assert/workspace/data/banana.obj
+graspnet-workspace/assets/objects/industrial_tools/two_color_hammer/textured.obj
 ```
 
 运行时也可以通过 `--obj` 指定其他 `.obj` 文件。
 
-3. JAKA Zu3 与 Robotiq-85 的 URDF（已随仓库 `assert/` 提供，无需另外准备）：
+3. JAKA Zu3 与 Robotiq-85 的 URDF（已随仓库 `graspnet-workspace/assets/robots/` 提供，无需另外准备）：
 
 ```text
-assert/jaka_zu3/jaka_zu3_pybullet.urdf
-assert/ur5e/gripper/robotiq_2f_85.urdf
+graspnet-workspace/assets/robots/jaka_zu3/gazebo_jaka_zu3_robotiq.urdf
 ```
 
 > 注意 mesh 的单位：仿真按米制处理。图形学单位的 mesh（如 `duck.obj` 等）需要用
@@ -84,27 +109,31 @@ assert/ur5e/gripper/robotiq_2f_85.urdf
 
 ## 运行闭环仿真
 
-推荐从仓库根目录通过 SLURM 脚本运行。脚本会进入 `graspnet-workspace`、激活环境、设置依赖路径，并把输出统一写到 `graspnet-workspace/results/`：
+当前直接从 `graspnet-workspace` 运行闭环仿真入口，输出写到 `results/`：
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 
-GRASP_OBJ_PATH=/home/qiuguanhe/SmartGrasp/assert/unseen_objects/gelatin_box/textured.obj \
-GRASP_TOP_K=5 \
-sbatch run_grasp_simulation.sh
+python scripts/demo_closed_loop.py \
+  --obj assets/objects/industrial_tools/two_color_hammer/textured.obj \
+  --ckpt checkpoints/checkpoint-rs.tar \
+  --top_k 5 \
+  --device cuda:0 \
+  --output results/grasp_simulation.json
 ```
 
-如果要抓一个图形学单位的立体物体（例：duck 缩到约 6 cm），用 `--scale` 透传给主入口：
+如果需要调整物体 mesh 尺寸，可用 `--scale` 透传给主入口：
 
 ```bash
-sbatch run_grasp_simulation.sh \
-  --obj /home/qiuguanhe/SmartGrasp/assert/workspace/data/duck.obj \
+python scripts/demo_closed_loop.py \
+  --obj assets/objects/industrial_tools/two_color_hammer/textured.obj \
+  --ckpt checkpoints/checkpoint-rs.tar \
   --top_k 5 \
-  --scale 0.04
+  --scale 1.0
 ```
 
-如果只是调试流程、没有可用 GPU，可以通过 `GRASP_DEVICE=cpu` 跑小规模测试（较慢）。默认不录制 MP4；需要视频时显式加 `GRASP_RECORD_VIDEO=1`。
+如果只是调试流程、没有可用 GPU，可以传入 `--device cpu` 跑小规模测试（较慢）。除非明确需要调度提交，否则不默认使用 SLURM。
 
 主要命令行参数：
 
@@ -220,7 +249,7 @@ results_viz_data.pkl
 
 ```bash
 conda activate smartgrasp
-cd /home/qiuguanhe/SmartGrasp/graspnet-workspace
+cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 
 python gui/app.py \
   --host 0.0.0.0 \
@@ -473,123 +502,109 @@ T_tcp_camera
 
 同时脚本会输出棋盘在机器人 base 下的一致性验证指标。`base_board_translation_error_mean_mm` 建议尽量小于 5-10 mm；如果超过 20 mm，优先检查棋盘内角点参数、方格边长、TCP 定义、采集时相机是否松动，以及是否采集了足够多旋转姿态。
 
-### 启动真实抓取
+## 实机运行
 
-第一次试抓不要直接执行机械臂，先只拍照、生成候选抓取，并确认候选落在目标物体上：
+真实抓取入口是 `graspnet-workspace/scripts/realworld_grasp.py`。运行前确认机器人工作区无人、急停可用、JAKA 已上电解锁、Robotiq 串口可访问，并检查代理状态。所有 Python 命令都在 `smartgrasp` 环境中运行；JAKA 控制默认通过独立的 `smartgrasp310` Python 子进程完成。
 
 ```bash
 conda activate smartgrasp
 cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
+proxy_status
+```
 
+三个常用模式已有独立脚本，脚本内部会调用仓库根目录的 `run_realworld_grasp.sh`，自动处理 conda、代理和 Python 路径：
+
+| 模式 | 脚本 | 默认行为 |
+|------|------|----------|
+| 拍照模式 | `scripts/run_realworld_capture.sh` | 回拍照位、打开夹爪、采集并生成候选，不抓取 |
+| 单次抓取 | `scripts/run_realworld_single_grasp.sh` | 新采集并完成一次抓取、放置 |
+| 连续抓取 | `scripts/run_realworld_continuous_grasp.sh` | 持续执行拍照、抓取、放置，直到中断 |
+
+直接运行：
+
+```bash
+bash scripts/run_realworld_capture.sh
+bash scripts/run_realworld_single_grasp.sh
+bash scripts/run_realworld_continuous_grasp.sh
+```
+
+可通过环境变量覆盖常用参数，例如切换严格 mask 模式、候选编号和运动速度：
+
+```bash
+GRASP_INPUT_MODE=mask bash scripts/run_realworld_capture.sh
+CANDIDATE_INDEX=1 VELOCITY=10 ACCELERATION=10 bash scripts/run_realworld_single_grasp.sh
+GRASP_INPUT_MODE=mask VELOCITY=30 ACCELERATION=15 bash scripts/run_realworld_continuous_grasp.sh
+```
+
+三个脚本还接受额外命令行参数，并将其追加传给 `realworld_grasp.py`。连续脚本默认 `NUM_CYCLES=0`，即持续运行；例如只连续运行 3 次：
+
+```bash
+NUM_CYCLES=3 bash scripts/run_realworld_continuous_grasp.sh
+```
+
+### 1. 新采集并生成候选，不执行抓取
+
+这是第一次试抓的推荐入口。该命令会先将机械臂移动到拍照关节位、打开夹爪，再采集 RGB-D、交互选择 SAM 目标并生成候选，但不会执行候选抓取。
+
+```bash
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
-  --top-k 20 \
+  --top-k 100 \
   --grasp-input-mode bbox \
-  --trial-name ring_horizontal_01 \
-  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
-  --velocity 10 \
-  --acceleration 10
-```
-
-`--grasp-input-mode` 控制送入 GraspNet 的点云区域：
-
-- `bbox`（默认）：使用 SAM 掩码外接矩形内的全部有效深度点。`--grasp-crop-margin-px` 和 `--grasp-crop-margin-ratio` 只影响该模式。
-- `mask`：仅使用 SAM 掩码内部的有效深度点，适合外接矩形中混入大量桌面或相邻物体的场景。
-
-严格按 SAM 掩码生成 GraspNet 输入时，使用以下完整命令：
-
-```bash
-conda activate smartgrasp
-cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
-
-MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
-  --calibration-mode hand_eye \
-  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
-  --top-k 20 \
-  --grasp-input-mode mask \
-  --trial-name ring_horizontal_mask_01 \
-  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
-  --velocity 10 \
-  --acceleration 10
-```
-
-如果指定 `--no-use-sam-mask`，程序会输入完整深度点云，忽略 `--grasp-input-mode`。
-
-生成后先检查：
-
-```text
-/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.png
-/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates_3d.html
-/home/admin128/qiuguanhe/SmartGrasp/result/grasp_candidates.json
-```
-
-点云调试文件的含义如下：
-
-- `point_cloud_object_camera.npy`：始终为严格 SAM 掩码内的目标点云。
-- `point_cloud_grasp_input_camera.npy`：本轮实际送入 GraspNet 的点云；内容由 `--grasp-input-mode` 决定。
-- `grasp_crop_overlay.png`：同时显示 SAM 掩码和矩形裁剪范围，两种输入模式都会生成。
-
-`grasp_candidates.json` 会记录 `grasp_input_mode`、`num_object_points`、`num_grasp_crop_points` 和 `num_grasp_input_points`，用于确认本轮实际输入模式及各类点数。
-
-拍照并成功生成目标掩码后，脚本会默认保存一份轻量试验日志到：
-
-```text
-graspnet-workspace/log/single_object_grasp/YYYYMMDD_HHMMSS[_trial_name]/
-```
-
-其中包含 `rgb.png`、`depth.raw`、`camera_meta.json`、`grasp_candidates.json`、`grasp_candidates.png`、`scene_grasps.ply`、`mask_overlay.png`、`run_info.json` 和可手动填写成功/失败的 `manual_result.json`。
-
-如果上一把急停后机器人未解锁，导致本次在回默认拍照位姿或打开夹爪阶段失败，本次不会创建试验日志；只有完成拍照并成功生成掩码后，才视为一次需要记录的试验。
-
-所有试验日志都固定放在 `graspnet-workspace/log/` 下。如果希望当前单物体试验日志放到 `graspnet-workspace/log/single_object/` 下，运行时指定：
-
-```bash
---trial-log-subdir single_object
-```
-
-例如：
-
-```bash
-MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
-  --calibration-mode hand_eye \
-  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
-  --top-k 20 \
   --trial-log-subdir single_object \
-  --trial-name ring_horizontal_01 \
+  --trial-name capture_only \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 10 \
   --acceleration 10
 ```
 
-如果本次不想保存试验日志，添加：
+若只需要严格 SAM 掩码内的目标点云，将 `--grasp-input-mode bbox` 改成：
 
 ```bash
---no-trial-log
+--grasp-input-mode mask
 ```
 
-确认 `grasp_candidates.json` 中：
+`bbox` 会使用 SAM 掩码外接矩形内的有效深度点，`mask` 只使用掩码内部的点。`--no-use-sam-mask` 会跳过 SAM，并让 GraspNet 使用完整有效深度点云。
 
-```text
-camera_to_robot_chain = T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp
-```
+### 2. 复用现有 RGB-D，不移动机器人
 
-如果候选姿态合理，再复用同一帧 RGB-D 和同一份 `capture_tcp_pose.json` 低速执行：
+`--reuse-capture` 读取 `result/rgb.png`、`depth.raw`、`camera_meta.json` 和 `capture_tcp_pose.json`，不重新采集，也不会在未指定 `--execute` 时连接或移动 JAKA：
 
 ```bash
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --reuse-capture \
-  --camera-serial 243122072659 \
+  --grasp-input-mode bbox \
+  --top-k 100 \
   --trial-log-subdir single_object \
-  --trial-name ring_horizontal_01_exec \
+  --trial-name reuse_capture
+```
+
+`capture_tcp_pose.json` 必须与复用的 RGB-D 来自同一拍照时刻。也可以用 `--capture-tcp-pose X Y Z RX RY RZ` 显式提供拍照时 TCP 位姿，其中位置单位为 mm、姿态单位为 rad。
+
+### 3. 低速执行一次抓取
+
+确认候选、坐标变换和工作空间安全后，使用单次抓取脚本。它会重新回到拍照位、采集当前 RGB-D、运行推理和过滤，然后执行本轮结果中的第 0 个候选：
+
+```bash
+bash scripts/run_realworld_single_grasp.sh
+```
+
+对应的完整命令为：
+
+```bash
+MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
+  --calibration-mode hand_eye \
+  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
+  --camera-serial 243122072659 \
+  --grasp-input-mode bbox \
+  --top-k 100 \
+  --trial-log-subdir single_object \
+  --trial-name grasp_execute_once \
   --execute \
   --candidate-index 0 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
@@ -600,78 +615,24 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --lift-mm 80
 ```
 
-如果第 0 个候选不合理，先在 `grasp_candidates.json` 里选更合适的编号，再修改：
+`--candidate-index` 指向当前这次运行过滤、重排后的候选。若通过第 2 节的 `--reuse-capture` 调试后直接执行，机械臂必须仍处于该帧对应的拍照位姿；复用输入仍会重新采样点云和运行 GraspNet，不保证同编号候选与上一次完全相同。
 
-```text
-  --candidate-index 0
-```
+实际执行顺序为：预抓取位姿 -> 抓取位姿 -> 闭合夹爪 -> 回拍照关节位 -> 到放置关节位 -> 沿机器人 base Z 向下 100 mm -> 打开夹爪 -> 回拍照关节位。
 
-hand-eye 模式会在拍照后记录当前 TCP 到 `result/capture_tcp_pose.json`，并用 `T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp` 生成每个候选的 `target_jaka_tcp_pose`。如果使用 `--reuse-capture`，必须保证 `result/capture_tcp_pose.json` 与这张 RGB-D 的拍照时刻一致，或显式传入 `--capture-tcp-pose X Y Z RX RY RZ`。
+### 4. 连续拍照、抓取和放置
 
-放置物体时，机械臂到达 `--place-target-joint-pose-deg` 指定的关节位姿后，会默认沿机器人 base 坐标系的 Z 轴向下移动 50 mm，再张开夹爪。可通过以下参数调整下移距离：
+`--loop` 等价于 `--num-cycles 0`，会一直循环直到 `Ctrl+C` 或急停。先完成单次低速验证后再使用。
 
-```bash
---place-release-lower-mm 50
-```
-
-设置为 `0` 可取消放置前下移。该动作是笛卡尔直线运动，使用 `--velocity` 和 `--acceleration` 的速度参数。
-
-## Git 备注
-
-这台共享服务器上 GitHub SSH 可能会被 `LD_LIBRARY_PATH` 里的 conda OpenSSL 影响。如果出现 OpenSSL mismatch，可以临时清掉这个环境变量：
+使用 bbox 点云：
 
 ```bash
-env -u LD_LIBRARY_PATH git status
-```
-
-如果需要从服务器 push 到 GitHub，可以使用当前验证过的 SSH 形式：
-
-```bash
-env -u LD_LIBRARY_PATH \
-  GIT_SSH_COMMAND='ssh -i /home/admin128/.ssh/beilei_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o KexAlgorithms=ecdh-sha2-nistp256' \
-  git push origin feat/GraspExecutionModule
-```
-##手操机械臂
-```bash
-/home/admin128/anaconda3/envs/smartgrasp310/bin/python plush5.py
-```
-
-MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
-  --execute \
-  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
-  --velocity 20 \
-  --acceleration 20 \
-  --candidate-index 0
-
-
-cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
-
-python scripts/print_jaka_tcp_pose.py \
-  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
-
-## 运动到默认位置,拍照但是不抓取:
-MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
-  --calibration-mode hand_eye \
-  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
-  --top-k 20 \
-  --trial-log-subdir single_object \
-  --trial-name capture_only \
-  --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
-  --velocity 10 \
-  --acceleration 10
-
-## 拍照,抓取(循环,bbox 模式):
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
   --camera-serial 243122072659 \
   --top-k 100 \
   --trial-log-subdir single_object \
-  --trial-name grasp_execute \
+  --trial-name grasp_execute_bbox \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
   --velocity 40 \
@@ -679,23 +640,124 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --loop \
   --execute \
   --grasp-input-mode bbox \
-  --grasp-crop-margin-px 0 \
+  --grasp-crop-margin-px 50 \
   --grasp-crop-margin-ratio 0 \
   --target-mask-center-tolerance-px 0
+```
 
-## 拍照,抓取(循环,严格 mask 模式):
-MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
-  --calibration-mode hand_eye \
-  --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
-  --top-k 100 \
-  --trial-log-subdir single_object \
-  --trial-name grasp_execute_mask \
+使用严格 mask 点云时，只需将末尾的输入参数替换为：
+
+```bash
+--grasp-input-mode mask
+```
+
+需要固定循环次数时，用 `--num-cycles N` 代替 `--loop`。
+
+### 5. 常用参数
+
+以下默认值来自 `config/realworld_config.yaml` 和 `scripts/realworld_grasp.py`；命令行参数会覆盖配置值。
+
+| 参数 | 当前默认值 | 作用 |
+|------|------------|------|
+| `--output-dir` | `../result` | 当前一轮的 RGB-D、点云和候选输出目录 |
+| `--camera-serial` | 后缀 `72508` | RealSense 序列号或唯一后缀 |
+| `--reuse-capture` | 关闭 | 复用输出目录中的现有 RGB-D |
+| `--warmup-frames` | `30` | 新采集前的相机预热帧数 |
+| `--device` | `cuda:0` | GraspNet 推理设备 |
+| `--num-points` | `20000` | 输入 GraspNet 的采样点数 |
+| `--top-k` | `50` | 保存和过滤的高分候选数量 |
+| `--if-pca` | 关闭 | GraspNet 原始候选为 0 时，用目标点云生成 PCA fallback |
+| `--grasp-input-mode` | `bbox` | SAM 启用时选择 `bbox` 或 `mask` 点云 |
+| `--grasp-crop-margin-px` | `50` | bbox 每侧固定扩张像素数 |
+| `--grasp-crop-margin-ratio` | `0.2` | bbox 按目标尺寸扩张的比例 |
+| `--target-mask-center-tolerance-px` | `25` | 候选中心允许落在 mask 外的像素距离 |
+| `--min-target-tcp-z-mm` | `165` | 最终物理 TCP 的最低允许 base Z |
+| `--filter-grasp-collisions` | 开启 | 启用 model-free 碰撞过滤 |
+| `--prefer-topdown-candidate` | 开启 | 在前 10 个候选中优先选择接近俯抓的姿态 |
+
+执行和运动参数：
+
+| 参数 | 当前默认值 | 作用 |
+|------|------------|------|
+| `--execute` | 关闭 | 执行当前轮选定候选；不加时只生成结果 |
+| `--candidate-index` | `0` | 执行过滤和重排后的候选编号 |
+| `--velocity` | `60` | JAKA 笛卡尔直线运动速度 |
+| `--acceleration` | `60` | JAKA 笛卡尔直线运动加速度 |
+| `--joint-velocity-rad-s` | `0.5` | 关节运动速度，单位 rad/s |
+| `--approach-offset-mm` | `80` | 抓取前沿 TCP 局部 Z 的退让距离 |
+| `--lift-mm` | `170` | 闭合后沿机器人 base Z 的抬升距离 |
+| `--capture-joint-pose-deg` | `[0, 90, 45, 135, 270, 72]` | 每轮拍照前的 JAKA 关节角 |
+| `--place-target-joint-pose-deg` | `[-75, 90, 45, 135, 270, 72]` | 抓取后的放置关节角 |
+| `--place-release-lower-mm` | `100` | 到达放置关节位后沿 base Z 向下距离 |
+| `--gripper-open-force` | `30` | Robotiq 打开力参数 |
+| `--gripper-close-force` | `200` | Robotiq 闭合力参数 |
+| `--num-cycles` | `1` | 完整流程循环次数，`0` 表示无限循环 |
+| `--loop` | 关闭 | 无限循环，等价于 `--num-cycles 0` |
+
+JAKA 和标定参数：
+
+| 参数 | 当前默认值 | 作用 |
+|------|------------|------|
+| `--calibration-mode` | `legacy_plate` | 坐标变换模式；当前实机命令显式使用 `hand_eye` |
+| `--hand-eye-calibration` | `calibration/hand_eye_tcp_camera.json` | 包含 `T_tcp_camera` 的标定文件 |
+| `--jaka-ip` | `192.168.1.199` | JAKA 控制器地址 |
+| `--robotiq-port` | `/dev/ttyUSB0` | Robotiq 串口 |
+| `--jaka-executor` | `subprocess` | 在独立 Python 进程中执行 JAKA 动作 |
+| `--persistent-jaka-worker` | 开启 | 循环时复用同一个 JAKA 子进程连接 |
+| `--jaka-python` | `smartgrasp310/bin/python` | 兼容 `jkrc` 的 Python 解释器 |
+| `--jkrc-dir` | `graspnet-workspace/jkrc` | `jkrc.so` 和 `libjakaAPI.so` 所在目录 |
+
+### 6. 输出、日志与候选检查
+
+当前输出默认写到 `/home/admin128/qiuguanhe/SmartGrasp/result/`。重点检查：
+
+```text
+rgb.png
+depth.raw
+camera_meta.json
+capture_tcp_pose.json
+mask.png
+grasp_crop_overlay.png
+point_cloud_object_camera.npy
+point_cloud_grasp_input_camera.npy
+grasp_candidates.json
+grasp_candidates.png
+grasp_candidates_3d.html
+grasp_candidates.ply
+```
+
+`grasp_candidates.json` 同时保存相机坐标系候选和转换后的 `target_jaka_tcp_pose`。手眼模式的坐标链为：
+
+```text
+T_base_grasp = T_base_tcp_capture @ inv(T_tcp_camera) @ T_camera_grasp
+```
+
+查看 PLY 点云和夹爪网格：
+
+```bash
+python visualize_ply.py ../result/grasp_candidates.ply
+```
+
+成功生成 SAM 掩码后，每轮试验默认记录到：
+
+```text
+graspnet-workspace/log/single_object_grasp/YYYYMMDD_HHMMSS[_trial_name]/
+```
+
+使用 `--trial-log-subdir single_object` 时写入 `log/single_object/`。`run_info.json` 记录命令、输出和执行状态，`manual_result.json` 用于人工标记成功或失败；`--no-trial-log` 可关闭试验日志。
+
+### 7. 实机辅助指令
+
+手动控制机械臂：
+
+```bash
+/home/admin128/anaconda3/envs/smartgrasp310/bin/python plush5.py
+```
+
+读取当前 JAKA TCP 位姿：
+
+```bash
+python scripts/print_jaka_tcp_pose.py \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
-  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc \
-  --velocity 40 \
-  --acceleration 20 \
-  --loop \
-  --execute \
-  --grasp-input-mode mask \
-  --target-mask-center-tolerance-px 0 
+  --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
+```

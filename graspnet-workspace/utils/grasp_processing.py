@@ -52,6 +52,82 @@ def run_graspnet(cloud_sampled: np.ndarray, checkpoint_path: Path, device_name: 
     return grasps
 
 
+def build_pca_fallback_grasp(object_cloud: np.ndarray) -> tuple[GraspGroup, dict[str, Any]]:
+    """Build one conservative parallel-jaw grasp from a masked object cloud."""
+    points = np.asarray(object_cloud, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"PCA fallback expects an Nx3 object cloud, got {points.shape}")
+    points = points[np.all(np.isfinite(points), axis=1)]
+    if len(points) < 30:
+        raise ValueError(f"PCA fallback needs at least 30 finite object points, got {len(points)}")
+
+    # Remove the farthest mask/depth outliers before estimating the object axes.
+    median = np.median(points, axis=0)
+    distances = np.linalg.norm(points - median, axis=1)
+    distance_limit = float(np.percentile(distances, 95.0))
+    inlier_points = points[distances <= distance_limit]
+    if len(inlier_points) < 30:
+        raise ValueError(f"PCA fallback retained too few inlier points: {len(inlier_points)}")
+
+    center = np.mean(inlier_points, axis=0)
+    covariance = np.cov(inlier_points - center, rowvar=False)
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    order = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+    if not np.all(np.isfinite(eigenvalues)) or eigenvalues[1] < 1e-10:
+        raise ValueError(f"PCA fallback object cloud is geometrically degenerate: {eigenvalues.tolist()}")
+
+    # GraspNet uses local X as approach and local Y as finger-opening direction.
+    # The least-variance PCA axis approximates the visible surface normal; the
+    # middle axis gives a short in-plane direction suitable for closing fingers.
+    approach_axis = eigenvectors[:, 2]
+    if float(np.dot(approach_axis, center)) < 0.0:
+        approach_axis = -approach_axis
+    opening_axis = eigenvectors[:, 1]
+    opening_axis -= np.dot(opening_axis, approach_axis) * approach_axis
+    opening_axis = normalized(opening_axis, "PCA opening axis")
+    closing_plane_axis = normalized(np.cross(approach_axis, opening_axis), "PCA closing-plane axis")
+    opening_axis = normalized(np.cross(closing_plane_axis, approach_axis), "orthogonal PCA opening axis")
+    rotation = np.column_stack([approach_axis, opening_axis, closing_plane_axis])
+
+    opening_coordinates = (inlier_points - center) @ opening_axis
+    lower, upper = np.percentile(opening_coordinates, [2.5, 97.5])
+    object_opening_extent = float(upper - lower)
+    grasp_width = float(np.clip(object_opening_extent * 1.15, 0.02, 0.10))
+    grasp_height = 0.02
+    grasp_depth = 0.02
+    grasp_array = np.concatenate(
+        [
+            np.array([0.0, grasp_width, grasp_height, grasp_depth], dtype=float),
+            rotation.reshape(-1),
+            center,
+            np.array([-1.0], dtype=float),
+        ]
+    ).reshape(1, 17)
+    info = {
+        "method": "masked_object_cloud_pca",
+        "num_input_points": int(len(points)),
+        "num_inlier_points": int(len(inlier_points)),
+        "outlier_distance_percentile": 95.0,
+        "eigenvalues_m2": eigenvalues.tolist(),
+        "center_camera_m": center.tolist(),
+        "approach_axis_camera": approach_axis.tolist(),
+        "opening_axis_camera": opening_axis.tolist(),
+        "object_opening_extent_m": object_opening_extent,
+        "grasp_width_m": grasp_width,
+        "grasp_height_m": grasp_height,
+        "grasp_depth_m": grasp_depth,
+    }
+    print(
+        "[pca-fallback] generated one grasp from the masked object cloud: "
+        f"points={len(inlier_points)} width={grasp_width:.4f}m "
+        f"center={np.round(center, 4).tolist()}",
+        flush=True,
+    )
+    return GraspGroup(grasp_array), info
+
+
 def grasp_to_record(grasp, index: int) -> dict[str, Any]:
     return {
         "grasp_index": index,
@@ -731,5 +807,3 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
             f"tcp target = [{tcp_mm[0]:.3f}, {tcp_mm[1]:.3f}, {tcp_mm[2]:.3f}] mm",
             flush=True,
         )
-
-
