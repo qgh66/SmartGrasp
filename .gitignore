@@ -27,3 +27,6 @@ results_phase3_*/
 results_viz_data.pkl
 simulation_demo.log
 *.pkl
+
+.codex/
+.agents/
