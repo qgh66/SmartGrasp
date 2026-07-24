@@ -47,6 +47,8 @@ def score_current_objects(
             objects=objects,
             labeled_rgb=labeled_rgb,
             parts_sheet_rgb=getattr(perception, "sam2_rgb_parts_sheet", None),
+            object_sheet_rgb=getattr(perception, "final_objects_sheet", None),
+            occlusion_graph_rgb=getattr(perception, "occlusion_graph_rgb", None),
         )
     except Exception as exc:
         return _fallback(mids, f"graspability VLM failed with {type(exc).__name__}")

@@ -24,7 +24,7 @@ if load_dotenv is not None:
     load_dotenv()
 
 RUN_INTENT_MODEL = "gpt-5.5"
-RUN_INTENT_BASE_URL = "https://www.highland-api.top/v1"
+RUN_INTENT_BASE_URL = "https://yunwu.ai/v1"
 RUN_INTENT_API_KEY_ENV = "OPENAI_API_KEY"
 RUN_INTENT_TIMEOUT = 300.0
 
@@ -87,7 +87,10 @@ def _resolve_from_summary(
             "openai_sam2_review_json": perception_summary.get("openai_sam2_review_json"),
             "molmo_sam2_review_json": perception_summary.get("molmo_sam2_review_json"),
         },
-        "perception_objects": perception_summary.get("molmo_points", []),
+        "perception_objects": (
+            perception_summary.get("object_points")
+            or perception_summary.get("molmo_points", [])
+        ),
         "intent": {
             "selected_perception_id": selected_id,
             "selected_object": result.target_object.to_json() if result.target_object else None,

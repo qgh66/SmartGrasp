@@ -34,6 +34,9 @@ decide which object is most relevant to "uncover" a partially visible target.
 
 You will see:
 - A labeled scene image where each object is outlined and tagged with its id.
+- An occlusion graph image. An arrow A -> B means Object A significantly
+  covers Object B; the arrow points to the covered object B. Do not reverse
+  the direction.
 - The target object id and label.
 - A list of candidate objects (object ids + labels). These are ALL ancestors
   of the target in the occlusion graph — they may be top-layer (directly
@@ -63,7 +66,9 @@ IMPORTANT RULES:
    occlusion chain, not whether they can be grasped first.
 4. Scores are INDEPENDENT; they do NOT need to sum to 1. Judge each candidate
    on its own.
-5. Consider BOTH the image (spatial layout) and the relations (graph chain).
+5. Consider the labeled scene image, the occlusion graph image, and the
+   textual relations together. When judging underneath/covering relations,
+   use the graph direction: the source covers the destination.
 
 Output strictly as JSON, no prose, no markdown:
 {"scores": {"<mid>": <0..1>, ...}, "reason": "<brief reason for the scores>"}
@@ -77,6 +82,20 @@ In addition to occlusion-chain importance, estimate:
    candidate object.
 2. A part-level graspability coefficient in [0, 1] for every listed SAM2
    part id of each candidate object.
+
+Additional visual references may be supplied:
+- An object-ID sheet. Each cell isolates one complete assembled object from
+  the scene and labels it as Object <mid>. Use it to understand the whole
+  object's identity, shape, extent, and which visible regions belong together.
+- A SAM2 part-ID sheet. Each cell isolates one visible part and labels it with
+  its SAM2 part id. Use the candidate list's part_ids to determine which parts
+  belong to each Object <mid>.
+
+Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
+covering hierarchy, surrounding clearance, and collision risk; use the
+object-ID sheet for whole-object appearance and extent; and use the part-ID
+sheet for exact grasp contacts. Object ids and
+SAM2 part ids are different namespaces and must not be confused.
 
 This is NOT a second semantic relevance score. It should measure whether a
 parallel gripper can safely and stably remove the candidate now.
@@ -113,6 +132,9 @@ find a HIDDEN target object that is fully invisible in the current scene.
 
 You will see:
 - A labeled scene image where each visible object is outlined and tagged with its id.
+- An occlusion graph image. An arrow A -> B means visible Object A
+  significantly covers Object B; the arrow points to the covered object B.
+  Use it to understand the visible covering hierarchy and never reverse it.
 - The target object label (the target itself is NOT in the image).
 - A list of candidate occluders (each could be hiding the target underneath/behind/inside).
 
@@ -150,6 +172,20 @@ In addition to hidden-target probability, estimate:
 2. A part-level graspability coefficient in [0, 1] for every listed SAM2
    part id of each candidate object.
 
+Additional visual references may be supplied:
+- An object-ID sheet. Each cell isolates one complete assembled object from
+  the scene and labels it as Object <mid>. Use it to understand the whole
+  object's identity, shape, extent, and which visible regions belong together.
+- A SAM2 part-ID sheet. Each cell isolates one visible part and labels it with
+  its SAM2 part id. Use the candidate list's part_ids to determine which parts
+  belong to each Object <mid>.
+
+Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
+covering hierarchy, surrounding clearance, and collision risk; use the
+object-ID sheet for whole-object appearance and extent; and use the part-ID
+sheet for exact grasp contacts. Object ids and
+SAM2 part ids are different namespaces and must not be confused.
+
 This is NOT another hidden-target probability. It should measure whether a
 parallel gripper can safely and stably remove the candidate now.
 
@@ -184,8 +220,19 @@ _SYSTEM_PROMPT_GRASPABILITY = """You are a robot graspability evaluator.
 
 You will see:
 - A labeled scene image where objects are outlined and tagged with ids.
+- An occlusion graph image. An arrow A -> B means Object A significantly
+  covers Object B; the arrow points to the covered object B.
+- Optionally, an object-ID sheet where each cell isolates one complete
+  assembled object and labels it as Object <mid>.
 - Optionally, a SAM2 part contact sheet showing candidate part ids.
 - A list of current object ids that the robot may grasp now.
+
+Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
+covering hierarchy, surrounding clearance, and collision risk. Use the
+object-ID sheet for whole-object identity, shape,
+extent, and grouping. Use the SAM2 part-ID sheet for exact visible grasp
+contacts, following the supplied mapping from Object <mid> to part ids.
+Object ids and SAM2 part ids are different namespaces and must not be confused.
 
 For EACH listed object, estimate:
 1. ONE integrated object-level graspability coefficient in [0, 1].
@@ -250,6 +297,8 @@ class VLMClient(ABC):
         occlusion_relations: list[tuple[int, int]],
         parts_sheet_rgb: np.ndarray | None = None,
         prompt_mode: str = "original",
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         """Return semantic scores and optional graspability per occluder."""
         ...
@@ -262,6 +311,8 @@ class VLMClient(ABC):
         labeled_rgb: np.ndarray,
         parts_sheet_rgb: np.ndarray | None = None,
         prompt_mode: str = "original",
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         """Return hidden-target probabilities and optional graspability."""
         ...
@@ -272,6 +323,8 @@ class VLMClient(ABC):
         objects: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
         parts_sheet_rgb: np.ndarray | None = None,
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         """Return object-level and part-level graspability for objects."""
         ...
@@ -321,6 +374,8 @@ class OpenAIVisionClient(VLMClient):
         occlusion_relations: list[tuple[int, int]],
         parts_sheet_rgb: np.ndarray | None = None,
         prompt_mode: str = "original",
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
         print(
@@ -340,6 +395,14 @@ class OpenAIVisionClient(VLMClient):
         content: list[dict[str, Any]] = [
             {"type": "text", "text": user_text},
             {
+                "type": "text",
+                "text": (
+                    "Labeled scene RGB: use the full spatial layout, object "
+                    "outlines, and numeric object IDs. These labels are object "
+                    "mids, not SAM2 part IDs."
+                ),
+            },
+            {
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{b64}",
@@ -347,16 +410,57 @@ class OpenAIVisionClient(VLMClient):
                 },
             },
         ]
+        if occlusion_graph_rgb is not None:
+            graph_b64 = _encode_image_b64(occlusion_graph_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Occlusion graph: an arrow A -> B means Object A "
+                            "significantly covers Object B; the arrow points "
+                            "to the covered object B."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{graph_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
+        if prompt_mode == "graspability" and object_sheet_rgb is not None:
+            object_b64 = _encode_image_b64(object_sheet_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": "Object-ID sheet: complete assembled objects labeled Object <mid>.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{object_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
         if prompt_mode == "graspability" and parts_sheet_rgb is not None:
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{parts_b64}",
-                        "detail": "high",
+            content.extend(
+                [
+                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{parts_b64}",
+                            "detail": "high",
+                        },
                     },
-                }
+                ]
             )
         max_retries = 5
         backoff = 2.0
@@ -429,6 +533,8 @@ class OpenAIVisionClient(VLMClient):
         labeled_rgb: np.ndarray,
         parts_sheet_rgb: np.ndarray | None = None,
         prompt_mode: str = "original",
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
         print(f"[VLM-INV] calling {self.model}, "
@@ -443,6 +549,14 @@ class OpenAIVisionClient(VLMClient):
         content: list[dict[str, Any]] = [
             {"type": "text", "text": user_text},
             {
+                "type": "text",
+                "text": (
+                    "Labeled scene RGB: use the full spatial layout, object "
+                    "outlines, and numeric object IDs. These labels are object "
+                    "mids, not SAM2 part IDs."
+                ),
+            },
+            {
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{b64}",
@@ -450,16 +564,57 @@ class OpenAIVisionClient(VLMClient):
                 },
             },
         ]
+        if occlusion_graph_rgb is not None:
+            graph_b64 = _encode_image_b64(occlusion_graph_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Occlusion graph: an arrow A -> B means Object A "
+                            "significantly covers Object B; the arrow points "
+                            "to the covered object B."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{graph_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
+        if prompt_mode == "graspability" and object_sheet_rgb is not None:
+            object_b64 = _encode_image_b64(object_sheet_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": "Object-ID sheet: complete assembled objects labeled Object <mid>.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{object_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
         if prompt_mode == "graspability" and parts_sheet_rgb is not None:
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{parts_b64}",
-                        "detail": "high",
+            content.extend(
+                [
+                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{parts_b64}",
+                            "detail": "high",
+                        },
                     },
-                }
+                ]
             )
 
         try:
@@ -519,6 +674,8 @@ class OpenAIVisionClient(VLMClient):
         objects: list[dict[str, Any]],
         labeled_rgb: np.ndarray,
         parts_sheet_rgb: np.ndarray | None = None,
+        object_sheet_rgb: np.ndarray | None = None,
+        occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [obj["mid"] for obj in objects]
         print(f"[VLM-GRASP] calling {self.model}, objects={mids}")
@@ -527,6 +684,7 @@ class OpenAIVisionClient(VLMClient):
         b64 = _encode_image_b64(labeled_rgb)
         content: list[dict[str, Any]] = [
             {"type": "text", "text": user_text},
+            {"type": "text", "text": "Labeled scene RGB: spatial layout and object labels."},
             {
                 "type": "image_url",
                 "image_url": {
@@ -535,16 +693,57 @@ class OpenAIVisionClient(VLMClient):
                 },
             },
         ]
+        if occlusion_graph_rgb is not None:
+            graph_b64 = _encode_image_b64(occlusion_graph_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Occlusion graph: an arrow A -> B means Object A "
+                            "significantly covers Object B; the arrow points "
+                            "to the covered object B."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{graph_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
+        if object_sheet_rgb is not None:
+            object_b64 = _encode_image_b64(object_sheet_rgb)
+            content.extend(
+                [
+                    {
+                        "type": "text",
+                        "text": "Object-ID sheet: complete assembled objects labeled Object <mid>.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{object_b64}",
+                            "detail": "high",
+                        },
+                    },
+                ]
+            )
         if parts_sheet_rgb is not None:
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{parts_b64}",
-                        "detail": "high",
+            content.extend(
+                [
+                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{parts_b64}",
+                            "detail": "high",
+                        },
                     },
-                }
+                ]
             )
 
         try:

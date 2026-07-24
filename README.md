@@ -1,501 +1,555 @@
-# SmartGrasp Grasp Execution Module
+# SmartGrasp
 
-这个分支保存了当前的 milestone 版本：基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及用于查看结果和播放抓取动画的 **Dash GUI**。
+基于视觉语言模型（VLM）的遮挡场景机器人抓取系统。给定 RGB-D 图像和自然语言指令，自动完成物体分割、遮挡关系推理、抓取目标选择。
 
-当前抓取执行采用 **JAKA Zu3 机械臂 + Robotiq-85 二指夹爪**，用 PyBullet IK 驱动机械臂、Robotiq-85 欠驱动夹爪做**真实摩擦夹持**（不再用固定约束“吸附”物体），整体流程对齐参考实现 `environment_sim.py` 的 `grasp()` 原语：张开 → 移到目标上方 → 直线下插 → 闭合 → 直线抬回 → 按夹爪关节角判定是否夹到实体。当前只抓**单个物体**，不含 VLM / LangSAM。
+---
 
-当前重点代码在 `graspnet-workspace/` 下面。`perception/` 是 SmartGrasp 原有感知模块，本 README 主要说明 grasp execution 这部分如何运行。
+## 目录
 
-## 目录结构
+1. [环境配置](#1-环境配置)
+2. [数据准备](#2-数据准备)
+3. [文件与脚本说明](#3-文件与脚本说明)
+4. [快速开始](#4-快速开始)
+5. [参数说明](#5-参数说明)
+6. [技术路线](#6-技术路线)
+7. [评估指标](#7-评估指标)
+8. [输出结构](#8-输出结构)
 
-```text
-SG_graspmodule/
-├── perception/                 # SmartGrasp 原有感知 pipeline
-├── graspnet-workspace/         # GraspNet + PyBullet 仿真和 GUI
-├── smartgrasp.full.yml         # conda 环境导出文件
-└── smartgrasp.full.no_pip.yml
+---
+
+## 1. 环境配置
+
+### 1.1 Conda 环境
+
+```bash
+# 创建环境（Python 3.12）
+conda create -n smartgrasp python=3.12
+conda activate smartgrasp
+
+# 安装 PyTorch（CUDA 12.1）
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# 安装核心依赖
+pip install openai opencv-python scipy scikit-learn pillow matplotlib pandas networkx pyarrow python-dotenv
 ```
 
-`graspnet-workspace/` 中最重要的文件是：
+### 1.2 SAM2 模型
 
-```text
-graspnet-workspace/
-├── scripts/demo_closed_loop.py # 主入口：建场景 -> 拍 RGB-D -> 裁剪点云 -> GraspNet -> JAKA 仿真评估
-├── simulation/
-│   ├── scene.py                # PyBullet 场景：桌面、加载 .obj（支持缩放）
-│   ├── camera.py               # 虚拟 RGB-D 相机（1280x720）+ 点云反投影
-│   ├── robot_gripper.py        # JAKA Zu3 + Robotiq-85 适配器（IK、欠驱动夹持、is_gripper_closed）
-│   ├── evaluator.py            # 抓取执行与物理评估（approach/close/lift，逐帧轨迹）
-│   └── planning/moveit_bridge.py # 可选的 ROS2/MoveIt 规划桥接（默认不启用）
-├── gui/app.py                  # Dash GUI，读取结果文件并展示动画
-├── gui/README.md               # GUI 快速启动说明
-├── models/                     # GraspNet 网络
-├── utils/                      # 点云、碰撞检测、数据处理工具
-├── pointnet2/, knn/            # CUDA extension 源码
-└── graspnet_api/               # GraspGroup 等接口
+```bash
+# 克隆 SAM2 仓库
+git clone https://github.com/facebookresearch/sam2.git
+cd sam2
+pip install -e .
+cd ..
+
+# 下载 SAM2 权重（约 2.4 GB）
+mkdir -p checkpoints
+wget -O checkpoints/sam2.1_hiera_large.pt https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
 ```
 
-## 环境准备
+### 1.3 API 配置
 
-所有命令建议在 `smartgrasp` conda 环境中运行：
+在项目根目录创建 `api_config.json`（已加入 `.gitignore`，不会提交到 git）：
+
+```json
+{
+  "api_key": "sk-你的密钥",
+  "base_url": "https://yunwu.ai/v1"
+}
+```
+
+所有 Python 和 Shell 脚本自动从这个文件读取 API 密钥和地址，无需手动设置环境变量。
+
+### 1.4 验证安装
+
+```bash
+python -c "import torch; print('CUDA:', torch.cuda.is_available())"
+python -c "from sam2.build_sam import build_sam2; print('SAM2 OK')"
+python -c "import json; json.load(open('api_config.json')); print('API config OK')"
+```
+
+---
+
+## 2. 数据准备
+
+源数据需放在 `data/` 目录下：
+
+| 文件 | 说明 |
+|------|------|
+| `data/train-00000-of-00002.parquet` | RGB 图像 + 标注文本 |
+| `data/train-00001-of-00002.parquet` | RGB 图像 + 标注文本 |
+| `data/npz_file.zip` | 深度图 + GT 实例分割掩码 |
+
+数据集按两个维度分类，共 **6 类 291 个场景**：
+
+| | easy | medium | hard |
+|---|---|---|---|
+| **非歧义** | easy (50) | medium (49) | hard (48) |
+| **歧义** | easy-ambi (48) | medium-ambi (49) | hard-ambi (47) |
+
+- **非歧义**（Non-ambiguous）：指令直接描述物体，如 `"the lemon"` —— 场景中只有一个柠檬
+- **歧义**（Ambiguous）：场景中有多个同类物体，需空间消歧，如 `"the orange nearest to the image bottom"`
+
+每场景有 **3 条不同的标注**（split 0/1/2），用于评估鲁棒性——同场景不同措辞的指令是否都能正确识别。
+
+---
+
+## 3. 文件与脚本说明
+
+### 3.1 项目结构
+
+```
+SmartGrasp/
+├── api_config.json            # API 密钥和地址（不入 git）
+├── run_pipeline.sh            # 全流程入口：Perception → Intent → Reason
+│
+├── perception/                # ① 感知模块：物体分割 + 遮挡关系
+│   ├── run_perception.sh      #    批量启动脚本
+│   ├── run_perception.py      #    主程序入口
+│   ├── sam2auto.py            #    SAM2 自动分割 + mask 质量过滤
+│   ├── vlm.py                 #    VLM 调用：物体识别 + mask 分配
+│   ├── occlusion_map.py       #    遮挡关系图（ORG）构建
+│   ├── background.py          #    背景掩码生成
+│   └── data_loader.py         #    数据加载（parquet + npz）
+│
+├── reason/                    # ②③ 推理模块：指令解析 + 抓取决策
+│   ├── run_reason.py          #    推理主程序
+│   ├── schemas.py             #    数据结构定义（Summary 等）
+│   ├── graspability.py        #    VLM graspability 评分
+│   ├── closed_loop.py         #    Closed-loop 模拟器
+│   ├── branch_judge/          #    分支分类
+│   │   └── classifier.py      #        fully_visible / partially_occluded / invisible
+│   ├── fully_visible/         #    完全可见分支
+│   │   └── handler.py         #        直接抓目标
+│   ├── partially_visible/     #    部分遮挡分支
+│   │   └── prior.py           #        祖先语义先验 + 图几何先验 → 熵排序
+│   ├── invisible/             #    不可见分支
+│   │   └── geometry.py        #        信息增益最大化
+│   ├── intent_handle/         #    指令解析
+│   │   └── intent_handler.py  #        VLM 将自然语言 → 目标物体 ID
+│   └── vlm/                   #    VLM 客户端
+│       ├── client.py          #        API 调用封装
+│       └── config.py          #        模型/URL/Temperature 配置
+│
+├── intent/                    # Intent 独立运行入口
+│   └── run_intent.py
+│
+├── ssr/                       # SSR（分割成功率）评估框架
+│   ├── run_all.sh             #    批量运行全部场景（Perception→Intent→Reason→Organize）
+│   ├── run_all_reason.sh      #    只重跑 intent+reason（复用已有 perception）
+│   ├── evaluate_ssr.py        #    计算 SSR 指标
+│   ├── evaluate_ssr.sh        #    SSR 计算脚本封装
+│   ├── prepare.py             #    生成任务清单（tasks.json）
+│   └── results/               #    SSR 结果输出
+│
+├── rsr/                       # RSR（推理成功率）评估框架
+│   ├── run_rsr.sh             #    独立批量运行（含 perception）
+│   ├── evaluate_rsr.py        #    计算 RSR 指标
+│   ├── evaluate_rsr.sh        #    RSR 计算脚本封装
+│   └── prepare_inputs.py      #    生成输入数据
+│
+├── tests/                     # 测试
+│   ├── depth_gradient_masks/  #    深度边缘检测测试用例（23个标注样本）
+│   │   ├── judge_mask.py      #       判定算法
+│   │   ├── visualize_large_gradient.py  # 可视化工具
+│   │   └── scene_*_mask_*/    #       测试 fixture
+│   └── test_internal_depth_topology.py
+│
+├── data/                      # 原始数据（parquet + npz）
+├── data-0716-55-ig/           # 0716 实验快照（gpt-5.5 + IG）
+├── data-0716-4o-ig/           # 0716 实验快照（gpt-4o + IG）
+├── data-0721-55-ig/           # 0721 实验快照（gpt-5.5 + IG）
+├── logs/                      # 运行日志
+├── runs_detail/               # 推理详情（per-model 输出）
+└── runs_reason_current/       # 当前推理结果
+```
+
+### 3.2 核心脚本速查
+
+| 脚本 | 用途 |
+|------|------|
+| `run_pipeline.sh 59` | 跑单个场景全流程（最快验证） |
+| `ssr/run_all.sh` | 批量 SSR 评估（全部 291 场景） |
+| `ssr/run_all.sh hard` | 只跑 hard 类别 |
+| `ssr/run_all.sh hard hard-ambi` | 跑多个类别 |
+| `ssr/run_all.sh --from 1548` | 断点续跑（从 scene_1548 开始） |
+| `ssr/run_all_reason.sh hard` | 只重跑 intent+reason（复用 perception） |
+| `perception/run_perception.sh 59` | 单独跑感知 |
+| `ssr/evaluate_ssr.sh --all` | 计算全部 SSR 指标 |
+| `rsr/evaluate_rsr.sh hard` | 计算 hard RSR 指标 |
+
+### 3.3 Python 关键文件
+
+| 文件 | 核心类/函数 | 职责 |
+|------|-----------|------|
+| `perception/sam2auto.py` | `_internal_depth_edge_report` | 深度边缘过滤（绿红桥梁算法） |
+| `perception/vlm.py` | `review_and_assign_sam2` | VLM 物体识别 + mask 分配 |
+| `perception/occlusion_map.py` | `build_occlusion_graph` | 遮挡关系图构建 |
+| `reason/run_reason.py` | `main` | 推理主流程 |
+| `reason/intent_handle/intent_handler.py` | `ResponsesVLMClient.choose_target` | Intent VLM 调用 |
+| `reason/vlm/client.py` | `OpenAIVisionClient` | Reason VLM graspability 评分 |
+| `reason/vlm/config.py` | `VLM_MODEL`, `VLM_BASE_URL` | 从 api_config.json 读取的配置 |
+
+---
+
+## 4. 快速开始
+
+### 4.1 跑一个场景（最快验证，约 2-3 分钟）
 
 ```bash
 conda activate smartgrasp
-cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
+bash run_pipeline.sh 59
 ```
 
-检查 GUI 和仿真依赖是否可导入：
+输出在 `data/scene_59/` 下。检查 `data/scene_59/perception/summary.json` 和 `data/scene_59/reason/results.csv`。
+
+### 4.2 批量跑（SSR 评估）
 
 ```bash
-python -c "import pybullet, dash, plotly, trimesh, scipy; print('deps OK')"
+# 全部 291 场景（耗时数小时）
+bash ssr/run_all.sh
+
+# 只跑特定类别
+bash ssr/run_all.sh hard
+
+# 跑多个类别
+bash ssr/run_all.sh hard hard-ambi medium
+
+# 断点续跑（跳过已完成的场景）
+bash ssr/run_all.sh --from 1548
+
+# 指定类别的断点续跑
+bash ssr/run_all.sh hard --from 827
 ```
 
-如果缺少 `dash`、`plotly`、`trimesh`、`pybullet` 等包，需要先安装到 `smartgrasp` 环境中。
+### 4.3 只重跑推理（跳过 perception）
 
-## 需要准备的外部文件
-
-大文件不建议直接提交到 Git。运行 milestone demo 时至少需要：
-
-1. GraspNet checkpoint，例如：
-
-
-```text
-/home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace/checkpoints/checkpoint-rs.tar
-```
-
-2. 一个待抓取物体 mesh，例如：
-
-```text
-/home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/workspace/data/banana.obj
-```
-
-运行时也可以通过 `--obj` 指定其他 `.obj` 文件。
-
-3. JAKA Zu3 与 Robotiq-85 的 URDF（已随仓库 `assert/` 提供，无需另外准备）：
-
-```text
-assert/jaka_zu3/jaka_zu3_pybullet.urdf
-assert/ur5e/gripper/robotiq_2f_85.urdf
-```
-
-> 注意 mesh 的单位：仿真按米制处理。图形学单位的 mesh（如 `duck.obj` 等）需要用
-> `--scale` 缩到约 5~8 cm 的桌面小物体尺寸，否则会因为太大/太小而抓不到。`banana.obj`
-> 本身就是米制（约 22 cm），用默认 `--scale 1.0` 即可。
-
-## 运行闭环仿真
-
-推荐从仓库根目录通过 SLURM 脚本运行。脚本会进入 `graspnet-workspace`、激活环境、设置依赖路径，并把输出统一写到 `graspnet-workspace/results/`：
+当 perception 已经跑完，只想换模型或参数重跑 intent + reason：
 
 ```bash
+# 全部类别
+bash ssr/run_all_reason.sh --all
+
+# 指定类别
+bash ssr/run_all_reason.sh hard
+
+# 断点续跑
+bash ssr/run_all_reason.sh hard --from 5000
+```
+
+### 4.4 单独跑 perception
+
+```bash
+# 单个场景
+bash perception/run_perception.sh 59
+
+# 多个场景
+bash perception/run_perception.sh 59 242 691
+
+# 只跑 perception，不自动接 reason
+RUN_REASON_AFTER_PERCEPTION=0 bash perception/run_perception.sh 59
+
+# 输出 SAM2 debug 信息
+DEBUG=sam2 bash perception/run_perception.sh 59
+```
+
+### 4.5 跑 intent（指令 → 目标物体 ID）
+
+```bash
+python -m intent.run_intent --scene-id 59 --instruction "the lemon"
+```
+
+### 4.6 跑 reason（遮挡推理 → 抓取物体 ID）
+
+```bash
+python -m reason.run_reason \
+  --root data --scene-id 59 \
+  --target-source auto \
+  --instruction "the lemon" \
+  --scene-root data \
+  --model gpt-5.5 --intent-model gpt-5.5 --ranking-score ig
+```
+
+### 4.7 计算指标
+
+```bash
+# SSR
+bash ssr/evaluate_ssr.sh --all
+bash ssr/evaluate_ssr.sh hard
+
+# RSR
+bash rsr/evaluate_rsr.sh hard
+```
+
+---
+
+## 5. 参数说明
+
+### 5.1 Perception 参数
+
+| 参数 | 当前值 | 说明 |
+|------|:---:|------|
+| `--mode` | `vlm` | `vlm`: SAM2 + VLM 全流程；`gt`: 仅生成 GT 遮挡图 |
+| `--review-model-id` | `gpt-5.5` | VLM 审阅模型 |
+| `--review-timeout` | `300` | VLM API 超时（秒） |
+| `--sam2-points-per-side` | `24` | SAM2 自动分割的网格点密度，越大 mask 越多 |
+| `--sam2-pred-iou-thresh` | `0.68` | SAM2 预测 IoU 阈值，低于此值的 mask 丢弃 |
+| `--sam2-stability-score-thresh` | `0.83` | SAM2 稳定性阈值，低于此值的 mask 丢弃 |
+| `--sam2-crop-n-layers` | `0` | SAM2 多尺度裁剪层数，0 表示不用多尺度 |
+| `--depth-sam2-crop-n-layers` | `1` | 深度图 SAM2 的裁剪层数（深度图特征少，用多尺度补偿） |
+| `--depth-sam2-pred-iou-thresh` | `0.58` | 深度图 SAM2 IoU 阈值（比 RGB 更宽松） |
+| `--depth-sam2-stability-score-thresh` | `0.73` | 深度图 SAM2 稳定性阈值 |
+| `--kernel-size` | `11` | 遮挡检测膨胀核（像素），越大越容易检测到远距离遮挡 |
+| `--min-contact-pixels` | `50` | 最小接触像素数，低于此值不认为有遮挡关系 |
+| `--min-contact-ratio` | `0.002` | 最小接触比例（接触像素 / 较小物体面积） |
+| `--max-contact-background-ratio` | `0.3` | 接触区域最大背景占比（30%），超过则不认为有效接触 |
+| `--mask-clean-kernel` | `3` | mask 清理核大小，用于去除 mask 边缘毛刺 |
+| `--proposal-min-area-ratio` | `0.006` | 候选 mask 最小面积比（相对于图像总面积） |
+| `--proposal-max-area-ratio` | `0.11` | 候选 mask 最大面积比，过大可能是背景 |
+| `--proposal-border-fraction-threshold` | `0.18` | 候选 mask 接触图像边界的比例上限 |
+| `--debug` | 无 | 设为 `sam2` 输出调试信息（debug_sam2.json） |
+
+### 5.2 深度边缘过滤参数（sam2auto.py 内置）
+
+用于过滤 SAM2 产生的内部有深度裂缝的 mask：
+
+| 参数 | 当前值 | 说明 |
+|------|:---:|------|
+| 梯度阈值 | `0.40` | 绝对深度梯度阈值（blur=3, Sobel=1） |
+| 最小绿点距离 | `8` px | 两绿色连通域间最小欧氏距离 |
+| 最大区域比 | `30` | 切开后两大区域面积比上限 |
+| 腐蚀像素 | `2` px | 从 mask 边界向内收缩量 |
+
+在 22 个标注样本上准确率 **77%（17/22）**。
+
+### 5.3 Reason 参数
+
+| 参数 | 当前值 | 说明 |
+|------|:---:|------|
+| `--model` | `gpt-5.5` | Reason VLM 模型 |
+| `--intent-model` | `gpt-5.5` | Intent VLM 模型 |
+| `--ranking-score` | `ig` | 排序算法：`ig`（信息增益）或 `theory`（理论概率） |
+| `--prior-prompt` | `graspability` | VLM prompt 模式，当前固定用 graspability |
+
+### 5.4 VLM 通用配置（reason/vlm/config.py）
+
+| 参数 | 值 | 说明 |
+|------|:---:|------|
+| `VLM_TEMPERATURE` | `0.0` | 确定性输出，消除 VLM 随机性 |
+| `VLM_TIMEOUT` | `600` | API 超时（秒） |
+| `VLM_MAX_RETRIES` | `0` | 不自动重试，失败即报错 |
+
+---
+
+## 6. 技术路线
+
+```
+输入: RGB 图像 + 深度图 + 自然语言指令
+         │
+         ▼
+┌──────────────────────────────────────────────┐
+│ ① Perception — 物体分割 + 遮挡关系图           │
+│                                              │
+│  1. SAM2 自动分割（RGB 源 + Depth 源双路）     │
+│  2. 面积/边界/背景过滤                         │
+│  3. 内部深度边缘过滤（绿红桥梁算法）            │
+│  4. 深度重叠解析（按 z 轴优先级合并）           │
+│  5. VLM 单次调用：物体识别 + mask 分配          │
+│  6. 遮挡关系图（ORG）：膨胀接触 + 深度中值判向  │
+│                                              │
+│  输出: masks + summary.json + occlusion_graph │
+└────────────────────┬─────────────────────────┘
+                     │ summary.json
+         ┌───────────┴───────────┐
+         ▼                       ▼
+┌─────────────────┐    ┌──────────────────────┐
+│ ② Intent        │    │ ③ Reason              │
+│ VLM 指令→物体ID  │    │ 遮挡图→分支→排序评分   │
+│                 │    │                      │
+│ 支持歧义消解     │    │ - fully_visible:      │
+│ 例："the pear   │    │   直接抓取目标          │
+│  under the      │    │                      │
+│  other pear"    │    │ - partially_occluded:  │
+│                 │    │   祖先语义×图几何→熵排序 │
+│ 输出: target_id │    │                      │
+│                 │    │ - invisible:          │
+│                 │    │   信息增益最大化        │
+└────────┬────────┘    │                      │
+         │             │ 输出: grasp_id        │
+         └──────┬──────┤       + results.csv   │
+                ▼      └──────────────────────┘
+           grasp_object
+```
+
+### 深度边缘过滤（绿红桥梁算法）
+
+用于过滤 SAM2 产生的内部有深度裂缝的 mask（如一个物体被错误分成两半）：
+
+1. 计算 mask 内部的**绝对深度梯度**（GaussianBlur=3, Sobel=1）
+2. 只从**外边界**向内腐蚀 2px → 标记边界高梯度像素为**绿色**，内部高梯度像素为**红色**
+3. 判断是否存在**绿 → 红 → 绿** 的 8-方向连通路径
+4. 路径两端绿色连通域距离 ≥ 8px，且切开后两大区域面积比 ≤ 30×
+5. 满足条件 → 判定 mask 内部有深度裂缝 → **拒绝该 mask 候选**
+
+---
+
+## 7. 评估指标
+
+### SSR（Segmentation Success Rate）
+
+评估 Perception 分割质量。VLM 输出的物体 mask 与 GT 物体 mask 的 **IoU ≥ 0.5** 即判定为成功。
+
+```bash
+bash ssr/evaluate_ssr.sh --all     # 全部 6 类
+bash ssr/evaluate_ssr.sh hard      # 单类
+```
+
+结果保存在 `ssr/results/{category}_ssr.json`。
+
+### RSR（Reasoning Success Rate）
+
+评估端到端推理质量。模型预测的 **grasp 位姿** 与 GT 的 IoU ≥ 0.5 为成功。
+
+```bash
+bash rsr/evaluate_rsr.sh hard
+```
+
+---
+
+## 8. 输出结构
+
+```
+data/{category}/scene_{id}/
+├── perception/                # ① Perception 输出（1 份，被 3 条标注共享）
+│   ├── summary.json           #    物体列表 + 遮挡图摘要（下游统一入口）
+│   ├── mask/                  #    每个物体的二值 mask (PNG)
+│   │   ├── 000_background_mask.png
+│   │   ├── 001_anchor_<物体描述>.png
+│   │   ├── 002_anchor_<物体描述>.png
+│   │   └── ...
+│   ├── occlusion_graph.json   #    遮挡关系图（节点 + 边 + 接触比例 + 背景占比）
+│   ├── occlusion_graph.png    #    遮挡图可视化
+│   ├── vlm.json               #    VLM 原始 JSON 输出
+│   ├── label_1_sam2auto.png   #    SAM2 自动分割标签图
+│   ├── label_2_vlm.png        #    VLM 审阅后的标签图
+│   ├── scene_image.png        #    场景 RGB 原图
+│   ├── scene_depth.png        #    深度可视化
+│   ├── depth.npy              #    深度数据 (float32)
+│   ├── points.json            #    SAM2 采样点
+│   ├── final_objects_sheet.png#    最终物体剪切表
+│   └── debug_sam2.json        #    SAM2 候选详情（DEBUG=sam2 时输出）
+├── gt/                        # GT 参考
+│   ├── summary.json
+│   └── mask/
+├── intent/                    # ② Intent 输出（3 条不同标注）
+│   ├── split0/intent_result.json
+│   ├── split1/intent_result.json
+│   └── split2/intent_result.json
+└── reason/                    # ③ Reason 输出（3 条不同标注）
+    ├── split0/summary.json
+    ├── split1/summary.json
+    └── split2/summary.json
+```
+
+---
+
+## 依赖
+
+- **Python 3.12** + Conda 环境 `smartgrasp`
+- **GPU（CUDA）**：SAM2 模型需要，CPU 模式极慢不推荐
+- **网络**：VLM 调用（perception / intent / reason 均需访问 API）
+- 主要 PyPI 包：`torch`, `sam2`, `opencv-python`, `scipy`, `scikit-learn`, `pillow`, `matplotlib`, `pandas`, `networkx`, `pyarrow`, `openai`, `python-dotenv`
+
+---
+
+## 9. Perception → Reason → Execution 单轮闭环
+
+`integration/perception-reason-execution` 在上述 Perception、Intent 和 Reason
+主流程之后接入 PyBullet 与 GraspNet，提供一次拍摄、一次推理、一次抓取后结束的
+单轮闭环：
+
+```text
+PyBullet 相机拍摄同一帧 RGB、Depth、Segmentation
+→ 保存用户指令和场景输入
+→ Perception
+→ Intent
+→ Reason
+→ 读取 Reason 输出的 grasp_object.id
+→ 通过整物体 mask 与 PyBullet segmentation 的最大 IoU 映射 body ID
+→ GraspNet 仅为该目标物体生成抓取候选
+→ PyBullet 执行一次夹取
+→ 保存结果并结束
+```
+
+### 9.1 快速运行
+
+```bash
+cd /home/admin128/hanhuang/temp/SmartGrasp
 conda activate smartgrasp
-cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
 
-GRASP_OBJ_PATH=/home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/unseen_objects/gelatin_box/textured.obj \
-GRASP_TOP_K=5 \
-sbatch run_grasp_simulation.sh
+export OPENAI_API_KEY="你的 API Key"
+export OPENAI_BASE_URL="https://yunwu.ai/v1"
+
+bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene.json \
+  --instruction "抓取红色螺丝刀" \
+  --run-pipeline-after-capture \
+  --stop-on-success
 ```
 
-如果要抓一个图形学单位的立体物体（例：duck 缩到约 6 cm），用 `--scale` 透传给主入口：
+正常使用时无需传入 `--scene-id`。相机每拍摄一帧会自动分配递增编号，并将
+同一帧数据保存到：
 
-```bash
-sbatch run_grasp_simulation.sh \
-  --obj /home/admin128/qiuguanhe/Simulation/SmartGrasp/assert/workspace/data/duck.obj \
-  --top_k 5 \
-  --scale 0.04
+```text
+input/scene_<id>/
+├── scene_image.png
+├── depth.npy
+├── segmentation.npy
+├── input.txt
+└── summary.json
 ```
 
-如果只是调试流程、没有可用 GPU，可以通过 `GRASP_DEVICE=cpu` 跑小规模测试（较慢）。默认不录制 MP4；需要视频时显式加 `GRASP_RECORD_VIDEO=1`。
+Perception、Intent 和 Reason 输出保存到 `data/scene_<id>/`。Execution 读取：
 
-主要命令行参数：
+```text
+data/scene_<id>/reason/summary.json
+```
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `--obj` | — | 物体 `.obj` 路径 |
-| `--ckpt` | 自动查找 | GraspNet checkpoint，找不到时报错 |
-| `--top_k` | 10 | 评估打分最高的前 K 个抓取 |
-| `--scale` | 1.0 | 物体缩放因子（图形学单位 mesh 需缩小） |
-| `--device` | cuda:0 | 推理设备 `cuda:0` / `cpu` |
-| `--gui` | 关 | 打开 PyBullet 图形窗口 |
-| `--output` | results/grasp_simulation.json | 结果 JSON 路径（相对 `graspnet-workspace/`） |
+其中 `grasp_object.id` 是 Reason 选择的物体编号。程序从 Perception 的
+`occlusion_graph.json` 找到该编号对应的整物体 mask，再与同一帧
+`segmentation.npy` 中的 PyBullet body mask 计算 IoU，确定要执行夹取的
+PyBullet body ID。
 
-这个脚本会依次完成：
-
-1. 在 PyBullet 中搭建桌面，并按配置加载单物体 mesh（默认固定朝向；设置 `GRASP_RANDOM_ORIENTATION=1` 或 `--random-orientation` 后随机朝向），等其稳定后记录位姿。
-2. 用虚拟相机（1280×720）拍 RGB-D，将 depth 反投影为世界坐标系点云。
-3. **按物体点云的 xy 包围盒裁剪点云**（裁掉远处大片桌面，只留物体及周围一圈支撑面，对应参考流程的 crop_pointcloud 简化版），再送入 GraspNet 生成候选抓取。
-4. 加载 **JAKA Zu3 + Robotiq-85**，对 top-k 抓取逐个执行物理仿真（见下一节），逐帧记录夹爪和物体位姿。
-5. 保存 JSON 结果和 GUI 可视化数据。
-
-默认输出文件统一为：
+抓取结果默认保存到：
 
 ```text
 graspnet-workspace/results/grasp_simulation.json
 graspnet-workspace/results/grasp_simulation_viz_data.pkl
-graspnet-workspace/results/grasp_simulation_candidates.png
-graspnet-workspace/results/grasp_simulation_candidates.html
 ```
 
-其中：
+结果会记录 Reason 选择的 Object ID、映射得到的 PyBullet body ID、IoU、
+GraspNet 候选、执行结果以及对应的输入和 Perception/Reason 输出路径。
 
-- `grasp_simulation.json`：每个抓取的分数、位姿、宽度、深度、是否成功、判定相关诊断字段、逐帧动画轨迹日志，以及执行用的夹爪 metadata。
-- `grasp_simulation_viz_data.pkl`：RGB、depth、点云、物体路径、物体姿态等 GUI 需要的数据。
-- `grasp_simulation_candidates.png/html`：候选抓取和实际执行姿态的静态/交互诊断图。
+### 9.2 模型和算法配置
 
-如果显式设置 `GRASP_RECORD_VIDEO=1`，还会生成：
-
-```text
-graspnet-workspace/results/grasp_simulation_pybullet.mp4
-```
-
-## 抓取执行流程（JAKA Zu3 + Robotiq-85）
-
-抓取执行在 `simulation/evaluator.py` 的 `GraspEvaluator` 中，对 GraspNet 输出的每个候选执行一次完整的物理抓取，流程对齐参考实现 `environment_sim.py` 的 `grasp()`：
-
-1. **抓取点修正**：抓取中心沿 z 下压 2 cm 并用桌面高度兜底（`center.z = max(center.z - 0.02, TABLE_Z)`），与参考一致。
-2. **几何护栏**：抓取中心到物体点云的最近距离若超过 `MAX_GRASP_CENTER_DIST` 则判失败（`grasp_center_not_on_object`），避免隔空抓取。（抓取中心的桌面高度限制已按需求取消。）
-3. **接近**：张开夹爪 → 移到目标正上方 `over` 点 → 直线下插到预抓取点 → 沿 approach 方向推进到抓取中心。约定 GraspNet 的 local X 轴为 approach/depth 方向、local Y 轴为夹爪开合方向。
-4. **闭合**：Robotiq-85 欠驱动夹爪慢速闭合，靠 `JOINT_GEAR` mimic 约束 + 高摩擦指垫做**真实摩擦夹持**（不创建固定约束“吸附”物体）。
-5. **抬升**：夹爪沿 z 直线抬回。
-6. **判定**：`success = gripper.is_gripper_closed()` —— 夹爪主关节角未完全合死即视为夹到实体（完全照参考）。物体能否被带起是物理自然结果，仅作诊断字段记录，不作为额外判据。
-
-机械臂运动用 PyBullet IK（`JakaZu3Robotiq85Gripper`，`planner=None`），默认**不启用** MoveIt。
-
-相关常量（`simulation/evaluator.py`）：
-
-```text
-TABLE_Z = 0.0                 # 桌面高度
-TABLE_CLEARANCE = 0.005       # 桌面余量
-MAX_GRASP_CENTER_DIST = 0.04  # 抓取中心到物体点云的最大允许距离（米）
-```
-
-夹爪闭合力等参数在 `simulation/robot_gripper.py`。当前六个活动指节由同一主角度
-主动保持，`GRIPPER_MOTOR_FORCE = 50.0`；指节使用有限关节阻尼，指垫使用有限摩擦
-与接触阻尼，同时提高 PyBullet 接触求解迭代精度，用于抑制从动指节松垮和抖动。
-这些参数均为有限值，避免无限摩擦/阻尼造成物体粘桌、夹爪无法开合或求解器发散。
-
-## 如何评估 / 查看评估结果
-
-`results.json` 顶层给出整体评估：
-
-- `total`：实际评估的抓取数（≤ `--top_k`）。
-- `success`：成功抓取数（即 `is_gripper_closed()` 判定为 True 的数量）。
-- `gripper`：执行用的夹爪 metadata（`model: jaka_zu3_robotiq85`、是否启用 MoveIt 等）。
-
-每个 `grasps[i]` 的关键字段：
-
-| 字段 | 含义 |
-|------|------|
-| `success` | 该抓取是否成功（= `grasped_by_gripper`） |
-| `grasped_by_gripper` | 夹爪关节角判定是否夹到实体（判定依据） |
-| `score` | GraspNet 打分 |
-| `translation` / `rotation` | 抓取中心位姿（已含下压修正） |
-| `width` / `depth` | 抓取宽度 / 深度 |
-| `obj_z_before` / `obj_z_after` / `obj_lift_delta` | 抓取前后物体高度及位移（**诊断用**：判断物体是否真被带起） |
-| `failure_reason` | 被护栏拦下时的原因（如 `grasp_center_not_on_object`），正常执行的抓取无此字段 |
-| `frame_log` | 逐帧（approach/close/lift/done）的夹爪与物体位姿，供 GUI 回放 |
-
-命令行快速查看一次评估结果：
+完整链路直接复用仓库中的 Perception 和 Reason，没有复制第二套实现。运行前可通过
+环境变量调整模型：
 
 ```bash
-python -c "
-import json,numpy as np
-d=json.load(open('graspnet-workspace/results/grasp_simulation.json'))
-print('gripper:', d['gripper']['model'], '| success', d['success'], '/', d['total'])
-for g in d['grasps']:
-    s='OK' if g['success'] else 'x'
-    print(f\"  {s} g{g['grasp_index']} grasped={g.get('grasped_by_gripper')} \"
-          f\"lift_delta={round(g.get('obj_lift_delta',0),4)} reason={g.get('failure_reason','-')}\")
-"
-```
-
-要按真实“物体被提起”更严格地评估，可在上面用 `obj_lift_delta`（lift 后物体相对上升量）自行加判据；当前默认判定与参考保持一致，只看夹爪关节角。
-
-## 启动 Dash GUI
-
-GUI 不会重新运行 GraspNet，也不会重新跑 PyBullet。它只读取已经保存好的：
-
-```text
-results.json
-results_viz_data.pkl
-```
-
-启动命令：
-
-```bash
-conda activate smartgrasp
-cd /home/admin128/qiuguanhe/Simulation/SmartGrasp/graspnet-workspace
-
-python gui/app.py \
-  --host 0.0.0.0 \
-  --port 8050 \
-  --results results/grasp_simulation.json \
-  --viz-data results/grasp_simulation_viz_data.pkl
-```
-
-如果是在服务器本机浏览器打开：
-
-```text
-http://127.0.0.1:8050
-```
-
-如果是在自己的电脑访问远程服务器，需要先做端口转发。VS Code / Cursor 一般会自动提示转发 `8050`；也可以在本地终端手动执行：
-
-```bash
-ssh -L 8050:127.0.0.1:8050 <user>@<server>
-```
-
-然后在本地浏览器打开：
-
-```text
-http://127.0.0.1:8050
-```
-
-## GUI 页面内容
-
-GUI 主要包含四块：
-
-- `Point Cloud and Grasp Poses`：显示桌面、物体点云、候选抓取中心和方向。这里故意不渲染完整夹爪，避免第一张图过乱。
-- `Constrained GraspNet Animation`：播放一个符合当前约束的抓取演示动画。
-- `RGB`：虚拟相机拍到的彩色图。
-- `Depth`：虚拟相机深度图。
-
-动画中的物体模型优先使用完整 mesh：
-
-- 如果结果中保存了 `object_orientation`，GUI 会用 PyBullet 中真实的物体姿态渲染 mesh。
-- 如果旧结果没有 `object_orientation`，GUI 会从物体点云估计姿态，尽量保持 mesh 与场景一致。
-- lift 阶段物体和夹爪同步上升。
-
-## GUI 输入格式
-
-`results.json` 的核心字段示例：
-
-```json
-{
-  "total": 3,
-  "success": 3,
-  "obj_path": "/path/to/duck.obj",
-  "object_position": [0.31, 0.008, -0.003],
-  "object_orientation": [0.66, -0.24, -0.24, 0.66],
-  "gripper": {
-    "model": "jaka_zu3_robotiq85",
-    "execution": "jaka_ik_attached_robotiq",
-    "moveit_enabled": false
-  },
-  "grasps": [
-    {
-      "grasp_index": 0,
-      "success": true,
-      "grasped_by_gripper": true,
-      "score": 0.127,
-      "translation": [0.28, -0.05, 0.045],
-      "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-      "width": 0.066,
-      "depth": 0.02,
-      "obj_z_before": -0.003,
-      "obj_z_after": -0.003,
-      "obj_lift_delta": 0.0,
-      "frame_log": []
-    }
-  ]
-}
-```
-
-`results_viz_data.pkl` 通常包含：
-
-```python
-{
-    "rgb": np.ndarray,
-    "depth": np.ndarray,
-    "point_cloud": np.ndarray,
-    "obj_path": str,
-    "object_orientation": list,
-}
-```
-
-## 常见问题
-
-### 浏览器显示 connection refused
-
-先确认 Dash 进程是否还在跑：
-
-```bash
-ps -ef | grep 'gui/app.py'
-```
-
-再确认启动时用了：
-
-```text
---host 0.0.0.0 --port 8050
-```
-
-如果是在远程服务器上跑，还需要确认 `8050` 端口已经转发到本地。
-
-### `ModuleNotFoundError: No module named 'dash'`
-
-通常是没有进入 `smartgrasp` 环境：
-
-```bash
-conda activate smartgrasp
-python -c "import dash"
-```
-
-### GUI 看到的不是最新结果
-
-GUI 读的是磁盘上的结果文件。重新生成结果后，需要启动 GUI 时指定新的路径：
-
-```bash
-python gui/app.py \
-  --results results/grasp_simulation.json \
-  --viz-data results/grasp_simulation_viz_data.pkl
-```
-
-浏览器中可以用 `Ctrl + Shift + R` 强制刷新。
-
-### 动画里物体不是完整模型
-
-优先使用 `scripts/demo_closed_loop.py` 重新生成结果。新的结果会保存 `object_orientation`，GUI 才能更稳定地按真实姿态渲染完整 mesh。
-
-### 抓取成功了，但物体没真正被提起来
-
-当前判定与参考实现一致，只看夹爪闭合后主关节角（`is_gripper_closed()`）——指间有阻挡即判成功。真实物理夹取下，物体可能被夹到但在抬升时从指间滑脱，此时 `obj_lift_delta` 接近 0。需要“物体确实被提起”才算成功时，用结果里的 `obj_lift_delta` 字段自行加判据即可。
-
-### 抓不到 / 候选都被护栏拦下
-
-常见原因是物体尺度不对（图形学单位 mesh 没缩放，用 `--scale` 调到约 5~8 cm），或物体随机朝向下平躺导致 GraspNet 抓取质量差。可多跑几次，或换更立体、规则的物体。
-
-## Git 备注
-
-这台共享服务器上 GitHub SSH 可能会被 `LD_LIBRARY_PATH` 里的 conda OpenSSL 影响。如果出现 OpenSSL mismatch，可以临时清掉这个环境变量：
-
-```bash
-env -u LD_LIBRARY_PATH git status
-```
-
-如果需要从服务器 push 到 GitHub，可以使用当前验证过的 SSH 形式：
-
-```bash
-env -u LD_LIBRARY_PATH \
-  GIT_SSH_COMMAND='ssh -i /home/admin128/.ssh/beilei_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o KexAlgorithms=ecdh-sha2-nistp256' \
-  git push origin feat/GraspExecutionModule
-```
-
-## 服务器本机 PyBullet GUI 抓取与搬运悬停
-
-`graspnet-workspace/config/industrial_scene.json` 中配置了：
-
-```text
-robot_base_yaw_deg: 180
-capture_joint_pose_deg: [0, 90, 45, 135, 270, 72]
-place_target_joint_pose_deg: [-75, 90, 45, 135, 270, 72]
-```
-
-`robot_base_yaw_deg` 将机械臂整机底座绕世界 Z 轴旋转 180 度，不改变下面两组
-关节角。`capture_joint_pose_deg` 是抓取开始前的 JAKA 初始关节位姿；抓取成功后，
-机械臂携带物体运动到 `place_target_joint_pose_deg` 并保持夹持悬停。OBJ 的 MTL 漫反射
-贴图会在 PyBullet 中显式绑定，避免 GUI 中物体显示为黑色。
-
-### 方案一：原始 Robotiq 85 夹爪
-
-完整运行命令：
-
-```bash
-cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
-conda activate smartgrasp
-
-PYBULLET_GUI=1 \
-GRASP_RECORD_VIDEO=1 \
-GRASP_ASSISTED_GRASP=1 \
-GRASP_STOP_ON_SUCCESS=1 \
-GRASP_SEED=1 \
-GRASP_GUI_SPEED=1 \
+REVIEW_MODEL_ID=gpt-4o \
+REASON_MODEL=gpt-4o \
+REASON_PRIOR_PROMPT=graspability \
+REASON_RANKING_SCORE=ig_graspability \
 bash run_grasp_simulation.sh \
-  --scene-config config/industrial_scene.json \
-  --all-objects \
-  --target-objects flat_screwdriver \
-  --gripper-model robotiq85 \
-  --max-candidates-per-object 30 \
-  --output results/robotiq85_red_screwdriver_gui.json
+  --scene-config graspnet-workspace/config/industrial_scene.json \
+  --instruction "抓取红色螺丝刀" \
+  --run-pipeline-after-capture \
+  --stop-on-success
 ```
 
-输出文件：
+更完整的参数、输入输出字段和故障排查说明见：
 
-```text
-graspnet-workspace/results/robotiq85_red_screwdriver_gui.json
-graspnet-workspace/results/robotiq85_red_screwdriver_gui_pybullet.mp4
-```
-
-### 方案二：稳定简易平行夹爪
-
-完整运行命令：
-
-```bash
-cd /home/admin128/qiuguanhe/Simulation/SmartGrasp
-conda activate smartgrasp
-
-PYBULLET_GUI=1 \
-GRASP_RECORD_VIDEO=1 \
-GRASP_ASSISTED_GRASP=1 \
-GRASP_STOP_ON_SUCCESS=1 \
-GRASP_SEED=1 \
-GRASP_GUI_SPEED=1 \
-bash run_grasp_simulation.sh \
-  --scene-config config/industrial_scene.json \
-  --all-objects \
-  --target-objects flat_screwdriver \
-  --gripper-model box_parallel \
-  --max-candidates-per-object 30 \
-  --output results/box_gripper_red_screwdriver_gui.json
-```
-
-输出文件：
-
-```text
-graspnet-workspace/results/box_gripper_red_screwdriver_gui.json
-graspnet-workspace/results/box_gripper_red_screwdriver_gui_pybullet.mp4
-```
-
-`GRASP_GUI_SPEED` 是动画速度倍率，默认 `1`；数值越小越慢，例如 `0.5`，
-`1.0` 为正常速度。当前只抓红色一字螺丝刀 `flat_screwdriver`。每个目标最多执行
-30 个候选，首次成功后立即移动到目标关节位姿上方并保持夹持，不执行放置或松爪。
-抓取开始前，机械臂会在 `capture_joint_pose_deg` 保持 3 秒。
-
-抓住物体后，前往 `place_target_joint_pose_deg` 的运输阶段使用独立慢速轨迹：
-关节路径采用更密的插值点和缓起缓停曲线，GUI 中也会额外放慢；抓取前定位速度
-保持不变。运输期间，简易夹爪的掌座、腕部连接座和双指会在每个物理步进前后
-重新锁定到机械臂 TCP，保持固定相对位姿；这项锁定不改变抓取前的同步逻辑。
-
-两套命令中的 `GRASP_ASSISTED_GRASP=1` 会启用运输吸附：确认目标已被双指夹住，
-或原始 Robotiq 因目标阻挡而未完全闭合且目标仍在 TCP 附近后，程序建立高保持力
-固定约束。约束在抬升和慢速运输期间持续生效；到达目标关节位姿后继续保持吸附
-和闭爪，使物体悬停在指定位置上方。该检查只针对当前目标物体，不会把场景中的
-其他物体隔空吸到夹爪上。
-
-`flat_screwdriver` 是当前固定随机种子结果中候选执行效率最高的目标：原始
-Robotiq 夹爪的第 1 个候选即可成功。两种夹爪使用相同目标，便于直接比较效果。
-
-当前场景配置了 `place_target_joint_pose_deg`，它现在表示搬运终点，而不是松爪放置
-位置。最终结果不再要求物体必须先抬升 3 cm，程序只检查：
-
-1. 机械臂是否到达配置的目标关节位姿。
-2. 搬运过程中物体是否跟随夹爪到达目标位置（`object_followed_to_place=true`）。
-
-`obj_lift_delta` 和 `bilateral_finger_contact` 仍会写入结果用于诊断，但不再决定这套
-任务的最终 `SUCCESS/FAIL`。只有未配置放置关节位姿的旧运行模式，才继续使用
-“双侧接触且抬升至少 3 cm”的兼容判定。
-
-### 保存原生 PyBullet GUI 动画
-
-上面的 `GRASP_RECORD_VIDEO=1` 会在运行抓取仿真的同时，直接录制 PyBullet GUI
-窗口的 OpenGL framebuffer。视频包含窗口中实际显示的完整机械臂、Robotiq 夹爪、
-桌面、所有物体、初始位姿停留、候选尝试、抓取和搬运悬停，不是根据 JSON
-重新绘制的简化回放。
-
-原生窗口录制要求同时设置 `PYBULLET_GUI=1`，并且当前会话能够正常打开 PyBullet
-窗口。本地服务器桌面、X11 转发或远程桌面均可；纯无头 `DIRECT` 模式不能录制
-GUI framebuffer。
-
-`box_parallel` 位于独立文件 `simulation/box_parallel_gripper.py`。它保留 JAKA 手臂，
-但隐藏并禁用旧 Robotiq 指节的碰撞，仅使用两个无内部活动关节的刚性长方体作为
-实际夹持碰撞体。默认不传 `--gripper-model` 时仍使用原来的 `robotiq85`。
-
-ssh -Y -C admin128@100.115.245.13
+- [`instruction.md`](instruction.md)：单轮 Perception → Reason → Execution 使用说明
+- [`execution/README.md`](execution/README.md)：Execution API、GraspNet 与 Reveal Push
+- [`execution/PUSH_SIMULATION_SUMMARY.md`](execution/PUSH_SIMULATION_SUMMARY.md)：Push 仿真实现与限制
+- [`graspnet-workspace/gui/README.md`](graspnet-workspace/gui/README.md)：PyBullet/Dash 结果查看

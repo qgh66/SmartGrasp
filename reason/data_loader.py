@@ -27,17 +27,25 @@ def load_sample(
         summary = json.load(f)
 
     target_mid = summary.get("query_obj_id")
-    molmo_points = summary.get("molmo_points", [])
+    # New perception summaries use ``object_points``.  Keep the legacy
+    # ``molmo_points`` fallback so older generated scenes remain readable.
+    object_points = summary.get("object_points") or summary.get("molmo_points", [])
     matrix = summary.get("occlusion_matrix", [])
     matrix_labels = summary.get("matrix_labels", [])
 
     graph, node_info, molmo_to_node = _build_graph(
-        molmo_points, matrix, matrix_labels, threshold=occlusion_threshold
+        object_points, matrix, matrix_labels, threshold=occlusion_threshold
     )
     _attach_scene_artifacts(summary_path.parent, node_info)
 
     depth = _load_depth(summary.get("depth_path"), summary_path.parent)
     labeled_rgb = _load_labeled_rgb(summary_path.parent, summary)
+    occlusion_graph_path = _resolve_occlusion_graph_path(summary, summary_path.parent)
+    occlusion_graph_rgb = (
+        _load_rgb_image(occlusion_graph_path) if occlusion_graph_path else None
+    )
+    objects_sheet_path = _resolve_objects_sheet_path(summary, summary_path.parent)
+    final_objects_sheet = _load_rgb_image(objects_sheet_path) if objects_sheet_path else None
     parts_sheet_path = _resolve_parts_sheet_path(summary, summary_path.parent)
     sam2_rgb_parts_sheet = _load_rgb_image(parts_sheet_path) if parts_sheet_path else None
 
@@ -49,6 +57,10 @@ def load_sample(
         molmo_to_node=molmo_to_node,
         depth=depth,
         labeled_rgb=labeled_rgb,
+        occlusion_graph_rgb=occlusion_graph_rgb,
+        occlusion_graph_path=occlusion_graph_path,
+        final_objects_sheet=final_objects_sheet,
+        final_objects_sheet_path=objects_sheet_path,
         sam2_rgb_parts_sheet=sam2_rgb_parts_sheet,
         sam2_rgb_parts_sheet_path=parts_sheet_path,
         object_id_to_sam2_part_ids=_parse_int_tuple_mapping(
@@ -78,7 +90,7 @@ def _parse_id_to_index(matrix_labels) -> dict[int, int]:
 
 
 def _build_graph(
-    molmo_points,
+    object_points,
     matrix,
     matrix_labels,
     threshold: float = 0.0,
@@ -86,7 +98,14 @@ def _build_graph(
     """Build a directed occlusion graph from the summary matrix."""
     id_to_index = _parse_id_to_index(matrix_labels)
     index_to_id = {v: k for k, v in id_to_index.items()}
-    id_to_label = {p["molmo_id"]: p.get("label", "") for p in molmo_points}
+    id_to_label: dict[int, str] = {}
+    for point in object_points:
+        raw_id = point.get("object_id", point.get("molmo_id"))
+        try:
+            object_id = int(raw_id)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        id_to_label[object_id] = str(point.get("label") or f"object_{object_id}")
 
     g = nx.DiGraph()
     node_info: dict[int, dict] = {}
@@ -131,6 +150,34 @@ def _resolve_parts_sheet_path(summary: dict, scene_dir: Path) -> Path | None:
     if summary.get("sam2_rgb_parts_sheet_png"):
         candidates.append(Path(summary["sam2_rgb_parts_sheet_png"]))
     candidates.append(scene_dir / "sam2_rgb_parts_sheet.png")
+
+    for path in candidates:
+        if not path.is_absolute():
+            path = scene_dir / path
+        if path.exists():
+            return path
+    return None
+
+
+def _resolve_occlusion_graph_path(summary: dict, scene_dir: Path) -> Path | None:
+    candidates = []
+    if summary.get("graph_png"):
+        candidates.append(Path(summary["graph_png"]))
+    candidates.append(scene_dir / "occlusion_graph.png")
+
+    for path in candidates:
+        if not path.is_absolute():
+            path = scene_dir / path
+        if path.exists():
+            return path
+    return None
+
+
+def _resolve_objects_sheet_path(summary: dict, scene_dir: Path) -> Path | None:
+    candidates = []
+    if summary.get("final_objects_sheet_png"):
+        candidates.append(Path(summary["final_objects_sheet_png"]))
+    candidates.append(scene_dir / "final_objects_sheet.png")
 
     for path in candidates:
         if not path.is_absolute():

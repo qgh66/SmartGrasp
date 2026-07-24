@@ -29,6 +29,10 @@ class PerceptionOutput:
     # Optional scene artifacts
     depth: Optional[np.ndarray] = None
     labeled_rgb: Optional[np.ndarray] = None
+    occlusion_graph_rgb: Optional[np.ndarray] = None
+    occlusion_graph_path: Optional[Path] = None
+    final_objects_sheet: Optional[np.ndarray] = None
+    final_objects_sheet_path: Optional[Path] = None
     sam2_rgb_parts_sheet: Optional[np.ndarray] = None
     sam2_rgb_parts_sheet_path: Optional[Path] = None
     object_id_to_sam2_part_ids: Optional[dict[int, tuple[int, ...]]] = None

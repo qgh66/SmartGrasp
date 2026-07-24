@@ -5,7 +5,7 @@ do not depend on shell-exported model/provider settings.
 """
 
 VLM_MODEL = "gpt-5.5"
-VLM_BASE_URL = "https://www.highland-api.top/v1"
+VLM_BASE_URL = "https://yunwu.ai/v1"
 VLM_API_KEY_ENV = "OPENAI_API_KEY"
 VLM_TEMPERATURE = 0.0
 VLM_TIMEOUT = 600.0

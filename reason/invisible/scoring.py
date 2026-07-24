@@ -4,7 +4,6 @@ from .geometry import (
     compute_geometric_prior,
     top_level_candidates_after,
 )
-from .prior import compute_semantic_prior
 
 def tbm_fusion(
     P_s: dict[int, float],
@@ -42,15 +41,17 @@ def _belief_after_miss(
     )
     if not new_mids:
         return {}
-    P_s = compute_semantic_prior(new_mids, perception.target_molmo_id, perception)
-    P_g = compute_geometric_prior(
+    # Do not issue a counterfactual VLM request for every possible removal.
+    # The miss-side belief is geometry-only: equivalent visible area and
+    # visible-mask depth determine the normalized probabilities of the newly
+    # exposed top-layer candidates.
+    return compute_geometric_prior(
         new_mids,
         perception.target_molmo_id,
         perception,
         geom_cache=geom_cache,
         # removed_mids=removed,   # ← 删掉, area 不再依赖
     )
-    return tbm_fusion(P_s, P_g)
 
 
 def expected_information_gain(
