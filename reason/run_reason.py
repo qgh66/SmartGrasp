@@ -396,19 +396,17 @@ def _reason_block(row: dict, decision, actions_seq=None) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Batch branch classification + handler dispatch")
-    parser.add_argument("--root", default="sample_data", help="Scene root directory")
+    parser.add_argument("--root", default="data_realworld", help="Scene root directory (default: data_realworld for real captures)")
     parser.add_argument(
         "--scene-id",
-        type=int,
         default=None,
-        help="Only run a specific scene_id, for example 564",
+        help="Only run a specific scene_id (int for FreeGrasp, timestamp string for data_realworld)",
     )
     parser.add_argument(
         "--scene-ids",
-        type=int,
         nargs="+",
         default=None,
-        help="Only run the listed scene_ids, for example 59 242 691",
+        help="Only run the listed scene_ids, for example 59 242 691 or timestamps",
     )
     parser.add_argument(
         "--target-id",
@@ -441,8 +439,8 @@ def main():
                         help="Override summary json path")
     parser.add_argument("--details-dir", default=None,
                         help="Override scene_details dir")
-    parser.add_argument("--scene-root", default=None,
-                        help="Per-scene output root (e.g. data). Writes data/scene_<id>/reason/ with per-scene CSV+JSON.")
+    parser.add_argument("--scene-root", default="data_realworld",
+                        help="Per-scene output root. Writes data_realworld/<scene>/reason/ with per-scene CSV+JSON.")
     parser.add_argument("--threshold", type=float, default=0.0,
                         help="Occlusion edge threshold")
     parser.add_argument(
@@ -512,17 +510,23 @@ def main():
         return
 
     if args.scene_id is not None:
-        target_suffix = f"scene_{args.scene_id}/perception"
+        scene_id_str = str(args.scene_id)
+        # match both timestamp-style (20260724_143052) and FreeGrasp-style (scene_59)
+        target_suffix = f"scene_{scene_id_str}/perception"
         summaries = [
             (scene_key, path)
             for scene_key, path in summaries
-            if scene_key == target_suffix
+            if scene_key == target_suffix or scene_key == f"{scene_id_str}/perception"
         ]
         if not summaries:
             print(f"[WARN] scene_id={args.scene_id} not found under {root}")
             return
     elif args.scene_ids:
-        target_suffixes = {f"scene_{scene_id}/perception" for scene_id in args.scene_ids}
+        target_suffixes = set()
+        for scene_id in args.scene_ids:
+            sid = str(scene_id)
+            target_suffixes.add(f"scene_{sid}/perception")
+            target_suffixes.add(f"{sid}/perception")
         summaries = [
             (scene_key, path)
             for scene_key, path in summaries
@@ -790,11 +794,17 @@ def main():
             "per_object": scene_detail_rows,
         }
 
-        # ── 落盘 per-scene reason 到 data/scene_<id>/reason/ ──
+        # ── 落盘 per-scene reason 到 data_realworld/<scene>/reason/ ──
         if args.scene_root:
             scene_id = perception.scene_id
             if scene_id is not None:
-                reason_dir = Path(args.scene_root) / f"scene_{scene_id}" / "reason"
+                sid_str = str(scene_id)
+                try:
+                    int(sid_str)  # FreeGrasp integer scene_id
+                    scene_subdir = f"scene_{sid_str}"
+                except ValueError:
+                    scene_subdir = sid_str  # timestamp or other string
+                reason_dir = Path(args.scene_root) / scene_subdir / "reason"
                 reason_dir.mkdir(parents=True, exist_ok=True)
                 reason_df = pd.DataFrame(scene_detail_rows)
                 reason_df.to_csv(reason_dir / "results.csv", index=False)

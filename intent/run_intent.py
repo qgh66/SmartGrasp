@@ -34,6 +34,7 @@ RUN_INTENT_TIMEOUT = 300.0
 
 def _default_summary(scene_id: int, root: Path) -> Path:
     candidates = [
+        root / "data_realworld" / str(scene_id) / "perception" / "summary.json",
         root / "data" / f"scene_{scene_id}" / "perception" / "summary.json",
         root / "sample_data" / f"scene_{scene_id}" / "perception" / "summary.json",
     ]
@@ -44,10 +45,19 @@ def _default_summary(scene_id: int, root: Path) -> Path:
 
 
 def _sample_summary_paths(root: Path) -> list[Path]:
-    return sorted(root.glob("sample_data/scene_*/perception/summary.json"))
+    paths = sorted(root.glob("data_realworld/*/perception/summary.json"))
+    if paths:
+        return paths
+    paths = sorted(root.glob("sample_data/scene_*/perception/summary.json"))
+    if paths:
+        return paths
+    return sorted(root.glob("data/scene_*/perception/summary.json"))
 
 
 def _data_summary_paths(root: Path) -> list[Path]:
+    paths = sorted(root.glob("data_realworld/*/perception/summary.json"))
+    if paths:
+        return paths
     return sorted(root.glob("data/scene_*/perception/summary.json"))
 
 
@@ -114,13 +124,14 @@ def _write_sample_intent_id(summary_path: Path, selected_id: int | None) -> Path
 def _run_sample_mode(args: argparse.Namespace) -> int:
     summary_paths = _sample_summary_paths(ROOT)
     if args.scene_id is not None:
+        sid = str(args.scene_id)
         summary_paths = [
             path
             for path in summary_paths
-            if path.parent.parent.name == f"scene_{args.scene_id}"
+            if path.parent.parent.name in (f"scene_{sid}", sid)
         ]
     if not summary_paths:
-        raise FileNotFoundError("No sample_data/scene_*/perception/summary.json files found.")
+        raise FileNotFoundError("No perception/summary.json files found under data_realworld/ or sample_data/.")
 
     rows = []
     for summary_path in summary_paths:
@@ -159,13 +170,14 @@ def _run_sample_mode(args: argparse.Namespace) -> int:
 def _run_data_mode(args: argparse.Namespace) -> int:
     summary_paths = _data_summary_paths(ROOT)
     if args.scene_id is not None:
+        sid = str(args.scene_id)
         summary_paths = [
             path
             for path in summary_paths
-            if path.parent.parent.name == f"scene_{args.scene_id}"
+            if path.parent.parent.name in (f"scene_{sid}", sid)
         ]
     if not summary_paths:
-        raise FileNotFoundError("No data/scene_*/perception/summary.json files found.")
+        raise FileNotFoundError("No perception/summary.json files found under data_realworld/ or data/.")
 
     rows = []
     for summary_path in summary_paths:
@@ -205,7 +217,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Generate/read perception outputs and resolve a FreeGrasp query to a perception object id.",
     )
-    parser.add_argument("--scene-id", type=int, default=None)
+    parser.add_argument("--scene-id", default=None, help="Scene id (timestamp string for data_realworld, int for FreeGrasp)")
     parser.add_argument("--summary", type=Path, default=None, help="Perception summary.json. Defaults to data/, then sample_data/.")
     parser.add_argument("--instruction", default=None, help="Override FreeGrasp annotation.")
     parser.add_argument("--use-sample", action="store_true", help="Run all sample_data/scene_*/perception summaries and write scene_<id>/intent/id.txt.")

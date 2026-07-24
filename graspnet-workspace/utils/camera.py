@@ -11,6 +11,7 @@ from typing import Any
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 
 from utils.data_loader import json_safe
 
@@ -448,7 +449,7 @@ def build_grasp_point_cloud(
     if len(full_cloud) == 0:
         raise RuntimeError("No valid point cloud points after depth/bounds filtering.")
 
-    if not args.use_sam_mask:
+    if not args.use_sam_mask and getattr(args, "perception_mask", None) is None:
         return full_cloud, full_cloud, full_cloud_rgb, full_cloud_rgb, full_cloud, {
             "point_cloud_source": "full_depth",
             "grasp_point_cloud_source": "full_depth",
@@ -460,7 +461,24 @@ def build_grasp_point_cloud(
             "camera_intrinsics": frame["meta"]["intrinsics"],
         }
 
-    sam_mask, object_mask_info = collect_interactive_sam_mask(frame, output_dir, args)
+    # --- perception mask (pre-computed SAM2 from perception pipeline) ---
+    perception_mask_path = getattr(args, "perception_mask", None)
+    if perception_mask_path is not None:
+        perception_mask_path = Path(perception_mask_path)
+        if not perception_mask_path.exists():
+            raise FileNotFoundError(f"Perception mask not found: {perception_mask_path}")
+        sam_mask = np.asarray(Image.open(perception_mask_path).convert("L")) > 0
+        if sam_mask.shape[:2] != (IMAGE_HEIGHT, IMAGE_WIDTH):
+            sam_mask = cv2.resize(sam_mask.astype(np.uint8), (IMAGE_WIDTH, IMAGE_HEIGHT),
+                                  interpolation=cv2.INTER_NEAREST).astype(bool)
+        object_mask_info = {
+            "mode": "perception_pipeline",
+            "mask_path": str(perception_mask_path.resolve()),
+            "mask_pixels": int(np.count_nonzero(sam_mask)),
+            "mask_overlay_path": None,
+        }
+    else:
+        sam_mask, object_mask_info = collect_interactive_sam_mask(frame, output_dir, args)
     target_mask = sam_mask.astype(bool)
     object_mask = target_mask & valid
     obstacle_mask = valid & ~object_mask

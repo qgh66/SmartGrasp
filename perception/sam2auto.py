@@ -1036,6 +1036,22 @@ def _save_sam2_rgb_parts_sheet(
     return sheet_path
 
 
+def _save_sam2_binary_masks(
+    candidates: list[dict[str, Any]],
+    out_dir: Path,
+    max_labels: int = 100,
+) -> Path:
+    """Save full-resolution binary mask PNG for every SAM2 candidate."""
+    mask_dir = out_dir / "mask_sam2"
+    mask_dir.mkdir(parents=True, exist_ok=True)
+    for index, candidate in enumerate(candidates[:max_labels], start=1):
+        mask = np.asarray(candidate["mask"], dtype=bool)
+        mask_u8 = mask.astype(np.uint8) * 255
+        mask_path = mask_dir / f"part_{index:03d}.png"
+        Image.fromarray(mask_u8, mode="L").save(mask_path)
+    return mask_dir
+
+
 def generate_masks_with_sam2_vlm_pipeline(
     image_path: Path,
     output_mask_dir: Path,
@@ -1087,6 +1103,7 @@ def generate_masks_with_sam2_vlm_pipeline(
 
     label_path = out_dir / "label_1_sam2auto.png"
     _draw_sam2_auto_label_image(image_path, candidates, label_path)
+    _save_sam2_binary_masks(candidates, out_dir)  # full-resolution binary masks for grasp pipeline
     parts_sheet_path = _save_sam2_rgb_parts_sheet(image_path, candidates, out_dir)
     try:
         t_review = _log_step("  ②b vlm_review", None)

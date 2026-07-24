@@ -3,6 +3,7 @@ data/
 models/*.pth
 models/*.onnx
 *.weights
+api_config.json
 
 # 排除 Python 缓存
 __pycache__/

@@ -28,8 +28,22 @@ from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_s
 from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
 
-OUT_ROOT = SMARTGRASP_ROOT / "data"
+OUT_ROOT = SMARTGRASP_ROOT / "data_realworld"
 INPUT_ROOT = SMARTGRASP_ROOT / "input"
+DATA_REALWORLD_ROOT = SMARTGRASP_ROOT / "data_realworld"
+
+
+def _convert_depth_raw_to_npy(depth_raw_path: Path, out_dir: Path) -> Path:
+    depth_npy_path = out_dir / "depth.npy"
+    raw_bytes = depth_raw_path.read_bytes()
+    depth_flat = np.frombuffer(raw_bytes, dtype=np.uint16)
+    h, w = 720, 1280
+    if len(depth_flat) == h * w:
+        depth = depth_flat.reshape(h, w).astype(np.float32)
+    else:
+        raise ValueError(f"Unexpected depth.raw size: {len(depth_flat)} bytes, expected {h * w * 2}")
+    np.save(depth_npy_path, depth)
+    return depth_npy_path
 
 def read_dataset() -> pd.DataFrame:
     parquet_files = sorted(Path(DATA_DIR).glob("*.parquet"))
@@ -68,39 +82,117 @@ def summary_instruction(summary: dict[str, Any]) -> str:
 def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
     if scene_id is None:
         return None
-    scene_name = f"scene_{int(scene_id)}"
-    candidates = [
-        (INPUT_ROOT / scene_name, INPUT_ROOT / scene_name),
-        (OUT_ROOT / scene_name / "perception", OUT_ROOT / scene_name / "perception"),
-    ]
-    # Highest-priority input path: use user-provided RGB/depth artifacts before
-    # falling back to generated perception artifacts and finally parquet / npz.
-    for input_dir, summary_dir in candidates:
-        summary_path = summary_dir / "summary.json"
-        depth_path = input_dir / "depth.npy"
-        scene_image_path = input_dir / "scene_image.png"
-        if not scene_image_path.exists():
-            scene_image_path = input_dir / "rgb.png"
-        if not (scene_image_path.exists() and depth_path.exists()):
+
+    # Try legacy FreeGrasp-style integer scene_id first
+    try:
+        int_scene_id = int(scene_id)
+        scene_name = f"scene_{int_scene_id}"
+        candidates = [
+            (INPUT_ROOT / scene_name, INPUT_ROOT / scene_name),
+            (OUT_ROOT / scene_name / "perception", OUT_ROOT / scene_name / "perception"),
+        ]
+        for input_dir, summary_dir in candidates:
+            summary_path = summary_dir / "summary.json"
+            depth_path = input_dir / "depth.npy"
+            scene_image_path = input_dir / "scene_image.png"
+            if not scene_image_path.exists():
+                scene_image_path = input_dir / "rgb.png"
+            if not (scene_image_path.exists() and depth_path.exists()):
+                continue
+            summary = load_json_file(summary_path) if summary_path.exists() else {}
+            instruction, instruction_path = scene_input_instruction(input_dir)
+            annotation = instruction if instruction is not None else summary_instruction(summary)
+            summary = {
+                **summary,
+                "scene_id": optional_int(summary.get("scene_id"), int_scene_id),
+                "annotation": annotation,
+                "instruction": annotation,
+            }
+            return {
+                "summary": summary,
+                "input_dir": input_dir,
+                "summary_path": summary_path if summary_path.exists() else None,
+                "instruction_path": instruction_path,
+                "image_path": scene_image_path,
+                "depth_path": depth_path,
+            }
+    except (ValueError, TypeError):
+        pass  # not an integer scene_id, try data_realworld timestamp
+
+    # --- data_realworld direct scene dirs (e.g. data_realworld/20260724_143052/) ---
+    if scene_id is not None:
+        # Filter by specific scene_id (timestamp string)
+        target_dir = DATA_REALWORLD_ROOT / str(scene_id)
+        entries = [target_dir] if target_dir.is_dir() else []
+    else:
+        entries = sorted(DATA_REALWORLD_ROOT.iterdir(), reverse=True)
+
+    for scene_dir in entries:
+        if not scene_dir.is_dir():
             continue
-        summary = load_json_file(summary_path) if summary_path.exists() else {}
+        input_dir = scene_dir / "input"
+        rgb_path = input_dir / "rgb.png"
+        depth_path = input_dir / "depth.npy"
+        if not rgb_path.exists():
+            rgb_path = scene_dir / "rgb.png"  # legacy fallback
+        if not rgb_path.exists():
+            continue
+        if not depth_path.exists():
+            depth_raw = input_dir / "depth.raw"
+            if not depth_raw.exists():
+                depth_raw = scene_dir / "depth.raw"  # legacy fallback
+            if depth_raw.exists():
+                depth_path = _convert_depth_raw_to_npy(depth_raw, input_dir)
+            else:
+                continue
         instruction, instruction_path = scene_input_instruction(input_dir)
-        annotation = instruction if instruction is not None else summary_instruction(summary)
+        if instruction is None:
+            instruction, instruction_path = scene_input_instruction(scene_dir)  # legacy fallback
         summary = {
-            **summary,
-            "scene_id": optional_int(summary.get("scene_id"), scene_id),
-            "annotation": annotation,
-            "instruction": annotation,
+            "scene_id": optional_int(scene_id),
+            "annotation": instruction or "",
+            "instruction": instruction or "",
         }
+        print(f"[perception] using data_realworld scene: {scene_dir.name}", flush=True)
         return {
             "summary": summary,
             "input_dir": input_dir,
-            "summary_path": summary_path if summary_path.exists() else None,
+            "summary_path": input_dir / "summary.json" if (input_dir / "summary.json").exists() else None,
             "instruction_path": instruction_path,
-            "image_path": scene_image_path,
+            "image_path": rgb_path,
             "depth_path": depth_path,
         }
-    return None
+
+    # --- legacy direct scene dirs (rgb.png/depth.npy at scene root, no input/) ---
+    for entry in sorted(DATA_REALWORLD_ROOT.iterdir(), reverse=True):
+        if not entry.is_dir():
+            continue
+        scene_dir = entry
+        rgb_path = scene_dir / "rgb.png"
+        depth_path = scene_dir / "depth.npy"
+        if not rgb_path.exists():
+            continue
+        if not depth_path.exists():
+            depth_raw = scene_dir / "depth.raw"
+            if depth_raw.exists():
+                depth_path = _convert_depth_raw_to_npy(depth_raw, scene_dir)
+            else:
+                continue
+        instruction, instruction_path = scene_input_instruction(scene_dir)
+        summary = {
+            "scene_id": optional_int(scene_id),
+            "annotation": instruction or "",
+            "instruction": instruction or "",
+        }
+        print(f"[perception] using data_realworld scene (legacy layout): {scene_dir.name}", flush=True)
+        return {
+            "summary": summary,
+            "input_dir": scene_dir,
+            "summary_path": scene_dir / "summary.json" if (scene_dir / "summary.json").exists() else None,
+            "instruction_path": instruction_path,
+            "image_path": rgb_path,
+            "depth_path": depth_path,
+        }
 
 
 def select_sample(df: pd.DataFrame, scene_id: int | None, query_obj_id: int | None) -> pd.Series:
@@ -645,23 +737,39 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     row = None
     source_image: Image.Image | None = None
     instances_objects: np.ndarray | None = None
+    is_data_realworld = False  # True if using data_realworld/<timestamp>/ dir
 
     if priority_inputs is not None:
         priority_summary = priority_inputs["summary"]
-        scene_id = optional_int(priority_summary.get("scene_id"), args.scene_id)
-        if scene_id is None:
-            raise ValueError("Priority perception inputs require a scene id.")
+        input_dir = Path(priority_inputs["input_dir"])
+        # Detect data_realworld scene dir (e.g. data_realworld/20260724_143052/)
+        # input_dir may be the scene root or input/ subdirectory
+        if DATA_REALWORLD_ROOT in input_dir.parents or input_dir.parent == DATA_REALWORLD_ROOT:
+            is_data_realworld = True
+            if input_dir.name == "input":
+                # input/ subdirectory layout: scene_dir is the parent
+                scene_dir = input_dir.parent
+                scene_id = scene_dir.name  # timestamp
+            else:
+                # legacy layout: input_dir IS the scene dir
+                scene_dir = input_dir
+                scene_id = input_dir.name  # timestamp
+        else:
+            scene_id = optional_int(priority_summary.get("scene_id"), args.scene_id)
+            if scene_id is None:
+                raise ValueError("Priority perception inputs require a scene id.")
+            scene_dir = OUT_ROOT / f"scene_{scene_id}"
+
         query_obj_id = optional_int(priority_summary.get("query_obj_id"), args.query_obj_id)
         if query_obj_id is None:
             query_obj_id = -1
         annotation = str(priority_summary.get("instruction") or priority_summary.get("annotation") or "")
         source_image = Image.open(priority_inputs["image_path"]).convert("RGB")
         depth = np.asarray(np.load(priority_inputs["depth_path"]), dtype=np.float32)
-        input_dir = Path(priority_inputs["input_dir"])
         instruction_path = priority_inputs.get("instruction_path")
         input_note = f", instruction={instruction_path}" if instruction_path else ""
         print(
-            f"[scene_{int(scene_id)}] using priority-1 perception inputs: "
+            f"[{scene_id}] using priority perception inputs: "
             f"{input_dir}{input_note}",
             flush=True,
         )
@@ -672,10 +780,13 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         scene_id = int(row["sceneId"])
         query_obj_id = int(row["queryObjId"])
         annotation = str(row["annotation"])
+        scene_dir = OUT_ROOT / f"scene_{scene_id}"
     from SmartGrasp.perception._shared import set_log_scene_id
-    set_log_scene_id(scene_id)
+    try:
+        set_log_scene_id(int(scene_id))
+    except (TypeError, ValueError):
+        pass
 
-    scene_dir = OUT_ROOT / f"scene_{scene_id}"
     out_dir = scene_dir / "perception"
     # Clean output directory by removing contents individually
     # (avoids iCloud Drive conflict copies caused by rmtree+recreate race)
@@ -881,8 +992,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run SmartGrasp perception pipeline: SAM2 auto -> VLM review -> occlusion graph.")
-    parser.add_argument("--scene-id", type=int, default=None, help="Scene id from the parquet/npz data.")
-    parser.add_argument("--scene-ids", type=int, nargs="+", default=None, help="Run multiple scene ids in one process.")
+    parser.add_argument("--scene-id", default=None, help="Scene id (int for FreeGrasp, timestamp string for data_realworld). Auto-detects latest data_realworld scene if omitted.")
+    parser.add_argument("--scene-ids", nargs="+", default=None, help="Run multiple scene ids in one process.")
     parser.add_argument("--mode", choices=["gt", "vlm"], default="vlm",
                         help="gt: ground-truth occlusion graph only; vlm: full SAM2+VLM pipeline (default: vlm)")
     parser.add_argument("--serve", action="store_true", help="Keep models loaded and read scene ids from stdin.")
@@ -940,7 +1051,7 @@ def main() -> None:
             if not line:
                 continue
             try:
-                scene_id = int(line)
+                scene_id = line
             except ValueError:
                 print(f"Invalid scene id: {line}", flush=True)
                 continue

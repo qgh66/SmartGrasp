@@ -69,6 +69,7 @@ REALWORLD_CONFIG_PATH = WORKSPACE_ROOT / "config" / "realworld_config.yaml"
 REALWORLD_CONFIG = load_realworld_config(REALWORLD_CONFIG_PATH)
 IMAGE_WIDTH = int(config_get(REALWORLD_CONFIG, "image.width", 1280))
 IMAGE_HEIGHT = int(config_get(REALWORLD_CONFIG, "image.height", 720))
+DATA_REALWORLD_ROOT = SMARTGRASP_ROOT / "data_realworld"
 DEFAULT_OUTPUT_DIR = config_path(REALWORLD_CONFIG, "paths.output_dir", WORKSPACE_ROOT, SMARTGRASP_ROOT / "result")
 DEFAULT_TRIAL_LOG_ROOT = config_path(REALWORLD_CONFIG, "paths.trial_log_root", WORKSPACE_ROOT, WORKSPACE_ROOT / "log")
 DEFAULT_TRIAL_LOG_SUBDIR = str(config_get(REALWORLD_CONFIG, "paths.trial_log_subdir", "single_object_grasp"))
@@ -538,6 +539,11 @@ def update_trial_run_info(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Capture real RGB-D, run GraspNet, and optionally move JAKA.")
+    parser.add_argument(
+        "--instruction",
+        default=None,
+        help="Natural language instruction for the grasp task (e.g. 'grasp the leftmost apple'). Also saved to instruction.txt.",
+    )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Directory for rgb.png, depth.raw, and results.")
     parser.add_argument(
         "--trial-log-dir",
@@ -856,6 +862,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run capture-grasp-place cycles until interrupted. Equivalent to --num-cycles 0.",
     )
+    parser.add_argument(
+        "--data-realworld",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Save captured RGB-D to data_realworld/<timestamp>/ instead of --output-dir.",
+    )
+    parser.add_argument(
+        "--perception-mask",
+        default=None,
+        help="Path to a pre-computed SAM2 mask PNG (from perception pipeline). Skips interactive SAM when provided.",
+    )
     return parser
 
 
@@ -868,6 +885,22 @@ def run_one_cycle(
 ) -> dict[str, Any]:
     trial_dir: Path | None = None
     try:
+        # --- resolve scene directory (data_realworld or legacy output-dir) ---
+        if args.data_realworld and not args.reuse_capture:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            scene_dir = DATA_REALWORLD_ROOT / timestamp
+            input_dir = scene_dir / "input"
+            input_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = input_dir
+            if args.instruction:
+                instruction_path = input_dir / "instruction.txt"
+                instruction_path.write_text(args.instruction.strip(), encoding="utf-8")
+                print(f"[data_realworld] scene_id={timestamp} instruction={args.instruction[:60]}...", flush=True)
+            else:
+                print(f"[data_realworld] scene_id={timestamp} (no instruction provided)", flush=True)
+        else:
+            output_dir = Path(args.output_dir).expanduser().resolve()
+
         if args.calibration_mode == "hand_eye":
             calibration = load_hand_eye_calibration(
                 Path(args.hand_eye_calibration).expanduser().resolve(),
