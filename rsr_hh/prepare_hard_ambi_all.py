@@ -24,7 +24,7 @@ from .prepare_inputs import (
 )
 
 
-DEFAULT_INPUT_ROOT = PROJECT_ROOT / "rsr" / "data" / "hard_ambi_all" / "input"
+DEFAULT_INPUT_ROOT = PROJECT_ROOT / "rsr_hh" / "data" / "hard_ambi_all" / "input"
 TESTCASE = "01_hard_ambiguous"
 
 

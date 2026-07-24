@@ -11,7 +11,7 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 # Reuse the existing pipeline's API defaults without copying credentials into
-# rsr/. Only these two trusted export assignments are evaluated; no pipeline
+# rsr_hh/. Only these two trusted export assignments are evaluated; no pipeline
 # stages are sourced or executed.
 while IFS= read -r line; do
     case "$line" in
@@ -24,4 +24,4 @@ while IFS= read -r line; do
     esac
 done < "$ROOT_DIR/run_pipeline.sh"
 
-exec "$PYTHON" -u -m rsr.run "$@"
+exec "$PYTHON" -u -m rsr_hh.run "$@"

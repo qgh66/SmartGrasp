@@ -5,7 +5,7 @@
   1. reason grasp_id 的 perception mask vs GT mask → IoU
   2. SSR = 所有有效 split 的 IoU 均值
 
-Usage: python ssr/evaluate_ssr.py easy easy-ambi ...
+Usage: python ssr_hh/evaluate_ssr_hh.py easy easy-ambi ...
 """
 from __future__ import annotations
 
@@ -201,9 +201,9 @@ def main() -> None:
         print(f"  {cat}: SSR = {ssr:.4f}  (mean IoU, {total} splits)")
         print(f"{'='*50}")
 
-        out_dir = ROOT / "ssr" / "results"
+        out_dir = ROOT / "ssr_hh" / "results"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{cat}_ssr.json"
+        out_path = out_dir / f"{cat}_ssr_hh.json"
         out_path.write_text(json.dumps({
             "category": cat,
             "total_splits": total,

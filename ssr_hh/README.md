@@ -9,8 +9,8 @@
 | `prepare.py` | 从 parquet 生成任务清单（`tasks.json` + `scene_lists/*.txt`） |
 | `run_all.sh` | 以 scene 为单位：perception → intent → reason → organize |
 | `run_all_reason.sh` | **仅重跑 intent + reason**，基于已有 perception 结果 |
-| `evaluate_ssr.py` | 计算 SSR 指标（模型预测 mask vs GT mask 的 IoU） |
-| `evaluate_ssr.sh` | SSR 计算的 shell 封装 |
+| `evaluate_ssr_hh.py` | 计算 SSR 指标（模型预测 mask vs GT mask 的 IoU） |
+| `evaluate_ssr_hh.sh` | SSR 计算的 shell 封装 |
 | `results/` | SSR 结果输出目录 |
 
 ## 快速开始
@@ -19,20 +19,20 @@
 conda activate smartgrasp
 
 # 1. 生成任务清单
-python ssr/prepare.py
+python ssr_hh/prepare.py
 
 # 2. 跑全部（6 类共 291 场景，非常耗时）
-bash ssr/run_all.sh
+bash ssr_hh/run_all_hh.sh
 
 # 3. 只跑某一类
-bash ssr/run_all.sh easy
+bash ssr_hh/run_all_hh.sh easy
 
 # 4. 只跑某一个 scene
-bash ssr/run_all.sh easy 0
+bash ssr_hh/run_all_hh.sh easy 0
 
 # 5. 断点续跑（从指定 scene_id 开始）
-bash ssr/run_all.sh --from 1556           # 全部类别，从 scene_1556 开始
-bash ssr/run_all.sh hard-ambi --from 1556 # 指定类别，从 scene_1556 开始
+bash ssr_hh/run_all_hh.sh --from 1556           # 全部类别，从 scene_1556 开始
+bash ssr_hh/run_all_hh.sh hard-ambi --from 1556 # 指定类别，从 scene_1556 开始
 ```
 
 ### 只重跑 intent + reason（不重跑 perception）
@@ -41,17 +41,17 @@ bash ssr/run_all.sh hard-ambi --from 1556 # 指定类别，从 scene_1556 开始
 
 ```bash
 # 全部 6 类
-bash ssr/run_all_reason.sh --all
+bash ssr_hh/run_all_reason_hh.sh --all
 
 # 重跑某个类
-bash ssr/run_all_reason.sh medium
+bash ssr_hh/run_all_reason_hh.sh medium
 
 # 从指定 scene_id 开始（断点续跑）
-bash ssr/run_all_reason.sh medium --from 79
-bash ssr/run_all_reason.sh --all --from 5000
+bash ssr_hh/run_all_reason_hh.sh medium --from 79
+bash ssr_hh/run_all_reason_hh.sh --all --from 5000
 
 # 只跑指定场景
-bash ssr/run_all_reason.sh medium 79 206 348 6862
+bash ssr_hh/run_all_reason_hh.sh medium 79 206 348 6862
 ```
 
 脚本顶部可切换模型和算法：
@@ -130,19 +130,19 @@ data/
 
 ```bash
 # 单类
-bash ssr/evaluate_ssr.sh easy
+bash ssr_hh/evaluate_ssr_hh.sh easy
 
 # 多类
-bash ssr/evaluate_ssr.sh easy medium hard
+bash ssr_hh/evaluate_ssr_hh.sh easy medium hard
 
 # 全部 6 类
-bash ssr/evaluate_ssr.sh --all
+bash ssr_hh/evaluate_ssr_hh.sh --all
 
 # 逐场景详细输出
-bash ssr/evaluate_ssr.sh -v easy
+bash ssr_hh/evaluate_ssr_hh.sh -v easy
 ```
 
-结果写入 `ssr/results/{category}_ssr.json`：
+结果写入 `ssr_hh/results/{category}_ssr_hh.json`：
 ```json
 {
   "category": "easy",
@@ -178,5 +178,5 @@ bash ssr/evaluate_ssr.sh -v easy
 - GT 和 perception 每个场景只跑一次（与 annotation split 无关）
 - intent 和 reason 每个场景跑 3 次（3 个不同的 annotation split）
 - `groundTruthObjIds` 是 0-based，GT mask 文件是 1-based，需要 +1
-- 不动源码，所有脚本在 `ssr/` 目录内
+- 不动源码，所有脚本在 `ssr_hh/` 目录内
 - 环境变量已在 `run_all.sh` 中设置

@@ -6,8 +6,8 @@ import numpy as np
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "ssr" / "results"
-OUT = ROOT / "ssr" / "plots"
+RESULTS = ROOT / "ssr_hh" / "results"
+OUT = ROOT / "ssr_hh" / "plots"
 OUT.mkdir(exist_ok=True)
 
 CATEGORIES = ["easy", "easy-ambi", "medium", "medium-ambi", "hard", "hard-ambi"]
@@ -17,7 +17,7 @@ fig, axes = plt.subplots(2, 3, figsize=(15, 10))
 axes = axes.flatten()
 
 for i, cat in enumerate(CATEGORIES):
-    path = RESULTS / f"{cat}_ssr.json"
+    path = RESULTS / f"{cat}_ssr_hh.json"
     if not path.exists():
         continue
     data = json.load(open(path))

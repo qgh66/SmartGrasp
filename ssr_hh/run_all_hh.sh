@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 # 逐 scene 完整处理：perception → gt → intent ×3 → reason ×3 → 放入分类目录
-# 用法:
-#   bash ssr/run_all.sh                  # 全部 6 类
-#   bash ssr/run_all.sh --all            # 全部 6 类
-#   bash ssr/run_all.sh easy             # 只跑 easy
-#   bash ssr/run_all.sh easy 0 20        # 只跑指定 scene
-#   bash ssr/run_all.sh --from 1556      # 全部类别，从 scene_1556 开始
-#   bash ssr/run_all.sh hard-ambi --from 1556  # hard-ambi，从 scene_1556 开始
+# 用法: bash ssr_hh/run_all_hh.sh [category] [scene_ids ...]
 
 set -u
 
@@ -45,44 +39,38 @@ REASON_ARGS="
 REASON_ARGS_FLAT=$(echo $REASON_ARGS)
 
 export SAM2_ROOT="${SAM2_ROOT:-$HOME/miniconda3/envs/smartgrasp/lib/python3.12/site-packages/sam2}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['api_key'])")}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['base_url'])")}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:?Please export OPENAI_API_KEY before running}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://yunwu.ai/v1}"
 
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }
 
-CATEGORIES=()
+CATEGORY="${1:-}"
+shift 2>/dev/null || true
+
 FROM_SCENE=""
 SCENE_IDS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --all) CATEGORIES=(); shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
-        easy|easy-ambi|medium|medium-ambi|hard|hard-ambi)
-            CATEGORIES+=("$1"); shift ;;
-        *)
-            SCENE_IDS="$SCENE_IDS $1"
-            shift
-            ;;
+        *) SCENE_IDS="$SCENE_IDS $1"; shift ;;
     esac
 done
 SCENE_IDS="${SCENE_IDS# }"  # trim leading space
-CATEGORY_STR=$(IFS=,; echo "${CATEGORIES[*]}")
-CATEGORY_STR="${CATEGORY_STR:-all}"
 
 # 日志
 mkdir -p logs/ssr
-LOG="logs/ssr/run_${CATEGORY_STR//,/_}_$(date +%Y%m%d_%H%M%S).log"
+LOG="logs/ssr_hh/run_${CATEGORY:-all}_$(date +%Y%m%d_%H%M%S).log"
 exec > "$LOG" 2>&1
 echo "Log: $LOG"
 
 # 生成任务清单
-"$PYTHON" "$ROOT_DIR/ssr/prepare.py" > /dev/null
+"$PYTHON" "$ROOT_DIR/ssr_hh/prepare.py" > /dev/null
 
 # 读取过滤后的任务（用 ||| 分隔，避免 annotation 内空格被切碎）
 TASKS=$("$PYTHON" -c "
 import json
-tasks = json.load(open('ssr/tasks.json'))
+tasks = json.load(open('ssr_hh/tasks.json'))
 cat = '${CATEGORY}'
 sids = set('${SCENE_IDS}'.split()) if '${SCENE_IDS}' else set()
 from_sid = '${FROM_SCENE}'
@@ -100,23 +88,23 @@ from pathlib import Path
 
 ROOT = Path('$ROOT_DIR')
 PYTHON = '$PYTHON'
-CATS = set('${CATEGORY_STR}'.split(',')) if '${CATEGORY_STR}' != 'all' else set()
+CAT = '${CATEGORY}'
 SIDS = set('${SCENE_IDS}'.split()) if '${SCENE_IDS}' else set()
 FROM = '${FROM_SCENE}'
 
-tasks = json.load(open('ssr/tasks.json'))
+tasks = json.load(open('ssr_hh/tasks.json'))
 total = 0
 ok = 0
 fail = 0
 
 for t in tasks:
-    if CATS and t['category'] not in CATS: continue
+    if CAT and t['category'] != CAT: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
     total += 1
 
 for t in tasks:
-    if CATS and t['category'] not in CATS: continue
+    if CAT and t['category'] != CAT: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
 

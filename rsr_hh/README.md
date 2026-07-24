@@ -16,13 +16,13 @@ It deterministically selects 20 globally unique scenes from each of the six
 three distinct annotation strings are eligible.
 
 ```bash
-$HOME/anaconda3/envs/smartgrasp/bin/python -m rsr.prepare_inputs
+$HOME/anaconda3/envs/smartgrasp/bin/python -m rsr_hh.prepare_inputs
 ```
 
-The resulting layout is entirely under `rsr/data/`:
+The resulting layout is entirely under `rsr_hh/data/`:
 
 ```text
-rsr/data/input/
+rsr_hh/data/input/
   manifest.json
   01_hard_ambiguous/
     scene_59/
@@ -49,27 +49,27 @@ to GPT-5.5 when invoked with ``--reason-model gpt-5.5``:
 - `theory_graspability`: graspability prompt + `theory`
 
 ```bash
-bash rsr/run_rsr.sh
+bash rsr_hh/run_rsr_hh.sh
 ```
 
 Useful smoke-test commands:
 
 ```bash
 # Required smoke test: two scenes, GPT-4o, both algorithms, three annotations.
-bash rsr/run_rsr.sh --testcase hard_ambiguous --limit-scenes 2 \
+bash rsr_hh/run_rsr_hh.sh --testcase hard_ambiguous --limit-scenes 2 \
   --reason-model gpt-4o --fail-fast
 
 # Perception only.
-bash rsr/run_rsr.sh --testcase hard_ambiguous --limit-scenes 1 --perception-only
+bash rsr_hh/run_rsr_hh.sh --testcase hard_ambiguous --limit-scenes 1 --perception-only
 
 # Reuse existing perception and run one annotation only.
-bash rsr/run_rsr.sh --testcase hard_ambiguous --limit-scenes 1 --reason-only --split 0
+bash rsr_hh/run_rsr_hh.sh --testcase hard_ambiguous --limit-scenes 1 --reason-only --split 0
 ```
 
 Outputs are isolated per annotation while sharing one perception directory:
 
 ```text
-rsr/data/output/
+rsr_hh/data/output/
   perception/01_hard_ambiguous/scene_59/perception/  # generated once
   results/
     gpt-5.5/information_gain_original/01_hard_ambiguous/scene_59/annotations/...
@@ -89,16 +89,16 @@ by maximum mask overlap, with point lookup as a fallback. Parquet IDs are
 zero-based; NPZ labels are one-based because label zero is background.
 
 Missing or failed runs count as failures and remain in the RSR denominator,
-following the current ``rsr/evaluate.py`` behavior. Compute or recompute the
+following the current ``rsr_hh/evaluate.py`` behavior. Compute or recompute the
 metric with:
 
 ```bash
-$HOME/anaconda3/envs/smartgrasp/bin/python -m rsr.evaluate
+$HOME/anaconda3/envs/smartgrasp/bin/python -m rsr_hh.evaluate
 ```
 
 Final files:
 
-- `rsr/data/output/reports/<model>/<algorithm>/rsr_results.csv`
-- `rsr/data/output/reports/<model>/<algorithm>/rsr_summary.json`
-- `rsr/data/output/reports/rsr_matrix_summary.json`
-- `rsr/data/output/run_failures.json`
+- `rsr_hh/data/output/reports/<model>/<algorithm>/rsr_results.csv`
+- `rsr_hh/data/output/reports/<model>/<algorithm>/rsr_summary.json`
+- `rsr_hh/data/output/reports/rsr_matrix_summary.json`
+- `rsr_hh/data/output/run_failures.json`

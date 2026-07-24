@@ -5,9 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON="${PYTHON:-$HOME/anaconda3/envs/smartgrasp/bin/python}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-rsr/data/gpt4o_first10_four_categories/output}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-rsr_hh/data/gpt4o_first10_four_categories/output}"
 POLL_SECONDS="${POLL_SECONDS:-30}"
-MAIN_PATTERN="[b]ash rsr/run_gpt4o_remaining_four_categories.sh"
+MAIN_PATTERN="[b]ash rsr_hh/run_gpt4o_remaining_four_categories_hh.sh"
 
 if [[ ! -x "$PYTHON" ]]; then
     echo "SmartGrasp Python not found: $PYTHON" >&2
@@ -31,7 +31,7 @@ mkdir -p "$OUTPUT_ROOT"
 retry_log="$OUTPUT_ROOT/retry_failed_$(date +%Y%m%d_%H%M%S).log"
 
 set +e
-"$PYTHON" -m rsr.retry_failed_reason --evaluate \
+"$PYTHON" -m rsr_hh.retry_failed_reason --evaluate \
     2>&1 | tee "$retry_log"
 retry_status=${PIPESTATUS[0]}
 set -e

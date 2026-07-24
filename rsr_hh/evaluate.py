@@ -26,7 +26,7 @@ RESULT_CSV_FIELDS = [
     "model", "algorithm", "testcase", "scene_id", "query_obj_id", "difficulty", "ambiguous", "split",
     "instruction", "intent_selected_id", "intent_selected_object", "branch", "reason_grasp_id",
     "reason_grasp_object", "reason_status", "selection_status", "ground_truth_object_ids",
-    "predicted_perception_object_id", "predicted_dataset_object_id", "rsr_success", "status",
+    "predicted_perception_object_id", "predicted_dataset_object_id", "ssr_iou", "rsr_success", "status",
 ]
 
 
@@ -128,6 +128,40 @@ def map_perception_id_to_gt(
     }
 
 
+def selected_mask_ssr(
+    object_id: int | None,
+    perception_dir: Path,
+    instances: np.ndarray,
+    valid_dataset_ids: list[int],
+) -> float:
+    """Return the best mask IoU against the valid GT objects for one annotation.
+
+    Missing selections, missing masks, and incompatible mask shapes count as
+    zero so SSR uses the same full-denominator rule as the current RSR
+    evaluator.
+    """
+    if object_id is None:
+        return 0.0
+
+    mask_path = _find_object_mask(perception_dir / "mask", int(object_id))
+    if mask_path is None:
+        return 0.0
+
+    predicted_mask = np.asarray(Image.open(mask_path).convert("L")) > 127
+    if predicted_mask.shape != instances.shape:
+        return 0.0
+
+    best_iou = 0.0
+    for dataset_object_id in valid_dataset_ids:
+        gt_mask = instances == (int(dataset_object_id) + 1)
+        union = np.logical_or(predicted_mask, gt_mask).sum()
+        if union == 0:
+            continue
+        intersection = np.logical_and(predicted_mask, gt_mask).sum()
+        best_iou = max(best_iou, float(intersection / union))
+    return best_iou
+
+
 def evaluate_annotation(
     input_scene: Path,
     perception_scene: Path,
@@ -158,6 +192,7 @@ def evaluate_annotation(
 
     mapping = map_perception_id_to_gt(predicted_id, perception_dir, instances)
     valid_ids = [int(value) for value in metadata["ground_truth_object_ids"]]
+    ssr_iou = selected_mask_ssr(predicted_id, perception_dir, instances, valid_ids)
     correct = int(mapping["dataset_object_id"] in valid_ids) if mapping["dataset_object_id"] is not None else 0
     result = {
         "model": model,
@@ -182,6 +217,7 @@ def evaluate_annotation(
         "predicted_perception_object_id": predicted_id,
         "predicted_dataset_object_id": mapping["dataset_object_id"],
         "mapping": mapping,
+        "ssr_iou": ssr_iou,
         "rsr_success": correct,
         "status": status,
         "reason_summary": str(reason_summary_path),
@@ -238,6 +274,10 @@ def evaluate_configuration(
             "num_scenes": len(category_rows) // 3,
             "num_annotation_runs": len(category_rows),
             "split_rsr": split_rates,
+            "ssr_mean_iou": (
+                fmean(row["ssr_iou"] for row in category_rows)
+                if category_rows else 0.0
+            ),
             "rsr_mean": fmean(values),
             "rsr_std": pstdev(values),
             "rsr_pooled": fmean(row["rsr_success"] for row in category_rows) if category_rows else 0.0,
@@ -289,8 +329,8 @@ def write_matrix_csv_reports(
 
     aggregate_fields = [
         "model", "algorithm", "ranking_score", "prior_prompt", "testcase", "difficulty", "ambiguous",
-        "num_scenes", "num_annotation_runs", "split_0_rsr", "split_1_rsr", "split_2_rsr",
-        "rsr_mean", "rsr_std", "rsr_pooled",
+        "num_scenes", "num_annotation_runs", "ssr_mean_iou", "split_0_rsr", "split_1_rsr",
+        "split_2_rsr", "rsr_mean", "rsr_std", "rsr_pooled",
     ]
     aggregate_path = report_root / "rsr_aggregate_summary.csv"
     with aggregate_path.open("w", newline="", encoding="utf-8") as handle:
@@ -308,6 +348,7 @@ def write_matrix_csv_reports(
                     "ambiguous": category["ambiguous"],
                     "num_scenes": category["num_scenes"],
                     "num_annotation_runs": category["num_annotation_runs"],
+                    "ssr_mean_iou": category["ssr_mean_iou"],
                     "split_0_rsr": category["split_rsr"]["0"],
                     "split_1_rsr": category["split_rsr"]["1"],
                     "split_2_rsr": category["split_rsr"]["2"],

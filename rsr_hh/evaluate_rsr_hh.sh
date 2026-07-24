@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# 计算 SSR（Segmentation Success Rate）
-# 用法:
-#   bash ssr/evaluate_ssr.sh easy          → 单个类别
-#   bash ssr/evaluate_ssr.sh easy medium   → 多个类别
-#   bash ssr/evaluate_ssr.sh --all         → 全部 6 类
-#   bash ssr/evaluate_ssr.sh -v easy       → 详细输出（逐场景）
+# 计算 RSR（Reasoning Success Rate）— 二值 IoU ≥ 0.5
+# 用法: bash rsr_hh/evaluate_rsr_hh.sh [--all] [-v] <category...>
 
 set -u
 
@@ -27,9 +23,9 @@ for arg in "$@"; do
 done
 
 if [[ ${#CATEGORIES[@]} -eq 0 ]]; then
-    echo "用法: bash ssr/evaluate_ssr.sh [--all] [-v] <category...>"
+    echo "用法: bash rsr_hh/evaluate_rsr_hh.sh [--all] [-v] <category...>"
     echo "类别: ${ALL_CATEGORIES[*]}"
     exit 1
 fi
 
-exec "$PYTHON" "$ROOT_DIR/ssr/evaluate_ssr.py" $VERBOSE "${CATEGORIES[@]}"
+exec "$PYTHON" "$ROOT_DIR/rsr_hh/evaluate_rsr_hh.py" $VERBOSE "${CATEGORIES[@]}"

@@ -35,7 +35,7 @@ SELECTED_CATEGORIES = (
 EXPECTED_CASES_PER_CATEGORY = 50
 BASELINE_CASES_PER_CATEGORY = 10
 DEFAULT_EXPERIMENT_ROOT = (
-    PROJECT_ROOT / "rsr" / "data" / "gpt4o_first10_four_categories"
+    PROJECT_ROOT / "rsr_hh" / "data" / "gpt4o_first10_four_categories"
 )
 
 

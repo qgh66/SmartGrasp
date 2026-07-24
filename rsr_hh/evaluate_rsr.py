@@ -6,7 +6,7 @@
   2. IoU >= 0.5 → 成功
   3. RSR = 成功数 / 总数
 
-Usage: python rsr/evaluate_rsr.py easy easy-ambi ...
+Usage: python rsr_hh/evaluate_rsr_hh.py easy easy-ambi ...
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ssr.evaluate_ssr import (
+from ssr_hh.evaluate_ssr import (
     load_ground_truth, load_mask, iou,
     find_perception_mask, find_gt_mask,
 )
@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 IOU_THRESHOLD = 0.5
 SPLITS = ["split0", "split1", "split2"]
-RSR_DIR = ROOT / "rsr"
+RSR_DIR = ROOT / "rsr_hh"
 RESULTS_DIR = RSR_DIR / "results"
 
 
@@ -141,7 +141,7 @@ def main() -> None:
         print(f"  {cat}: RSR = {ok}/{total} = {rsr:.4f}  (IoU ≥ {IOU_THRESHOLD})")
         print(f"{'='*50}")
 
-        out_path = RESULTS_DIR / f"{cat}_rsr.json"
+        out_path = RESULTS_DIR / f"{cat}_rsr_hh.json"
         out_path.write_text(json.dumps({
             "category": cat,
             "iou_threshold": IOU_THRESHOLD,

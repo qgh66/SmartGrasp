@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 基于已有 perception，只重跑 intent + reason
-# 用法: bash ssr/run_all_reason.sh [category] [scene_ids ...] [--from N]
+# 用法: bash ssr_hh/run_all_reason_hh.sh [category] [scene_ids ...] [--from N]
 
 set -u
 
@@ -18,25 +18,26 @@ REASON_ARGS="
 REASON_ARGS_FLAT=$(echo $REASON_ARGS)
 
 export SAM2_ROOT="${SAM2_ROOT:-$HOME/miniconda3/envs/smartgrasp/lib/python3.12/site-packages/sam2}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['api_key'])")}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$(python3 -c "import json;print(json.load(open('$ROOT_DIR/api_config.json'))['base_url'])")}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:?Please export OPENAI_API_KEY before running}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://yunwu.ai/v1}"
 
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }
 
-CATEGORIES=()
+CATEGORY=""
 FROM_SCENE=""
 SCENE_IDS=""
+CATEGORY_SET=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --all) CATEGORIES=(); shift ;;
+        --all) CATEGORY=""; CATEGORY_SET="1"; shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
-        easy|easy-ambi|medium|medium-ambi|hard|hard-ambi)
-            CATEGORIES+=("$1"); shift ;;
         *) 
-            SCENE_IDS="$SCENE_IDS $1"
-            shift
-            ;;
+            if [[ -z "$CATEGORY_SET" && "$1" != --* ]]; then
+                CATEGORY="$1"; CATEGORY_SET="1"
+            else
+                SCENE_IDS="$SCENE_IDS $1"
+            fi
             shift
             ;;
     esac
@@ -45,12 +46,12 @@ SCENE_IDS="${SCENE_IDS# }"
 
 # 日志
 mkdir -p logs/ssr
-LOG="logs/ssr/run_reason_${CATEGORY_STR//,/_}_$(date +%Y%m%d_%H%M%S).log"
+LOG="logs/ssr_hh/run_reason_${CATEGORY:-all}_$(date +%Y%m%d_%H%M%S).log"
 exec > "$LOG" 2>&1
 echo "Log: $LOG"
 
 # 生成任务清单
-"$PYTHON" "$ROOT_DIR/ssr/prepare.py" > /dev/null
+"$PYTHON" "$ROOT_DIR/ssr_hh/prepare.py" > /dev/null
 
 # 逐 scene 循环
 "$PYTHON" -c "
@@ -59,11 +60,11 @@ from pathlib import Path
 
 ROOT = Path('$ROOT_DIR')
 PYTHON = '$PYTHON'
-CATS = set('${CATEGORY_STR}'.split(',')) if '${CATEGORY_STR}' != 'all' else set()
+CAT = '${CATEGORY}'
 SIDS = set('${SCENE_IDS}'.split()) if '${SCENE_IDS}' else set()
 FROM = '${FROM_SCENE}'
 
-tasks = json.load(open('ssr/tasks.json'))
+tasks = json.load(open('ssr_hh/tasks.json'))
 total = 0
 ok = 0
 fail = 0
@@ -76,13 +77,13 @@ if not _key:
 print(f'[env] OPENAI_API_KEY = {_key[:8]}...{_key[-4:]}', flush=True)
 
 for t in tasks:
-    if CATS and t['category'] not in CATS: continue
+    if CAT and t['category'] != CAT: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
     total += 1
 
 for t in tasks:
-    if CATS and t['category'] not in CATS: continue
+    if CAT and t['category'] != CAT: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
 

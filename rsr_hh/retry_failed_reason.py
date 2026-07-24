@@ -19,7 +19,7 @@ from .run import run_perception, run_reason, selected_testcases
 
 
 DEFAULT_EXPERIMENT_ROOT = (
-    PROJECT_ROOT / "rsr" / "data" / "gpt4o_first10_four_categories"
+    PROJECT_ROOT / "rsr_hh" / "data" / "gpt4o_first10_four_categories"
 )
 DEFAULT_TESTCASES = (
     "hard_ambiguous",

@@ -57,6 +57,13 @@ results.csv
 branch_results.json
 reason.txt
 /rsr/data
+/rsr_hh/data/
+/rsr_hh/results*/
+/ssr_hh/results*/
+/ssr_hh/plots/
+
+# Per-scene SSR evaluation artifacts are local outputs, not source.
+/ssr/results/*/
 
 # --- Downloaded models, checkpoints, and external repos ---
 /models/

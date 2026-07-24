@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate task list for all 291 scenes with first query + 3 annotation splits.
 
-Output: ssr/tasks.json
+Output: ssr_hh/tasks.json
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-SSR_DIR = ROOT / "ssr"
+SSR_DIR = ROOT / "ssr_hh"
 SSR_DIR.mkdir(parents=True, exist_ok=True)
 
 

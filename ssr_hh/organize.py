@@ -12,8 +12,8 @@ Assumes the following have been generated for each scene:
   data/scene_X/reason_split2/         (reason for split 2)
 
 Usage:
-  python ssr/organize.py          # dry-run, shows what would be moved
-  python ssr/organize.py --run    # actually moves files
+  python ssr_hh/organize.py          # dry-run, shows what would be moved
+  python ssr_hh/organize.py --run    # actually moves files
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-SSR_DIR = ROOT / "ssr"
+SSR_DIR = ROOT / "ssr_hh"
 SPLITS = ["split0", "split1", "split2"]
 
 

@@ -119,14 +119,14 @@ def main() -> None:
     parser.add_argument(
         "--source-root",
         type=Path,
-        default=PROJECT_ROOT / "rsr" / "data" / "input",
+        default=PROJECT_ROOT / "rsr_hh" / "data" / "input",
     )
     parser.add_argument(
         "--target-root",
         type=Path,
         default=(
             PROJECT_ROOT
-            / "rsr"
+            / "rsr_hh"
             / "data"
             / "gpt4o_first10_four_categories"
             / "input"

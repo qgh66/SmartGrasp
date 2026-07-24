@@ -5,15 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON="${PYTHON:-$HOME/anaconda3/envs/smartgrasp/bin/python}"
-INPUT_ROOT="${INPUT_ROOT:-rsr/data/hard_ambi_all/input}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-rsr/data/hard_ambi_all/output}"
+INPUT_ROOT="${INPUT_ROOT:-rsr_hh/data/hard_ambi_all/input}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-rsr_hh/data/hard_ambi_all/output}"
 
 if [[ ! -f "$INPUT_ROOT/manifest.json" ]]; then
-    "$PYTHON" -m rsr.prepare_hard_ambi_all --input-root "$INPUT_ROOT"
+    "$PYTHON" -m rsr_hh.prepare_hard_ambi_all --input-root "$INPUT_ROOT"
 fi
 
 set +e
-bash rsr/run_rsr.sh \
+bash rsr_hh/run_rsr_hh.sh \
   --input-root "$INPUT_ROOT" \
   --output-root "$OUTPUT_ROOT" \
   --testcase hard_ambiguous \
@@ -43,7 +43,7 @@ bash rsr/run_rsr.sh \
   --force-reason
 run_status=$?
 
-"$PYTHON" -m rsr.evaluate \
+"$PYTHON" -m rsr_hh.evaluate \
   --input-root "$INPUT_ROOT" \
   --output-root "$OUTPUT_ROOT" \
   --model gpt-5.5 \
