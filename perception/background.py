@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from scipy.ndimage import label as connected_components
 
 DEPTH_BACKGROUND_THRESHOLD = 79.802 - 0.05
 BACKGROUND_OVERLAP_REJECTION_THRESHOLD = 0.5
@@ -29,44 +28,6 @@ def _load_tray_border_mask(shape: tuple[int, int]) -> np.ndarray | None:
     if mask.shape[:2] != shape:
         return None
     return mask > 128
-
-
-def load_tray_interior_mask(shape: tuple[int, int]) -> np.ndarray | None:
-    """Return the largest black region enclosed by the white tray border.
-
-    ``tray_border_mask.png`` contains a white tray rim, a black region outside
-    the tray, and a black rectangular floor inside the rim.  Connected black
-    components touching the image boundary are outside the tray; small enclosed
-    components are calibration marks.  The largest remaining component is the
-    tray-floor sampling region.
-    """
-    tray_border_mask = _load_tray_border_mask(shape)
-    if tray_border_mask is None:
-        return None
-
-    labels, count = connected_components(~tray_border_mask)
-    if count == 0:
-        return None
-
-    boundary_labels = set(
-        int(value)
-        for value in np.unique(
-            np.concatenate(
-                (labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1])
-            )
-        )
-    )
-    component_ids, component_areas = np.unique(labels, return_counts=True)
-    enclosed = [
-        (int(component_id), int(area))
-        for component_id, area in zip(component_ids, component_areas)
-        if int(component_id) != 0 and int(component_id) not in boundary_labels
-    ]
-    if not enclosed:
-        return None
-
-    interior_id = max(enclosed, key=lambda item: item[1])[0]
-    return labels == interior_id
 
 
 def _get_reference_tray_depth(shape: tuple[int, int]) -> np.ndarray | None:

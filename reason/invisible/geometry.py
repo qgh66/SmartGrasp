@@ -1,12 +1,51 @@
 from __future__ import annotations
 
-import numpy as np
-from scipy.ndimage import binary_dilation
+from pathlib import Path
 
-from perception.background import load_tray_interior_mask
+import numpy as np
+from PIL import Image
+from scipy.ndimage import binary_dilation, label as connected_components
 
 
 EQUIVALENT_AREA_KEY = "equivalent_area_px"
+_TRAY_BORDER_MASK_PATH = (
+    Path(__file__).resolve().parents[2] / "data" / "tray_border_mask.png"
+)
+
+
+def _load_tray_interior_mask(shape: tuple[int, int]) -> np.ndarray | None:
+    """Return the largest black region enclosed by the white tray border."""
+    if not _TRAY_BORDER_MASK_PATH.exists():
+        return None
+
+    with Image.open(_TRAY_BORDER_MASK_PATH) as image:
+        mask = np.asarray(image.convert("L"))
+    if mask.shape != shape:
+        return None
+
+    labels, count = connected_components(~(mask > 128))
+    if count == 0:
+        return None
+
+    boundary_labels = set(
+        int(value)
+        for value in np.unique(
+            np.concatenate(
+                (labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1])
+            )
+        )
+    )
+    component_ids, component_areas = np.unique(labels, return_counts=True)
+    enclosed = [
+        (int(component_id), int(area))
+        for component_id, area in zip(component_ids, component_areas)
+        if int(component_id) != 0 and int(component_id) not in boundary_labels
+    ]
+    if not enclosed:
+        return None
+
+    interior_id = max(enclosed, key=lambda item: item[1])[0]
+    return labels == interior_id
 
 
 def precompute_geometry_cache(perception) -> dict:
@@ -22,7 +61,7 @@ def precompute_geometry_cache(perception) -> dict:
     for info in perception.node_info.values():
         all_masks |= np.asarray(info["mask"], dtype=bool)
     valid_depth = np.isfinite(depth) & (depth > 0)
-    tray_interior = load_tray_interior_mask(depth.shape)
+    tray_interior = _load_tray_interior_mask(depth.shape)
     if tray_interior is None:
         table_region = (~all_masks) & valid_depth
     else:
