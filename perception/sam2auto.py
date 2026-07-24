@@ -231,44 +231,185 @@ def _internal_depth_edge_report(
     mask: np.ndarray,
     depth_gradient: np.ndarray | None,
     valid_depth_mask: np.ndarray | None,
+    depth_map: np.ndarray | None = None,
 ) -> dict[str, Any]:
-    if depth_gradient is None or valid_depth_mask is None or cv2 is None:
-        return {"has_internal_depth_edge": False, "reason": "depth_gradient_unavailable"}
+    """Judge whether a mask has an internal depth edge crossing the object.
 
-    mask_u8 = np.asarray(mask, dtype=np.uint8)
-    num_labels, labels = cv2.connectedComponents(mask_u8, connectivity=8)
+    Uses green-red bridge algorithm: green = boundary high-gradient pixels,
+    red = internal high-gradient pixels. If a path exists from one green
+    component through red to another green component with distance >= 8 px
+    and region split ratio <= 30x, the mask is rejected.
+    """
+    if depth_map is None or depth_map.size == 0:
+        # Fallback to old behavior when depth_map not provided
+        if depth_gradient is None or valid_depth_mask is None or cv2 is None:
+            return {"has_internal_depth_edge": False, "reason": "depth_gradient_unavailable"}
+        mask_u8 = np.asarray(mask, dtype=np.uint8)
+        num_labels, labels = cv2.connectedComponents(mask_u8, connectivity=8)
+        kernel = np.ones((3, 3), np.uint8)
+        checked_components = 0
+        strongest_edge_fraction = 0.0
+        strongest_edge_p90 = 0.0
+        for label in range(1, num_labels):
+            component = labels == label
+            if int(np.count_nonzero(component)) < 64:
+                continue
+            interior = cv2.erode(component.astype(np.uint8), kernel, iterations=2).astype(bool)
+            interior &= valid_depth_mask
+            if int(np.count_nonzero(interior)) < 32:
+                continue
+            values = depth_gradient[interior]
+            edge_fraction = float(np.mean(values >= 0.45))
+            edge_p90 = float(np.percentile(values, 90))
+            checked_components += 1
+            strongest_edge_fraction = max(strongest_edge_fraction, edge_fraction)
+            strongest_edge_p90 = max(strongest_edge_p90, edge_p90)
+            if edge_fraction >= 0.08 and edge_p90 >= 0.70:
+                return {
+                    "has_internal_depth_edge": True,
+                    "checked_components": checked_components,
+                    "internal_edge_fraction": edge_fraction,
+                    "internal_edge_p90": edge_p90,
+                }
+        return {
+            "has_internal_depth_edge": False,
+            "checked_components": checked_components,
+            "internal_edge_fraction": strongest_edge_fraction,
+            "internal_edge_p90": strongest_edge_p90,
+        }
+
+    # Compute absolute depth gradient (blur=3, sobel=1)
+    depth = np.asarray(depth_map, dtype=np.float32)
+    valid = np.isfinite(depth) & (depth > 0)
+    if not np.any(valid):
+        return {"has_internal_depth_edge": False, "reason": "no_valid_depth"}
+    fill_value = float(np.median(depth[valid]))
+    filled = np.where(valid, depth, fill_value).astype(np.float32)
+    smooth = cv2.GaussianBlur(filled, (3, 3), 0)
+    grad_x = cv2.Sobel(smooth, cv2.CV_32F, 1, 0, ksize=1)
+    grad_y = cv2.Sobel(smooth, cv2.CV_32F, 0, 1, ksize=1)
+    magnitude = np.sqrt(grad_x * grad_x + grad_y * grad_y)
+
+    m = np.asarray(mask, dtype=bool)
+    from scipy import ndimage
+
+    # Erode 2px (all directions, matching production) to get interior
     kernel = np.ones((3, 3), np.uint8)
-    checked_components = 0
-    strongest_edge_fraction = 0.0
-    strongest_edge_p90 = 0.0
+    mask_eroded = cv2.erode(m.astype(np.uint8), kernel, iterations=2).astype(bool)
+    eroded_boundary = mask_eroded & ~cv2.erode(mask_eroded.astype(np.uint8), kernel, iterations=1).astype(bool)
 
-    for label in range(1, num_labels):
-        component = labels == label
-        if int(np.count_nonzero(component)) < 64:
-            continue
-        interior = cv2.erode(component.astype(np.uint8), kernel, iterations=2).astype(bool)
-        interior &= valid_depth_mask
-        if int(np.count_nonzero(interior)) < 32:
-            continue
-        values = depth_gradient[interior]
-        edge_fraction = float(np.mean(values >= 0.45))
-        edge_p90 = float(np.percentile(values, 90))
-        checked_components += 1
-        strongest_edge_fraction = max(strongest_edge_fraction, edge_fraction)
-        strongest_edge_p90 = max(strongest_edge_p90, edge_p90)
-        if edge_fraction >= 0.08 and edge_p90 >= 0.70:
+    THRESHOLD = 0.40
+    MIN_DIST = 8.0
+    MAX_RATIO = 30
+
+    high_grad = mask_eroded & (magnitude >= THRESHOLD)
+    green = eroded_boundary & high_grad
+    red = high_grad & ~eroded_boundary
+
+    n_green = int(np.count_nonzero(green))
+    n_red = int(np.count_nonzero(red))
+    if n_green < 2:
+        return {"has_internal_depth_edge": False, "reason": "too_few_green", "green_pixels": n_green, "red_pixels": n_red}
+
+    n_g, g_labels = cv2.connectedComponents(green.astype(np.uint8), connectivity=8)
+    if n_g - 1 < 2:
+        return {"has_internal_depth_edge": False, "reason": "single_green_component", "green_pixels": n_green, "red_pixels": n_red}
+
+    n_r, r_labels = cv2.connectedComponents(red.astype(np.uint8), connectivity=8)
+
+    green_to_reds: dict[int, set[int]] = {}
+    green_coords: dict[int, np.ndarray] = {}
+    for gid in range(1, n_g):
+        gmask = g_labels == gid
+        green_coords[gid] = np.argwhere(gmask)
+        dilated = cv2.dilate(gmask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=1)
+        touching = set(np.unique(r_labels[(dilated > 0) & red]))
+        touching.discard(0)
+        green_to_reds[gid] = touching
+
+    red_adj: dict[int, set[int]] = {}
+    for rid in range(1, n_r):
+        rmask = r_labels == rid
+        dilated = cv2.dilate(rmask.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=1)
+        neighbors = set(np.unique(r_labels[(dilated > 0) & red]))
+        neighbors.discard(0)
+        neighbors.discard(rid)
+        red_adj[rid] = neighbors
+
+    green_ids = list(range(1, n_g))
+    for i in range(len(green_ids)):
+        for j in range(i + 1, len(green_ids)):
+            ga, gb = green_ids[i], green_ids[j]
+            ra_set = green_to_reds.get(ga, set())
+            rb_set = green_to_reds.get(gb, set())
+
+            connected = False
+            for ra in ra_set:
+                for rb in rb_set:
+                    if ra == rb:
+                        connected = True
+                        break
+                    if ra in red_adj and rb in red_adj:
+                        visited = {ra}
+                        stack = [ra]
+                        while stack:
+                            cur = stack.pop()
+                            if cur == rb:
+                                connected = True
+                                break
+                            for nb in red_adj.get(cur, set()):
+                                if nb not in visited:
+                                    visited.add(nb)
+                                    stack.append(nb)
+                        if connected:
+                            break
+                if connected:
+                    break
+
+            if not connected:
+                continue
+
+            ca = green_coords[ga]
+            cb = green_coords[gb]
+            if len(ca) * len(cb) < 50000:
+                min_dist = float(np.min(np.sqrt(np.sum((ca[:, None, :].astype(float) - cb[None, :, :].astype(float))**2, axis=-1))))
+            else:
+                min_dist = float("inf")
+                for pt in ca[::max(1, len(ca)//500)]:
+                    d = np.sqrt(np.sum((cb.astype(float) - pt.astype(float))**2, axis=1))
+                    min_dist = min(min_dist, float(np.min(d)))
+
+            if min_dist < MIN_DIST:
+                continue
+
+            # Region ratio check
+            cut_components = {ga, gb} | ra_set | rb_set
+            cut_mask = np.zeros_like(mask_eroded, dtype=np.uint8)
+            for cid in cut_components:
+                if cid < n_g:
+                    cut_mask |= (g_labels == cid).astype(np.uint8)
+                if cid < n_r:
+                    cut_mask |= (r_labels == cid).astype(np.uint8)
+            cut_dilated = cv2.dilate(cut_mask, np.ones((3, 3), np.uint8), iterations=3)
+            remaining = mask_eroded.astype(np.uint8) & ~cut_dilated
+            n_reg, reg_labels = cv2.connectedComponents(remaining, connectivity=8)
+            sizes = sorted([int(np.count_nonzero(reg_labels == rid)) for rid in range(1, n_reg)], reverse=True)
+            if len(sizes) >= 2 and sizes[0] / max(sizes[1], 1) > MAX_RATIO:
+                continue
+
             return {
                 "has_internal_depth_edge": True,
-                "checked_components": checked_components,
-                "internal_edge_fraction": edge_fraction,
-                "internal_edge_p90": edge_p90,
+                "reason": "cross_boundary_path",
+                "green_pixels": n_green,
+                "red_pixels": n_red,
+                "distance": round(min_dist, 1),
             }
 
     return {
         "has_internal_depth_edge": False,
-        "checked_components": checked_components,
-        "internal_edge_fraction": strongest_edge_fraction,
-        "internal_edge_p90": strongest_edge_p90,
+        "reason": "no_cross_boundary_path",
+        "green_pixels": n_green,
+        "red_pixels": n_red,
     }
 
 
@@ -595,6 +736,7 @@ def _merge_candidates_with_depth_edges(
     initial_kept: list[dict[str, Any]] | None = None,
     reject_internal_depth_edges: bool = True,
     containment_threshold: float = 0.82,
+    depth_map: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = list(initial_kept or [])
     cumulative_mask: np.ndarray | None = None
@@ -609,7 +751,7 @@ def _merge_candidates_with_depth_edges(
             continue
 
         if reject_internal_depth_edges:
-            depth_edge_report = _internal_depth_edge_report(new_mask, depth_gradient, valid_depth_mask)
+            depth_edge_report = _internal_depth_edge_report(new_mask, depth_gradient, valid_depth_mask, depth_map=depth_map)
             candidate["depth_edge_report"] = depth_edge_report
             if depth_edge_report.get("has_internal_depth_edge"):
                 candidate["rejection_reason"] = str(
@@ -751,6 +893,7 @@ def _sam2_auto_candidate_pool(
         report=report,
         initial_kept=rgb_candidates,
         reject_internal_depth_edges=True,
+        depth_map=depth_map,
     )
     candidates = _resolve_overlaps_by_depth(candidates, depth_map=depth_map)
     if save_candidates:

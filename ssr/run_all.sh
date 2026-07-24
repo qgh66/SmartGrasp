@@ -51,29 +51,28 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$(python3 -c "import json;print(json.
 PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 [[ -x "$PYTHON" ]] || { echo "❌ Python not found" >&2; exit 1; }
 
-CATEGORY=""
+CATEGORIES=()
 FROM_SCENE=""
 SCENE_IDS=""
-CATEGORY_SET=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --all) CATEGORY=""; CATEGORY_SET="1"; shift ;;
+        --all) CATEGORIES=(); shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
+        easy|easy-ambi|medium|medium-ambi|hard|hard-ambi)
+            CATEGORIES+=("$1"); shift ;;
         *)
-            if [[ -z "$CATEGORY_SET" && "$1" != --* ]]; then
-                CATEGORY="$1"; CATEGORY_SET="1"
-            else
-                SCENE_IDS="$SCENE_IDS $1"
-            fi
+            SCENE_IDS="$SCENE_IDS $1"
             shift
             ;;
     esac
 done
 SCENE_IDS="${SCENE_IDS# }"  # trim leading space
+CATEGORY_STR=$(IFS=,; echo "${CATEGORIES[*]}")
+CATEGORY_STR="${CATEGORY_STR:-all}"
 
 # 日志
 mkdir -p logs/ssr
-LOG="logs/ssr/run_${CATEGORY:-all}_$(date +%Y%m%d_%H%M%S).log"
+LOG="logs/ssr/run_${CATEGORY_STR//,/_}_$(date +%Y%m%d_%H%M%S).log"
 exec > "$LOG" 2>&1
 echo "Log: $LOG"
 
@@ -101,7 +100,7 @@ from pathlib import Path
 
 ROOT = Path('$ROOT_DIR')
 PYTHON = '$PYTHON'
-CAT = '${CATEGORY}'
+CATS = set('${CATEGORY_STR}'.split(',')) if '${CATEGORY_STR}' != 'all' else set()
 SIDS = set('${SCENE_IDS}'.split()) if '${SCENE_IDS}' else set()
 FROM = '${FROM_SCENE}'
 
@@ -111,13 +110,13 @@ ok = 0
 fail = 0
 
 for t in tasks:
-    if CAT and t['category'] != CAT: continue
+    if CATS and t['category'] not in CATS: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
     total += 1
 
 for t in tasks:
-    if CAT and t['category'] != CAT: continue
+    if CATS and t['category'] not in CATS: continue
     if FROM and t['scene_id'] < int(FROM): continue
     if SIDS and str(t['scene_id']) not in SIDS: continue
 
