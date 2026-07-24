@@ -61,6 +61,7 @@ reason.txt
 /rsr_hh/results*/
 /ssr_hh/results*/
 /ssr_hh/plots/
+/ssr_hh/tasks.json
 
 # Per-scene SSR evaluation artifacts are local outputs, not source.
 /ssr/results/*/
