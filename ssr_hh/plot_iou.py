@@ -22,7 +22,7 @@ for i, cat in enumerate(CATEGORIES):
         continue
     data = json.load(open(path))
     ious = [d["iou"] for d in data["details"]]
-    
+
     ax = axes[i]
     ax.hist(ious, bins=20, range=(0, 1), color=COLORS[i], edgecolor="white", alpha=0.8)
     ax.axvline(np.mean(ious), color="black", linestyle="--", label=f"mean={np.mean(ious):.3f}")

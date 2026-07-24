@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --all) CATEGORY=""; CATEGORY_SET="1"; shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
-        *) 
+        *)
             if [[ -z "$CATEGORY_SET" && "$1" != --* ]]; then
                 CATEGORY="$1"; CATEGORY_SET="1"
             else

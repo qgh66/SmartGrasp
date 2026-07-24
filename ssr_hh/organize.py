@@ -3,7 +3,7 @@
 
 Assumes the following have been generated for each scene:
   data/scene_X/gt/                    (GT perception, once)
-  data/scene_X/perception/            (VLM perception, once)  
+  data/scene_X/perception/            (VLM perception, once)
   data/scene_X/intent_split0/         (intent for split 0)
   data/scene_X/intent_split1/         (intent for split 1)
   data/scene_X/intent_split2/         (intent for split 2)
