@@ -56,6 +56,8 @@ graspnet-workspace/
 results.csv
 branch_results.json
 reason.txt
+/ssr_hh
+/rsr_hh
 /rsr/data
 # Keep HH experiment data local, except the compact aggregate reports that are
 # intentionally versioned for comparison and publication.
