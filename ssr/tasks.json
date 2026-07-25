@@ -5,6 +5,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_0",
     "annotations": {
       "0": "the bandage",
       "1": "the plastic bag roll",
@@ -17,6 +18,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_20",
     "annotations": {
       "0": "the yellow lemon on the right",
       "1": "the rightmost lemon",
@@ -29,6 +31,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_32",
     "annotations": {
       "0": "the lemon in the top right corner",
       "1": "the top right lemon",
@@ -41,6 +44,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_33",
     "annotations": {
       "0": "the standing cup in the centre of the image",
       "1": "the bottom cup",
@@ -53,6 +57,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_59",
     "annotations": {
       "0": "the orange nearest to the image bottom",
       "1": "the orange in the bottom",
@@ -65,6 +70,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_79",
     "annotations": {
       "0": "the transparent package with a cable inside",
       "1": "the transparent cover",
@@ -77,6 +83,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_125",
     "annotations": {
       "0": "the juice box on the top left corner",
       "1": "the juice on top",
@@ -89,6 +96,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_184",
     "annotations": {
       "0": "the grey box",
       "1": "the white box",
@@ -101,6 +109,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_206",
     "annotations": {
       "0": "the domino sugar box",
       "1": "the yellow and white sugar box",
@@ -113,6 +122,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_222",
     "annotations": {
       "0": "the top left yellow cup",
       "1": "the yogurt on the left",
@@ -125,6 +135,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_242",
     "annotations": {
       "0": "the pear under the other peaer",
       "1": "the bottom pear",
@@ -137,6 +148,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_298",
     "annotations": {
       "0": "the gray cup on top center",
       "1": "the espresso cup on top",
@@ -149,6 +161,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_305",
     "annotations": {
       "0": "the rightmost black object",
       "1": "the black object on the right",
@@ -161,6 +174,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_345",
     "annotations": {
       "0": "the strawberry on the left",
       "1": "the strawberry on the left",
@@ -173,6 +187,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_348",
     "annotations": {
       "0": "the strawberry",
       "1": "the strawberry",
@@ -185,6 +200,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_358",
     "annotations": {
       "0": "the top right most yellow thing",
       "1": "the clamp-like yellow object on the right",
@@ -197,6 +213,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_365",
     "annotations": {
       "0": "the sponge on the  bottom right corner",
       "1": "the brown box on bottom right",
@@ -209,6 +226,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_374",
     "annotations": {
       "0": "the lemon",
       "1": "the lemon",
@@ -221,6 +239,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_381",
     "annotations": {
       "0": "the sponge",
       "1": "the sponge",
@@ -233,6 +252,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_390",
     "annotations": {
       "0": "the elmex package",
       "1": "the toothpaste box",
@@ -245,6 +265,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_395",
     "annotations": {
       "0": "the spam can on the right",
       "1": "the spam can on the top",
@@ -257,6 +278,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_398",
     "annotations": {
       "0": "the blue object in the center of the tray",
       "1": "the blue screw",
@@ -269,6 +291,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_422",
     "annotations": {
       "0": "the transparent bottle",
       "1": "the plastic container",
@@ -281,6 +304,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_460",
     "annotations": {
       "0": "the strawberry in the bottom left corner",
       "1": "the bottom most strawberry",
@@ -293,6 +317,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_491",
     "annotations": {
       "0": "the strawberry on the bottom, under a white box",
       "1": "the strawberry",
@@ -305,6 +330,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_501",
     "annotations": {
       "0": "the top strawberry",
       "1": "the strawberry on top right",
@@ -317,6 +343,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_509",
     "annotations": {
       "0": "the little white bottle",
       "1": "the white cylindrical object",
@@ -329,6 +356,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_527",
     "annotations": {
       "0": "the inverted red cup",
       "1": "the bottom red cup",
@@ -341,6 +369,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_564",
     "annotations": {
       "0": "the yellow thing on the bottom",
       "1": "the yellow tool on the bottom",
@@ -353,6 +382,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_610",
     "annotations": {
       "0": "the yellow clamp",
       "1": "the clamp-like yellow object",
@@ -365,6 +395,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_646",
     "annotations": {
       "0": "the elmex box",
       "1": "the light green box in the middle",
@@ -377,6 +408,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_691",
     "annotations": {
       "0": "the green grinder on bottom",
       "1": "the green vape-like object from the bottom",
@@ -389,6 +421,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_766",
     "annotations": {
       "0": "the leftmost cardboard box",
       "1": "the festo box on the left",
@@ -401,6 +434,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_771",
     "annotations": {
       "0": "the banana on the bottom",
       "1": "the bottom banana",
@@ -413,6 +447,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_774",
     "annotations": {
       "0": "the banana on the left",
       "1": "the left banana",
@@ -425,6 +460,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_815",
     "annotations": {
       "0": "the plyer on the left",
       "1": "the top left clamp",
@@ -437,6 +473,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_820",
     "annotations": {
       "0": "the cutting plier under the white thing",
       "1": "the wire cutter on the right",
@@ -449,6 +486,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_823",
     "annotations": {
       "0": "the wire cutters on the right",
       "1": "the plyer on the right",
@@ -461,6 +499,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_827",
     "annotations": {
       "0": "the cable",
       "1": "the white cable",
@@ -473,6 +512,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_834",
     "annotations": {
       "0": "the toy drill",
       "1": "the red toy gun",
@@ -485,6 +525,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_838",
     "annotations": {
       "0": "the top-most glass",
       "1": "the upper glass",
@@ -497,6 +538,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_842",
     "annotations": {
       "0": "the toy drill",
       "1": "the red gun",
@@ -509,6 +551,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_913",
     "annotations": {
       "0": "the green grinder",
       "1": "the green object vape-like",
@@ -521,6 +564,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_944",
     "annotations": {
       "0": "the red drill",
       "1": "the hand driller",
@@ -533,6 +577,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_959",
     "annotations": {
       "0": "the knife at the bottom",
       "1": "the knife at the bottom",
@@ -545,6 +590,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_961",
     "annotations": {
       "0": "the festo box",
       "1": "the white box",
@@ -557,10 +603,24 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_976",
     "annotations": {
       "0": "the bottom apple",
       "1": "the red apple on the bottom left",
       "2": "the apple in the bottom left corner"
+    }
+  },
+  {
+    "scene_id": 976,
+    "query_obj_id": 1,
+    "difficulty": "Easy",
+    "ambiguious": true,
+    "category": "easy-ambi",
+    "directory_name": "scene_976_q1",
+    "annotations": {
+      "0": "the apple on top",
+      "1": "the top most red fruit",
+      "2": "the top apple"
     }
   },
   {
@@ -569,6 +629,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_988",
     "annotations": {
       "0": "the light blue box",
       "1": "the green box",
@@ -581,6 +642,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1042",
     "annotations": {
       "0": "the leftmost yellow cup under the cutting plier",
       "1": "the yellow yogurt container on the left",
@@ -593,6 +655,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1047",
     "annotations": {
       "0": "the sponge on top",
       "1": "the sponge on top of another sponge",
@@ -605,6 +668,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1050",
     "annotations": {
       "0": "the bottom most ball",
       "1": "the blue ball at the bottom",
@@ -617,6 +681,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1064",
     "annotations": {
       "0": "the yellow fan",
       "1": "the yellow propeller",
@@ -629,6 +694,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1070",
     "annotations": {
       "0": "the most vertical green thing",
       "1": "the blue bolt on the right",
@@ -641,6 +707,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1071",
     "annotations": {
       "0": "the banana of the right",
       "1": "the banana on the right",
@@ -653,6 +720,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1072",
     "annotations": {
       "0": "the blue object among a banana and two other blue objects",
       "1": "the bolt-like blue object attach to the bottom of the banana",
@@ -665,6 +733,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1078",
     "annotations": {
       "0": "the bottom most banana",
       "1": "the banana on the bottom",
@@ -677,6 +746,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1085",
     "annotations": {
       "0": "the brown box on top left",
       "1": "the top brown box",
@@ -689,6 +759,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1094",
     "annotations": {
       "0": "the topmost box",
       "1": "the box package touching the top of the bin",
@@ -701,6 +772,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1101",
     "annotations": {
       "0": "the screwdriver under the box in the bottom left corner",
       "1": "the screwdriver with two elmex boxes leaning on top",
@@ -713,6 +785,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1104",
     "annotations": {
       "0": "the spray bottle",
       "1": "the spray bottle",
@@ -725,6 +798,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1109",
     "annotations": {
       "0": "the silver cube in the middle of the bin",
       "1": "the white cap",
@@ -737,6 +811,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1113",
     "annotations": {
       "0": "the white box in the middle under the toothpaste and screwdriver",
       "1": "the grey little box",
@@ -749,6 +824,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1115",
     "annotations": {
       "0": "the grey box in between the 3 toothpaste boxes",
       "1": "the gray metal thing on center right",
@@ -761,6 +837,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1125",
     "annotations": {
       "0": "the strawberry on the bottom",
       "1": "the strawberry on bottom right",
@@ -773,6 +850,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1189",
     "annotations": {
       "0": "the can",
       "1": "the beans can",
@@ -785,6 +863,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1200",
     "annotations": {
       "0": "the screwdriver",
       "1": "the screwdriver",
@@ -797,6 +876,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1206",
     "annotations": {
       "0": "the yellow dog on the bottom right leaning on the other dog",
       "1": "the toy dog on bottom right being on top of another toy dog",
@@ -809,6 +889,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1214",
     "annotations": {
       "0": "the spam can from the top",
       "1": "the top most tin",
@@ -821,6 +902,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1216",
     "annotations": {
       "0": "the screw under the can",
       "1": "the metallic bolt",
@@ -833,6 +915,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1269",
     "annotations": {
       "0": "the screw in the center under the light blue cups",
       "1": "the metallic screw",
@@ -845,6 +928,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1312",
     "annotations": {
       "0": "the grey package",
       "1": "the white box on the bottom right corner of the tray",
@@ -857,6 +941,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1318",
     "annotations": {
       "0": "the small blue box",
       "1": "the extra blue box",
@@ -869,6 +954,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1350",
     "annotations": {
       "0": "the cylinder-like package on the left",
       "1": "the roll of bags",
@@ -881,6 +967,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1357",
     "annotations": {
       "0": "the blue bolt on the top right",
       "1": "the blue screw on top right",
@@ -893,10 +980,24 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1365",
     "annotations": {
       "0": "the lighter package on the bottom",
       "1": "the box under the box",
       "2": "the lighters blister card underneath another blister"
+    }
+  },
+  {
+    "scene_id": 1365,
+    "query_obj_id": 3,
+    "difficulty": "Hard",
+    "ambiguious": true,
+    "category": "hard-ambi",
+    "directory_name": "scene_1365_q3",
+    "annotations": {
+      "0": "the propeller on the bottom",
+      "1": "the yellow propeller underneath the lighter blister",
+      "2": "the yellow propeller on bottom left under the boxes"
     }
   },
   {
@@ -905,6 +1006,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1383",
     "annotations": {
       "0": "the rightmost package with the picture of a cat",
       "1": "the juice box behind the banana end the knife",
@@ -917,6 +1019,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1393",
     "annotations": {
       "0": "the bottom left bulb",
       "1": "the bulb on bottom left touching the edges of the tray",
@@ -929,6 +1032,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1394",
     "annotations": {
       "0": "the lamp on bottom center",
       "1": "the bulb on the left",
@@ -941,6 +1045,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1419",
     "annotations": {
       "0": "the green plastic bottle on the bottom left of the tray",
       "1": "the green cylinder on the bottom",
@@ -953,6 +1058,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1441",
     "annotations": {
       "0": "the blue ball in the bottom left corner",
       "1": "the blue ball on the bottom left",
@@ -965,10 +1071,24 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1449",
     "annotations": {
       "0": "the screwdriver",
       "1": "the screwdriver",
       "2": "the screwdriver"
+    }
+  },
+  {
+    "scene_id": 1449,
+    "query_obj_id": 4,
+    "difficulty": "Hard",
+    "ambiguious": true,
+    "category": "hard-ambi",
+    "directory_name": "scene_1449_q4",
+    "annotations": {
+      "0": "the blue bolt-like object",
+      "1": "the blue color cap",
+      "2": "the blue screw"
     }
   },
   {
@@ -977,6 +1097,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1452",
     "annotations": {
       "0": "the green box on the top right",
       "1": "the top most green box",
@@ -989,6 +1110,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1459",
     "annotations": {
       "0": "the screwdriver",
       "1": "the screwdriver",
@@ -1001,6 +1123,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1494",
     "annotations": {
       "0": "the orange touching the blister card placed in the center of the tray",
       "1": "the orange in the middle next to the lighter box",
@@ -1013,6 +1136,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1498",
     "annotations": {
       "0": "the most top box",
       "1": "the package in center",
@@ -1025,6 +1149,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1500",
     "annotations": {
       "0": "the lemon behind the obstacle",
       "1": "the lemon on the right",
@@ -1037,6 +1162,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1508",
     "annotations": {
       "0": "the cardboard packaging in the bottom left",
       "1": "the most bottom box",
@@ -1049,6 +1175,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1512",
     "annotations": {
       "0": "the lighters package in the top right corner",
       "1": "the lighter box on the top right",
@@ -1061,6 +1188,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1524",
     "annotations": {
       "0": "the gray box on bottom right",
       "1": "the bottom most brown box",
@@ -1073,6 +1201,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1527",
     "annotations": {
       "0": "the big red box",
       "1": "the cracker box",
@@ -1085,6 +1214,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1546",
     "annotations": {
       "0": "the top tomato can",
       "1": "the can in the top right corner",
@@ -1097,6 +1227,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1556",
     "annotations": {
       "0": "the white cable in the plastic bag in the top left corner",
       "1": "the plastic bag in the top left corner",
@@ -1109,6 +1240,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1566",
     "annotations": {
       "0": "the white cable on bottom left",
       "1": "the cable on the bottom part of the image",
@@ -1121,6 +1253,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1599",
     "annotations": {
       "0": "the white box",
       "1": "the white box at the top",
@@ -1133,6 +1266,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1608",
     "annotations": {
       "0": "the bottom left pear",
       "1": "the pear at the bottom left corner",
@@ -1145,6 +1279,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1626",
     "annotations": {
       "0": "the bottom white-capped bottle",
       "1": "the plastic bottle on the bottom left",
@@ -1157,6 +1292,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1631",
     "annotations": {
       "0": "the spam can",
       "1": "the meat can",
@@ -1169,6 +1305,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1632",
     "annotations": {
       "0": "the semi transparent flacon at the top right",
       "1": "the transparent bottle on to[",
@@ -1181,6 +1318,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1657",
     "annotations": {
       "0": "the wire cutter on top leaning on the top side of the box",
       "1": "the cutting plier that is under the blue cap and other cutting pliers",
@@ -1193,6 +1331,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1662",
     "annotations": {
       "0": "the lighter box behind the brown box",
       "1": "the lighters package on top of the tennis ball",
@@ -1201,10 +1340,24 @@
   },
   {
     "scene_id": 1670,
+    "query_obj_id": 5,
+    "difficulty": "Easy",
+    "ambiguious": true,
+    "category": "easy-ambi",
+    "directory_name": "scene_1670_q5",
+    "annotations": {
+      "0": "the standing wire cutter on the bottom",
+      "1": "the clamp on bottom left",
+      "2": "the most bottom plier"
+    }
+  },
+  {
+    "scene_id": 1670,
     "query_obj_id": 10,
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1670",
     "annotations": {
       "0": "the brown box",
       "1": "the cardboard box on the top",
@@ -1217,6 +1370,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1684",
     "annotations": {
       "0": "the cardboard packaging near the right edge",
       "1": "the package with text on the right",
@@ -1229,6 +1383,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1697",
     "annotations": {
       "0": "the white box on top",
       "1": "the brown box",
@@ -1241,6 +1396,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1703",
     "annotations": {
       "0": "the gray box on bottom left",
       "1": "the white box in the bottom left corner",
@@ -1253,6 +1409,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1709",
     "annotations": {
       "0": "the right most screwdriver",
       "1": "the screwdriver in the center right of the box",
@@ -1265,6 +1422,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1711",
     "annotations": {
       "0": "the white box on the right-hand side under the chewing gum box",
       "1": "the grey box on bottom right",
@@ -1277,6 +1435,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1720",
     "annotations": {
       "0": "the juice on the bottom right",
       "1": "the juice box in the bottom right corner",
@@ -1289,6 +1448,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1727",
     "annotations": {
       "0": "the box on top right",
       "1": "the the light blue box at the top of the image",
@@ -1301,6 +1461,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1733",
     "annotations": {
       "0": "the extra box",
       "1": "the white and blue extra box",
@@ -1313,6 +1474,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1745",
     "annotations": {
       "0": "the blue ball on the top",
       "1": "the blue ball at the top between another blue ball and the pliers",
@@ -1325,6 +1487,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1746",
     "annotations": {
       "0": "the white package in the middle, the second from top",
       "1": "the grey package on top",
@@ -1337,10 +1500,24 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1755",
     "annotations": {
       "0": "the clamp",
       "1": "the wire cutter",
       "2": "the pliers"
+    }
+  },
+  {
+    "scene_id": 1755,
+    "query_obj_id": 9,
+    "difficulty": "Hard",
+    "ambiguious": true,
+    "category": "hard-ambi",
+    "directory_name": "scene_1755_q9",
+    "annotations": {
+      "0": "the blue ball on the center, under the pliers",
+      "1": "the  blue ball on the center under the clamp",
+      "2": "the blue ball in the middle under the plier"
     }
   },
   {
@@ -1349,6 +1526,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1758",
     "annotations": {
       "0": "the white box",
       "1": "the white cube",
@@ -1361,6 +1539,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1776",
     "annotations": {
       "0": "the apple",
       "1": "the red apple",
@@ -1373,6 +1552,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1784",
     "annotations": {
       "0": "the small plastic box underneath a knife",
       "1": "the green cylinder",
@@ -1385,6 +1565,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1786",
     "annotations": {
       "0": "the big cardboard box",
       "1": "the package on the top right",
@@ -1397,6 +1578,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1796",
     "annotations": {
       "0": "the knife on the bottom left",
       "1": "the knife",
@@ -1409,6 +1591,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1824",
     "annotations": {
       "0": "the green bottle next to the two blue screws",
       "1": "the top most spray diffuser  bottle",
@@ -1421,6 +1604,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1827",
     "annotations": {
       "0": "the spray bottle in the middle with the domino sugar and another spray bottle leaning on it",
       "1": "the green bottle behind the green bottle in the center",
@@ -1433,6 +1617,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1834",
     "annotations": {
       "0": "the lowest blue cap",
       "1": "the blue screw below the yellow box",
@@ -1445,6 +1630,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1842",
     "annotations": {
       "0": "the white box under the cheese cracker box in the middle",
       "1": "the white box in the center partially behind the red box",
@@ -1457,10 +1643,24 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1860",
     "annotations": {
       "0": "the tennis ball",
       "1": "the yellow tennis ball",
       "2": "the tennis ball"
+    }
+  },
+  {
+    "scene_id": 1860,
+    "query_obj_id": 7,
+    "difficulty": "Medium",
+    "ambiguious": true,
+    "category": "medium-ambi",
+    "directory_name": "scene_1860_q7",
+    "annotations": {
+      "0": "the bulb from the bottom",
+      "1": "the lamp on bottom right under the screwdriver",
+      "2": "the bottom most glass bulb"
     }
   },
   {
@@ -1469,6 +1669,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1868",
     "annotations": {
       "0": "the screwdriver on the bottom right",
       "1": "the blue and black screwdriver on the bottom right",
@@ -1481,6 +1682,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1869",
     "annotations": {
       "0": "the tennis ball",
       "1": "the tennis ball",
@@ -1493,6 +1695,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1871",
     "annotations": {
       "0": "the bulb in the centre left of the image",
       "1": "the bulb on the left-hand side",
@@ -1505,6 +1708,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_1897",
     "annotations": {
       "0": "the gray box in the exact middle",
       "1": "the white box in the center",
@@ -1517,6 +1721,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1942",
     "annotations": {
       "0": "the blue item",
       "1": "the blue bolt",
@@ -1529,6 +1734,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_1947",
     "annotations": {
       "0": "the screw at the top right corner",
       "1": "the bolt",
@@ -1541,6 +1747,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_1948",
     "annotations": {
       "0": "the roll of bags under the refiller bag",
       "1": "the trash bags under the juice box",
@@ -1553,6 +1760,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1958",
     "annotations": {
       "0": "the green vape-like object in the middle, with a banana on top and a bulb directly attach",
       "1": "the green object in the exact middle under the middle banana",
@@ -1565,6 +1773,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_1961",
     "annotations": {
       "0": "the bottom right banana",
       "1": "the right banana",
@@ -1577,6 +1786,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1962",
     "annotations": {
       "0": "the banana in horizontal attach to the bottom side of the box",
       "1": "the bottom most horizontal banana",
@@ -1589,6 +1799,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1963",
     "annotations": {
       "0": "the green object behind the green object",
       "1": "the green tool that is under another green tool",
@@ -1601,6 +1812,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_1978",
     "annotations": {
       "0": "the knife on the top right",
       "1": "the knife on top right",
@@ -1613,6 +1825,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_1996",
     "annotations": {
       "0": "the knife",
       "1": "the knife",
@@ -1625,6 +1838,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2000",
     "annotations": {
       "0": "the yellow propeller on the top left part of the image, situated between two other propellers",
       "1": "the yellow propeller on top right in between of two yellow propellers",
@@ -1637,6 +1851,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2014",
     "annotations": {
       "0": "the yellow propeller on bottom right",
       "1": "the most right yellow propeller",
@@ -1649,6 +1864,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2030",
     "annotations": {
       "0": "the lemon which is on the right of another lemon",
       "1": "the topmost lemon",
@@ -1661,6 +1877,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2035",
     "annotations": {
       "0": "the bottom right object with orange and yellow color",
       "1": "the orange toy similar to a submarine",
@@ -1673,6 +1890,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_2037",
     "annotations": {
       "0": "the white plastic bag",
       "1": "the package with the cable",
@@ -1685,6 +1903,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_2052",
     "annotations": {
       "0": "the espresso cup",
       "1": "the mug on top left",
@@ -1697,6 +1916,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2078",
     "annotations": {
       "0": "the extra box on the bottom left",
       "1": "the chewing gum box on bottom left",
@@ -1709,6 +1929,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2088",
     "annotations": {
       "0": "the glass on the right",
       "1": "the vertical glass",
@@ -1721,6 +1942,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2096",
     "annotations": {
       "0": "the blue extra box on top left behind the brown box",
       "1": "the top left chewing gum box under everything",
@@ -1733,6 +1955,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2157",
     "annotations": {
       "0": "the blue cup in the middle",
       "1": "the light blue cup in the center of the image",
@@ -1745,6 +1968,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2163",
     "annotations": {
       "0": "the blue cup in the middle behind the orange object",
       "1": "the third plastic cup encountered moving from right to left, under a submarine",
@@ -1757,6 +1981,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_2168",
     "annotations": {
       "0": "the orange submarine-like toy",
       "1": "the orange object",
@@ -1769,6 +1994,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2179",
     "annotations": {
       "0": "the sugar box on the right under the top sugar box",
       "1": "the box under the yellow bottle and the other yellow box",
@@ -1781,6 +2007,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2186",
     "annotations": {
       "0": "the banana",
       "1": "the banana",
@@ -1793,6 +2020,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_2189",
     "annotations": {
       "0": "the white and yellow box",
       "1": "the domino sugar box",
@@ -1805,6 +2033,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2215",
     "annotations": {
       "0": "the peach",
       "1": "the peach on center right",
@@ -1817,6 +2046,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2233",
     "annotations": {
       "0": "the greenish box on top",
       "1": "the top most green tetra pack bottle",
@@ -1829,6 +2059,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_2274",
     "annotations": {
       "0": "the wire cutter",
       "1": "the pliers",
@@ -1841,6 +2072,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2275",
     "annotations": {
       "0": "the green box on the top left corner",
       "1": "the coffee package on the top left",
@@ -1853,6 +2085,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2276",
     "annotations": {
       "0": "the knife on top of the box",
       "1": "the knife",
@@ -1865,6 +2098,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_2284",
     "annotations": {
       "0": "the wire cutter",
       "1": "the wire cutter",
@@ -1877,6 +2111,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2310",
     "annotations": {
       "0": "the brown box leaning on the soup can",
       "1": "the most visible brown box on right",
@@ -1889,6 +2124,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2313",
     "annotations": {
       "0": "the red plastic cup underneath another red cup",
       "1": "the red bowl laying on the bottom",
@@ -1901,6 +2137,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2355",
     "annotations": {
       "0": "the bottom right white cable",
       "1": "the cable bundle touching the apple",
@@ -1913,6 +2150,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2357",
     "annotations": {
       "0": "the white cable on bottom left",
       "1": "the bottom most circular white thing",
@@ -1925,6 +2163,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2372",
     "annotations": {
       "0": "the green box in the middle",
       "1": "the elmex box on the bottom",
@@ -1937,6 +2176,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2404",
     "annotations": {
       "0": "the topmost chips can",
       "1": "the cylinder in the top right corner",
@@ -1949,6 +2189,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2446",
     "annotations": {
       "0": "the pringles chips box in the top left",
       "1": "the pringles tub on top",
@@ -1961,6 +2202,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2448",
     "annotations": {
       "0": "the red pringles tube on top",
       "1": "the horizontal chips tin",
@@ -1973,6 +2215,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_2473",
     "annotations": {
       "0": "the sponge",
       "1": "the sponge",
@@ -1985,6 +2228,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2516",
     "annotations": {
       "0": "the second bottle from the bottom",
       "1": "the bottle that is under another bottle",
@@ -1997,6 +2241,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_2520",
     "annotations": {
       "0": "the white box",
       "1": "the gray box",
@@ -2009,6 +2254,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2537",
     "annotations": {
       "0": "the blue screw head in the top right",
       "1": "the blue bolt on top near the peach",
@@ -2021,6 +2267,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2541",
     "annotations": {
       "0": "the spray bottle on top left  under another spray bottle",
       "1": "the spray bottle on the left below the other spray bottle",
@@ -2033,6 +2280,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_2581",
     "annotations": {
       "0": "the cylindrical container on the left",
       "1": "the left small object",
@@ -2045,6 +2293,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2646",
     "annotations": {
       "0": "the light green box on top of another green box",
       "1": "the greenish festo box on top",
@@ -2057,6 +2306,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_2683",
     "annotations": {
       "0": "the banana",
       "1": "the banana",
@@ -2069,6 +2319,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2765",
     "annotations": {
       "0": "the yellow bottle in the middle, occluded by a same object",
       "1": "the bottle that is under the other two bottles",
@@ -2081,6 +2332,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2804",
     "annotations": {
       "0": "the second box starting from the top",
       "1": "the big festo box in the middle with another two boxes leaning on it",
@@ -2093,6 +2345,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2819",
     "annotations": {
       "0": "the orange on top right",
       "1": "the orange on top right",
@@ -2105,6 +2358,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_2839",
     "annotations": {
       "0": "the bottom purple box",
       "1": "the blue box lower of the two",
@@ -2117,6 +2371,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_2862",
     "annotations": {
       "0": "the spray under the orange stuff",
       "1": "the spray can",
@@ -2129,6 +2384,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2867",
     "annotations": {
       "0": "the brown box on bottom left",
       "1": "the brown box without any label",
@@ -2141,6 +2397,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_2884",
     "annotations": {
       "0": "the top yellow cup",
       "1": "the yellow cup on the top right corner",
@@ -2153,6 +2410,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_2973",
     "annotations": {
       "0": "the white cable, which is under another white cable on the left of the image",
       "1": "the bottom left white cable",
@@ -2165,6 +2423,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_3033",
     "annotations": {
       "0": "the spray bottle on the right",
       "1": "the spray can on the light",
@@ -2177,6 +2436,7 @@
     "difficulty": "Easy",
     "ambiguious": true,
     "category": "easy-ambi",
+    "directory_name": "scene_3046",
     "annotations": {
       "0": "the knife on top right",
       "1": "the knife on top",
@@ -2189,6 +2449,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3078",
     "annotations": {
       "0": "the cylinder in the bottom",
       "1": "the red tube on bottom left",
@@ -2201,6 +2462,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_3125",
     "annotations": {
       "0": "the screwdriver",
       "1": "the screwdriver",
@@ -2213,6 +2475,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_3143",
     "annotations": {
       "0": "the peach on the left",
       "1": "the peach",
@@ -2225,6 +2488,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3216",
     "annotations": {
       "0": "the black thing on bottom right",
       "1": "the valve object on the right",
@@ -2237,6 +2501,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3217",
     "annotations": {
       "0": "the second of the three vertical bananas",
       "1": "the second banana from the right",
@@ -2249,6 +2514,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_3288",
     "annotations": {
       "0": "the light blue box on the left",
       "1": "the green box",
@@ -2261,6 +2527,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_3298",
     "annotations": {
       "0": "the box",
       "1": "the festo box",
@@ -2273,6 +2540,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3309",
     "annotations": {
       "0": "the central chips can",
       "1": "the pringles tube on the bottom",
@@ -2285,6 +2553,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3357",
     "annotations": {
       "0": "the tin that is touching the box",
       "1": "the tomato can soup",
@@ -2297,6 +2566,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3374",
     "annotations": {
       "0": "the purple apple-like object from bottom",
       "1": "the apple closest to the bottom",
@@ -2309,6 +2579,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_3486",
     "annotations": {
       "0": "the extra package on the right",
       "1": "the box of chewing gum on bottom right",
@@ -2321,10 +2592,24 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_3576",
     "annotations": {
       "0": "the little box on top",
       "1": "the top white box",
       "2": "the small festo box"
+    }
+  },
+  {
+    "scene_id": 3576,
+    "query_obj_id": 3,
+    "difficulty": "Hard",
+    "ambiguious": false,
+    "category": "hard",
+    "directory_name": "scene_3576_q3",
+    "annotations": {
+      "0": "the bigger box",
+      "1": "the white box on the left of the red bowl",
+      "2": "the festo box on the bottom"
     }
   },
   {
@@ -2333,6 +2618,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_3661",
     "annotations": {
       "0": "the red box",
       "1": "the cheez-it red box",
@@ -2345,6 +2631,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3686",
     "annotations": {
       "0": "the green box on the right",
       "1": "the greenish box on the right",
@@ -2357,6 +2644,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_3724",
     "annotations": {
       "0": "the yellow toy dog in the bottom right",
       "1": "the toy dog at the bottom under the refiller bag",
@@ -2369,6 +2657,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_3727",
     "annotations": {
       "0": "the strawberry on the right under the drills",
       "1": "the strawberry on bottom right",
@@ -2381,6 +2670,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_3789",
     "annotations": {
       "0": "the strawberry under the blue box",
       "1": "the strawberry",
@@ -2393,6 +2683,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_3908",
     "annotations": {
       "0": "the crackers box on the right",
       "1": "the cheez box on the right",
@@ -2405,6 +2696,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_3961",
     "annotations": {
       "0": "the green cylindrical package in the middle",
       "1": "the green thing in the middle",
@@ -2417,6 +2709,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4015",
     "annotations": {
       "0": "the lemon on the bottom",
       "1": "the lemon further down another lemon",
@@ -2429,6 +2722,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4018",
     "annotations": {
       "0": "the cable bundle on the bottom",
       "1": "the white cable in center over the lamp",
@@ -2441,6 +2735,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_4020",
     "annotations": {
       "0": "the yellow box under the cardboard box",
       "1": "the yellow and white box",
@@ -2453,6 +2748,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_4098",
     "annotations": {
       "0": "the screwdriver",
       "1": "the screwdriver",
@@ -2465,6 +2761,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4109",
     "annotations": {
       "0": "the blue object under the other blue object",
       "1": "the little blue handlebar on the right",
@@ -2477,6 +2774,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4156",
     "annotations": {
       "0": "the banana at the top",
       "1": "the top banana",
@@ -2489,6 +2787,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_4189",
     "annotations": {
       "0": "the scissor on the top left",
       "1": "the scissor on center",
@@ -2501,6 +2800,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4232",
     "annotations": {
       "0": "the toy submarine under the other submarines",
       "1": "the yellow toy submarine-like with two other similar object leaning on top",
@@ -2513,6 +2813,7 @@
     "difficulty": "Medium",
     "ambiguious": true,
     "category": "medium-ambi",
+    "directory_name": "scene_4351",
     "annotations": {
       "0": "the white box with the label",
       "1": "the most top white box",
@@ -2525,6 +2826,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_4409",
     "annotations": {
       "0": "the peach",
       "1": "the peach",
@@ -2537,6 +2839,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_4570",
     "annotations": {
       "0": "the plastic bag closest to the top edge",
       "1": "the white cable on top right under the mug",
@@ -2549,6 +2852,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_4735",
     "annotations": {
       "0": "the glass",
       "1": "the glass",
@@ -2561,6 +2865,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_4877",
     "annotations": {
       "0": "the red cup",
       "1": "the red object behind the green object",
@@ -2573,6 +2878,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_4992",
     "annotations": {
       "0": "the lemon",
       "1": "the lemon",
@@ -2585,6 +2891,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5062",
     "annotations": {
       "0": "the knife on the bottom",
       "1": "the bottom knife",
@@ -2597,6 +2904,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5076",
     "annotations": {
       "0": "the scissor on the left",
       "1": "the scissor in the top behind the box",
@@ -2609,6 +2917,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5110",
     "annotations": {
       "0": "the cylinder on the bottom left",
       "1": "the light blue object under the black object",
@@ -2621,6 +2930,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_5155",
     "annotations": {
       "0": "the chips can",
       "1": "the red tube",
@@ -2633,6 +2943,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5223",
     "annotations": {
       "0": "the yellow propeller occluded by another propeller",
       "1": "the yellow fidget spinner under the box and the other fidget spinner",
@@ -2645,6 +2956,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5359",
     "annotations": {
       "0": "the second soap box from the bottom right",
       "1": "the white soap dispenser in the middle under the glass",
@@ -2657,6 +2969,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5368",
     "annotations": {
       "0": "the top calculator",
       "1": "the calculator on top center",
@@ -2669,6 +2982,7 @@
     "difficulty": "Hard",
     "ambiguious": true,
     "category": "hard-ambi",
+    "directory_name": "scene_5405",
     "annotations": {
       "0": "the spray bottle on bottom under the white cables",
       "1": "the spray container on the bottom",
@@ -2681,6 +2995,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_5447",
     "annotations": {
       "0": "the chips can",
       "1": "the pringles tube",
@@ -2693,6 +3008,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_5636",
     "annotations": {
       "0": "the calculator",
       "1": "the calculator",
@@ -2705,6 +3021,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_5778",
     "annotations": {
       "0": "the toothpaste",
       "1": "the green and white tube",
@@ -2717,6 +3034,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6717",
     "annotations": {
       "0": "the  toothpaste box",
       "1": "the toothpaste package",
@@ -2729,6 +3047,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6726",
     "annotations": {
       "0": "the bottom right white bottle with a yellow cap",
       "1": "the glue bottle",
@@ -2741,6 +3060,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6732",
     "annotations": {
       "0": "the white stick object",
       "1": "the white stick behind the orange object",
@@ -2753,6 +3073,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6751",
     "annotations": {
       "0": "the the light blue box at the bottom left",
       "1": "the bottom most green box",
@@ -2765,6 +3086,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6755",
     "annotations": {
       "0": "the grey metal thing",
       "1": "the grey object behind the boxes",
@@ -2777,6 +3099,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6758",
     "annotations": {
       "0": "the white box",
       "1": "the white box under the wires",
@@ -2789,6 +3112,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6760",
     "annotations": {
       "0": "the yellow Mayonnaise box",
       "1": "the yellow bottle",
@@ -2801,6 +3125,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6784",
     "annotations": {
       "0": "the dog toy",
       "1": "the toy dog",
@@ -2813,6 +3138,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6797",
     "annotations": {
       "0": "the milk box in the bottom right corner",
       "1": "the bottom right box",
@@ -2825,6 +3151,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6801",
     "annotations": {
       "0": "the vape-like green object on the bottom",
       "1": "the greenish object under the lighter box",
@@ -2837,6 +3164,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6807",
     "annotations": {
       "0": "the green box",
       "1": "the green box under the white ropes at the bottom of the bin",
@@ -2849,6 +3177,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6811",
     "annotations": {
       "0": "the yellow cube",
       "1": "the yellow box",
@@ -2861,6 +3190,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6817",
     "annotations": {
       "0": "the  yellow object on top of toy drill",
       "1": "the yellow clamp",
@@ -2873,6 +3203,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6827",
     "annotations": {
       "0": "the toothpaste box",
       "1": "the toothpaste",
@@ -2885,6 +3216,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6835",
     "annotations": {
       "0": "the green and red box behind the white box",
       "1": "the coffee box",
@@ -2897,6 +3229,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6837",
     "annotations": {
       "0": "the the green festo box on the top left",
       "1": "the top grey package",
@@ -2909,6 +3242,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6862",
     "annotations": {
       "0": "the green grinder",
       "1": "the green tool under the green box",
@@ -2921,6 +3255,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6870",
     "annotations": {
       "0": "the glue in a white container near the orange toy",
       "1": "the white bottle under the yellow box and the orange object",
@@ -2933,6 +3268,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6873",
     "annotations": {
       "0": "the small white bottle",
       "1": "the white nasal spray",
@@ -2945,6 +3281,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6874",
     "annotations": {
       "0": "the domino sugar box",
       "1": "the yellow and white sugar box",
@@ -2957,6 +3294,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6897",
     "annotations": {
       "0": "the clamp",
       "1": "the clamp",
@@ -2969,6 +3307,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6903",
     "annotations": {
       "0": "the festo box from top",
       "1": "the gray box on top left placed vertically",
@@ -2981,6 +3320,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6935",
     "annotations": {
       "0": "the festo box",
       "1": "the light blue box",
@@ -2993,6 +3333,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6938",
     "annotations": {
       "0": "the white box between the green boxes",
       "1": "the small white box",
@@ -3005,6 +3346,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6941",
     "annotations": {
       "0": "the central white package",
       "1": "the white package behind the drill",
@@ -3017,6 +3359,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6946",
     "annotations": {
       "0": "the white box on top of the blue ball and the paper box",
       "1": "the white box on the top right",
@@ -3029,6 +3372,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6949",
     "annotations": {
       "0": "the nasal spray",
       "1": "the bottle of eye drops",
@@ -3041,6 +3385,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6962",
     "annotations": {
       "0": "the empty bottle",
       "1": "the transparent bottle",
@@ -3053,10 +3398,24 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_6971",
     "annotations": {
       "0": "the wire cutters",
       "1": "the cutting plier",
       "2": "the piller next to the festo box"
+    }
+  },
+  {
+    "scene_id": 6971,
+    "query_obj_id": 18,
+    "difficulty": "Hard",
+    "ambiguious": false,
+    "category": "hard",
+    "directory_name": "scene_6971_q18",
+    "annotations": {
+      "0": "the banana",
+      "1": "the banana",
+      "2": "the banana"
     }
   },
   {
@@ -3065,6 +3424,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_6991",
     "annotations": {
       "0": "the scissor",
       "1": "the scissor",
@@ -3077,6 +3437,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_6998",
     "annotations": {
       "0": "the blue box",
       "1": "the blue box",
@@ -3089,6 +3450,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7020",
     "annotations": {
       "0": "the brown cardboard box",
       "1": "the bottom box",
@@ -3101,6 +3463,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7022",
     "annotations": {
       "0": "the potato chip cylinder",
       "1": "the red tube",
@@ -3113,6 +3476,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_7024",
     "annotations": {
       "0": "the box under the plier",
       "1": "the package",
@@ -3125,6 +3489,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_7025",
     "annotations": {
       "0": "the  hacksaw",
       "1": "the saw",
@@ -3137,10 +3502,24 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_7029",
     "annotations": {
       "0": "the juice box behind the plastic bag",
       "1": "the box with white cap present under the transparent cover",
       "2": "the tetrapack on top"
+    }
+  },
+  {
+    "scene_id": 7029,
+    "query_obj_id": 7,
+    "difficulty": "Medium",
+    "ambiguious": false,
+    "category": "medium",
+    "directory_name": "scene_7029_q7",
+    "annotations": {
+      "0": "the wire cutter",
+      "1": "the wire cutter",
+      "2": "the wire cutter"
     }
   },
   {
@@ -3149,6 +3528,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7032",
     "annotations": {
       "0": "the tomato can",
       "1": "the tomato can",
@@ -3161,6 +3541,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7034",
     "annotations": {
       "0": "the grey box",
       "1": "the white box",
@@ -3173,6 +3554,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7071",
     "annotations": {
       "0": "the red apple",
       "1": "the apple on the right",
@@ -3185,6 +3567,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7074",
     "annotations": {
       "0": "the lipstick package",
       "1": "the white box behind the blue object",
@@ -3197,6 +3580,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7084",
     "annotations": {
       "0": "the white container on top right with round edges on one side",
       "1": "the greenish cylinder on the top right",
@@ -3209,6 +3593,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7101",
     "annotations": {
       "0": "the green box",
       "1": "the bottom green box",
@@ -3221,6 +3606,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7106",
     "annotations": {
       "0": "the coffee filters box",
       "1": "the the box on the left in red and green",
@@ -3233,6 +3619,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7108",
     "annotations": {
       "0": "the blue object in the top left corner",
       "1": "the blue object on the top left corner",
@@ -3245,6 +3632,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7146",
     "annotations": {
       "0": "the soap recharge container",
       "1": "the drinking bag",
@@ -3257,6 +3645,7 @@
     "difficulty": "Medium",
     "ambiguious": false,
     "category": "medium",
+    "directory_name": "scene_7163",
     "annotations": {
       "0": "the green object on the top left",
       "1": "the green box under the orange object",
@@ -3269,6 +3658,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7175",
     "annotations": {
       "0": "the power drill",
       "1": "the drill",
@@ -3281,6 +3671,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7176",
     "annotations": {
       "0": "the lemon",
       "1": "the lemon",
@@ -3293,6 +3684,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7192",
     "annotations": {
       "0": "the red apple",
       "1": "the round red thing",
@@ -3305,6 +3697,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7201",
     "annotations": {
       "0": "the yellow cube on the bottom right of the tray",
       "1": "the yellow die in the bottom right corner",
@@ -3317,6 +3710,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7228",
     "annotations": {
       "0": "the yellow clamp",
       "1": "the yellow clamp",
@@ -3329,6 +3723,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7239",
     "annotations": {
       "0": "the white box under the banana",
       "1": "the white box below the banana",
@@ -3341,6 +3736,7 @@
     "difficulty": "Easy",
     "ambiguious": false,
     "category": "easy",
+    "directory_name": "scene_7265",
     "annotations": {
       "0": "the shampoo-like cylinder on the right",
       "1": "the juice container",
@@ -3353,6 +3749,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7271",
     "annotations": {
       "0": "the domino sugar box",
       "1": "the yellow and white sugar box",
@@ -3365,6 +3762,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7281",
     "annotations": {
       "0": "the banana",
       "1": "the banana",
@@ -3377,6 +3775,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7291",
     "annotations": {
       "0": "the coffee box",
       "1": "the green box behind the white box",
@@ -3389,6 +3788,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7310",
     "annotations": {
       "0": "the blue ball under the scissor",
       "1": "the blue ball underneath the pringles tube",
@@ -3401,6 +3801,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7321",
     "annotations": {
       "0": "the orange submarine toy",
       "1": "the orange toy submarine-like",
@@ -3413,6 +3814,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7340",
     "annotations": {
       "0": "the yellow helix on the left",
       "1": "the yellow propeller on the left side of the red bowl",
@@ -3425,6 +3827,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7346",
     "annotations": {
       "0": "the cheez-it box",
       "1": "the red box",
@@ -3437,6 +3840,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7348",
     "annotations": {
       "0": "the yellow object behind the red bowl",
       "1": "the small yellow thing under the red bowl",
@@ -3449,6 +3853,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7368",
     "annotations": {
       "0": "the yellow propeller touching the left side of the bin",
       "1": "the yellow propeller",
@@ -3461,6 +3866,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7387",
     "annotations": {
       "0": "the orange toy submarine-like",
       "1": "the red-orange stuff at the top of the bin",
@@ -3473,6 +3879,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7404",
     "annotations": {
       "0": "the yellow thing under the lighter package",
       "1": "the yellow box on the bottom left",
@@ -3485,6 +3892,7 @@
     "difficulty": "Hard",
     "ambiguious": false,
     "category": "hard",
+    "directory_name": "scene_7433",
     "annotations": {
       "0": "the brown box",
       "1": "the brown box",

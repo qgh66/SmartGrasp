@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 基于已有 perception，只重跑 intent + reason
-# 用法: bash ssr/run_all_reason.sh [category] [scene_ids ...] [--from N]
+# 用法: bash ssr/run_all_reason.sh [category] [scene_ids ...] [--from N] [--query QID]
 
 set -u
 
@@ -27,21 +27,35 @@ PYTHON="$HOME/miniconda3/envs/smartgrasp/bin/python"
 CATEGORIES=()
 FROM_SCENE=""
 SCENE_IDS=""
+QUERY_ID=""
+QUERY_PAIRS=""  # "QID,SID QID,SID ..." each --query binds to exactly 1 scene
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --all) CATEGORIES=(); shift ;;
         --from) FROM_SCENE="$2"; shift 2 ;;
+        --query)
+            q="$2"
+            shift 2
+            # 只绑定紧跟的一个 scene
+            if [[ $# -gt 0 && "$1" != -* ]]; then
+                QUERY_PAIRS="$QUERY_PAIRS $q,$1"
+                shift
+            fi
+            ;;
         easy|easy-ambi|medium|medium-ambi|hard|hard-ambi)
             CATEGORIES+=("$1"); shift ;;
         *) 
             SCENE_IDS="$SCENE_IDS $1"
             shift
             ;;
-            shift
-            ;;
     esac
 done
 SCENE_IDS="${SCENE_IDS# }"
+if [[ -n "$QUERY_PAIRS" ]]; then
+    QUERY_ID="${QUERY_PAIRS# }"
+fi
+CATEGORY_STR=$(IFS=,; echo "${CATEGORIES[*]}")
+CATEGORY_STR="${CATEGORY_STR:-all}"
 
 # 日志
 mkdir -p logs/ssr
@@ -62,11 +76,19 @@ PYTHON = '$PYTHON'
 CATS = set('${CATEGORY_STR}'.split(',')) if '${CATEGORY_STR}' != 'all' else set()
 SIDS = set('${SCENE_IDS}'.split()) if '${SCENE_IDS}' else set()
 FROM = '${FROM_SCENE}'
+QUERY = '${QUERY_ID}'
 
-tasks = json.load(open('ssr/tasks.json'))
-total = 0
-ok = 0
-fail = 0
+ALL_CATS = ['easy', 'easy-ambi', 'medium', 'medium-ambi', 'hard', 'hard-ambi']
+
+def find_base_scene_dir(scene_id):
+    for cat in ALL_CATS:
+        d = ROOT / 'data' / cat / f'scene_{scene_id}'
+        if d.is_dir():
+            return d
+    return None
+
+def is_secondary_query(dir_name):
+    return '_q' in dir_name.replace('scene_', '', 1)
 
 # 验证环境变量
 _key = os.environ.get('OPENAI_API_KEY', '')
@@ -75,53 +97,77 @@ if not _key:
     sys.exit(1)
 print(f'[env] OPENAI_API_KEY = {_key[:8]}...{_key[-4:]}', flush=True)
 
-for t in tasks:
-    if CATS and t['category'] not in CATS: continue
-    if FROM and t['scene_id'] < int(FROM): continue
-    if SIDS and str(t['scene_id']) not in SIDS: continue
-    total += 1
-
-for t in tasks:
-    if CATS and t['category'] not in CATS: continue
-    if FROM and t['scene_id'] < int(FROM): continue
-    if SIDS and str(t['scene_id']) not in SIDS: continue
-
+def run_one(t, idx, total, is_manual=False):
     sid = t['scene_id']
     cat = t['category']
-    a0  = t['annotations']['0']
-    a1  = t['annotations']['1']
-    a2  = t['annotations']['2']
+    dir_name = t.get('directory_name', f'scene_{sid}')
+    a0 = t['annotations']['0']
+    a1 = t['annotations']['1']
+    a2 = t['annotations']['2']
+    secondary = is_secondary_query(dir_name)
 
-    ok += 1
-    print(f'\n===== [{ok}/{total}] scene_{sid} ({cat}) =====', flush=True)
+    label = f'--query {t[\"query_obj_id\"]}' if is_manual else ''
+    print(f'\\n===== [{idx}/{total}] {dir_name} ({cat}) {label} =====', flush=True)
 
-    # 检查 perception 是否存在
-    per_dir = ROOT / 'data' / cat / f'scene_{sid}' / 'perception'
+    dst = ROOT / 'data' / cat / dir_name
+    dst.mkdir(parents=True, exist_ok=True)
+
+    # 确定 perception 来源
+    if secondary:
+        base_dir = find_base_scene_dir(sid)
+        if base_dir is None:
+            print(f'  [skip] base scene scene_{sid} not found', flush=True)
+            return False
+        per_dir = base_dir / 'perception'
+    else:
+        per_dir = ROOT / 'data' / cat / f'scene_{sid}' / 'perception'
+
     if not (per_dir / 'summary.json').exists():
-        print(f'  [skip] no perception summary → skip', flush=True)
-        fail += 1
-        continue
+        print(f'  [skip] no perception summary in {per_dir} → skip', flush=True)
+        return False
+
+    # 如果 secondary，软链接 perception + gt
+    if secondary:
+        for sub in ['perception', 'gt']:
+            base_sub = base_dir / sub
+            dst_sub = dst / sub
+            if base_sub.exists():
+                if dst_sub.is_symlink() or dst_sub.exists():
+                    dst_sub.unlink() if dst_sub.is_symlink() else shutil.rmtree(dst_sub)
+                rel = os.path.relpath(base_sub, dst)
+                os.symlink(rel, str(dst_sub))
+                print(f'  [link] {sub}/ → {rel}', flush=True)
+        # reason 用 --root data/{cat} 找 data/{cat}/scene_{sid}/perception，
+        # 跨类别时该路径不存在，需要临时软链接（文件级，rglob 才能跟随）
+        reason_scene = ROOT / 'data' / cat / f'scene_{sid}'
+        if not (reason_scene / 'perception').exists():
+            reason_scene.mkdir(parents=True, exist_ok=True)
+            for sub in ['perception', 'gt']:
+                base_sub = base_dir / sub
+                tmp_sub = reason_scene / sub
+                tmp_sub.mkdir(exist_ok=True)
+                for item in base_sub.iterdir():
+                    target = tmp_sub / item.name
+                    if not target.exists():
+                        os.symlink(os.path.relpath(item, tmp_sub), str(target))
 
     # 清除旧的 intent 和 reason
-    dst = ROOT / 'data' / cat / f'scene_{sid}'
     for sub in ['intent', 'reason']:
         old = dst / sub
         if old.exists():
             shutil.rmtree(old)
             print(f'  [clean] removed {old}', flush=True)
 
-    # 也清理临时 scene 目录
+    # 清理临时 scene 目录
     tmp = ROOT / 'data' / f'scene_{sid}'
     if tmp.exists():
         shutil.rmtree(tmp)
 
-    # 验证 annotation 不为空
     if not a0.strip() or not a1.strip() or not a2.strip():
-        print(f'  [skip] empty annotation in task (a0={repr(a0[:30])}) → skip', flush=True)
-        fail += 1
-        continue
+        print(f'  [skip] empty annotation → skip', flush=True)
+        return False
 
-    # Reason × 3 splits（--root data/{cat} 直接从分类目录读 perception）
+    # Reason × 3 splits
     for split_name, annot in [('0', a0), ('1', a1), ('2', a2)]:
         print(f'  reason split{split_name}: {annot[:60]}', flush=True)
         r = subprocess.run(
@@ -136,9 +182,7 @@ for t in tasks:
         if r.returncode != 0:
             print(f'    split{split_name}: FAIL (rc={r.returncode})', flush=True)
             print(r.stderr[-500:], flush=True)
-            fail += 1
-            continue
-        # reason 输出在 dst/intent/ 和 dst/reason/，移到临时 flat 目录
+            return False
         moved_any = False
         for sub in ['intent', 'reason']:
             src = dst / sub
@@ -152,11 +196,10 @@ for t in tasks:
             print(f'    split{split_name}: no intent/reason produced!', flush=True)
             print(r.stdout[-800:], flush=True)
             print(r.stderr[-800:], flush=True)
-            fail += 1
-            continue
+            return False
         print(f'    split{split_name}: done', flush=True)
 
-    # 把 flat 目录归入 intent/splitN/ 和 reason/splitN/
+    # 归入 split 子目录
     for s in ['0', '1', '2']:
         for sub in ['intent', 'reason']:
             flat = dst / f'{sub}_split{s}'
@@ -166,6 +209,67 @@ for t in tasks:
                     shutil.rmtree(target)
                 shutil.move(str(flat), str(target))
     print(f'  done', flush=True)
+    return True
 
-print(f'\n===== DONE: {ok-fail}/{total} OK, {fail} failed =====', flush=True)
+# ── 主流程 ──
+tasks = json.load(open('ssr/tasks.json'))
+total = 0
+ok = 0
+fail = 0
+
+if QUERY:
+    # 解析 --query QID SID 对
+    pairs = []
+    paired_sids = set()
+    for token in QUERY.split():
+        qid_str, sid_str = token.split(',')
+        pairs.append((int(qid_str), int(sid_str)))
+        paired_sids.add(sid_str)
+    total = len(pairs)
+    for qid, sid in sorted(pairs, key=lambda x: x[1]):
+        ok += 1
+        task = None
+        for t in tasks:
+            if t['scene_id'] == sid and t['query_obj_id'] == qid:
+                task = t
+                break
+        if task is None:
+            print(f'  [skip] scene_{sid} qid={qid}: not in tasks.json', flush=True)
+            fail += 1
+        elif not run_one(task, ok, total, is_manual=True):
+            fail += 1
+    # 剩余 SIDS 走正常流程
+    remaining = SIDS - paired_sids
+    if remaining:
+        for t in tasks:
+            if CATS and t['category'] not in CATS: continue
+            if FROM and t['scene_id'] < int(FROM): continue
+            if str(t['scene_id']) not in remaining: continue
+            total += 1
+        for t in tasks:
+            if CATS and t['category'] not in CATS: continue
+            if FROM and t['scene_id'] < int(FROM): continue
+            if str(t['scene_id']) not in remaining: continue
+            ok += 1
+            if not run_one(t, ok, total):
+                fail += 1
+            fail += 1
+        elif not run_one(task, ok, total, is_manual=True):
+            fail += 1
+else:
+    for t in tasks:
+        if CATS and t['category'] not in CATS: continue
+        if FROM and t['scene_id'] < int(FROM): continue
+        if SIDS and str(t['scene_id']) not in SIDS: continue
+        total += 1
+
+    for t in tasks:
+        if CATS and t['category'] not in CATS: continue
+        if FROM and t['scene_id'] < int(FROM): continue
+        if SIDS and str(t['scene_id']) not in SIDS: continue
+        ok += 1
+        if not run_one(t, ok, total):
+            fail += 1
+
+print(f'\\n===== DONE: {ok-fail}/{total} OK, {fail} failed =====', flush=True)
 "

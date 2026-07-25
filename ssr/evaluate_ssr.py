@@ -22,8 +22,8 @@ DATA_DIR = ROOT / "data"
 SPLITS = ["split0", "split1", "split2"]
 
 
-def load_ground_truth() -> dict[int, dict]:
-    """Return {scene_id: {query_obj_id, groundTruthObjIds, annotation: {split: str}}}."""
+def load_ground_truth() -> dict[tuple, dict]:
+    """Return {(scene_id, query_obj_id): {query_obj_id, groundTruthObjIds, annotation: {split: str}}}."""
     df = pd.concat([
         pd.read_parquet(DATA_DIR / "train-00000-of-00002.parquet"),
         pd.read_parquet(DATA_DIR / "train-00001-of-00002.parquet"),
@@ -32,23 +32,23 @@ def load_ground_truth() -> dict[int, dict]:
     gt_map = {}
     for sid in sorted(df["sceneId"].unique()):
         sdf = df[df["sceneId"] == sid]
-        first_qid = int(sdf["queryObjId"].iloc[0])
-        qdf = sdf[sdf["queryObjId"] == first_qid]
-        row0 = qdf.iloc[0]
+        for qid in sorted(sdf["queryObjId"].unique()):
+            qdf = sdf[sdf["queryObjId"] == qid]
+            row0 = qdf.iloc[0]
 
-        raw = str(row0["groundTruthObjIds"])
-        # groundTruthObjIds 是 0-based，GT mask 文件是 1-based，需要 +1
-        gt_ids = [int(x.strip()) + 1 for x in raw.replace("[", "").replace("]", "").split(",") if x.strip()]
+            raw = str(row0["groundTruthObjIds"])
+            # groundTruthObjIds 是 0-based，GT mask 文件是 1-based，需要 +1
+            gt_ids = [int(x.strip()) + 1 for x in raw.replace("[", "").replace("]", "").split(",") if x.strip()]
 
-        annotations = {}
-        for _, r in qdf.iterrows():
-            annotations[str(int(r["split"]))] = str(r["annotation"])
+            annotations = {}
+            for _, r in qdf.iterrows():
+                annotations[str(int(r["split"]))] = str(r["annotation"])
 
-        gt_map[int(sid)] = {
-            "query_obj_id": first_qid,
-            "groundTruthObjIds": gt_ids,
-            "annotations": annotations,
-        }
+            gt_map[(int(sid), int(qid))] = {
+                "query_obj_id": int(qid),
+                "groundTruthObjIds": gt_ids,
+                "annotations": annotations,
+            }
     return gt_map
 
 
@@ -108,8 +108,25 @@ def main() -> None:
         details = []
 
         for scene_dir in scenes:
-            sid = int(scene_dir.name.replace("scene_", ""))
-            gt_info = gt_map.get(sid)
+            name = scene_dir.name  # e.g. "scene_1449" or "scene_1449_q4"
+            if "_q" in name:
+                parts = name.replace("scene_", "").split("_q")
+                sid = int(parts[0])
+                qid = int(parts[1])
+            else:
+                sid = int(name.replace("scene_", ""))
+                qid = None
+
+            # 查找 GT：优先用 (sid, qid)，fallback 到 (sid, first_qid)
+            if qid is not None:
+                gt_info = gt_map.get((sid, qid))
+            else:
+                gt_info = None
+                for (s, q), info in gt_map.items():
+                    if s == sid:
+                        gt_info = info
+                        break
+
             if not gt_info or not gt_info["groundTruthObjIds"]:
                 continue
 
@@ -133,7 +150,7 @@ def main() -> None:
                 if not reason_csv.exists():
                     total += 1
                     iou_list.append(0.0)
-                    details.append({"scene_id": sid, "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "reason_csv missing"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "reason_csv missing"})
                     continue
 
                 try:
@@ -141,19 +158,19 @@ def main() -> None:
                 except Exception:
                     total += 1
                     iou_list.append(0.0)
-                    details.append({"scene_id": sid, "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "csv read error"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "csv read error"})
                     continue
                 if df.empty or "grasp_id" not in df.columns:
                     total += 1
                     iou_list.append(0.0)
-                    details.append({"scene_id": sid, "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "no grasp_id column"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "no grasp_id column"})
                     continue
 
                 grasp_id = df["grasp_id"].iloc[0]
                 if pd.isna(grasp_id):
                     total += 1
                     iou_list.append(0.0)
-                    details.append({"scene_id": sid, "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "intent_no_target"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "grasp_id": None, "gt_object_ids": gt_obj_ids, "best_gt_id": -1, "iou": 0.0, "error": "intent_no_target"})
                     continue
                 grasp_id = int(grasp_id)
 
@@ -186,6 +203,7 @@ def main() -> None:
 
                 details.append({
                     "scene_id": sid,
+                    "query_obj_id": gt_info["query_obj_id"],
                     "split": split_name,
                     "grasp_id": grasp_id,
                     "gt_object_ids": gt_obj_ids,
@@ -194,7 +212,8 @@ def main() -> None:
                 })
 
                 if args.verbose:
-                    print(f"  scene_{sid} {split_name}: grasp={grasp_id} → best_gt={best_gt_id} IoU={best_iou:.4f}")
+                    scene_label = f"scene_{sid}_q{qid}" if qid else f"scene_{sid}"
+                    print(f"  {scene_label} {split_name}: grasp={grasp_id} → best_gt={best_gt_id} IoU={best_iou:.4f}")
 
         ssr = iou_sum / total if total > 0 else 0.0
         print(f"\n{'='*50}")

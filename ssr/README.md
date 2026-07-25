@@ -18,10 +18,10 @@
 ```bash
 conda activate smartgrasp
 
-# 1. 生成任务清单
+# 1. 生成任务清单（300 条，含多 query 场景）
 python ssr/prepare.py
 
-# 2. 跑全部（6 类共 291 场景，非常耗时）
+# 2. 跑全部（6 类共 300 场景，非常耗时）
 bash ssr/run_all.sh
 
 # 3. 只跑某一类
@@ -29,10 +29,17 @@ bash ssr/run_all.sh easy
 
 # 4. 只跑某一个 scene
 bash ssr/run_all.sh easy 0
+# 跨类别混合，完全 OK
+bash ssr/run_all.sh 1449 1670 1755 1860 976 1365 3576 6971 7029
 
 # 5. 断点续跑（从指定 scene_id 开始）
 bash ssr/run_all.sh --from 1556           # 全部类别，从 scene_1556 开始
 bash ssr/run_all.sh hard-ambi --from 1556 # 指定类别，从 scene_1556 开始
+
+# 6. 指定 query（多 query 场景的第二 query，目录名 scene_{id}_q{qid}）
+bash ssr/run_all.sh --query 4 1449           # scene_1449_q4 in hard-ambi
+bash ssr/run_all.sh --query 4 1449 --query 9 1755  # 多个 scene，不同 query
+bash ssr/run_all.sh --query 4 1449 1670 --query 9 1755  # query 与默认混合，1670 跑默认
 ```
 
 ### 只重跑 intent + reason（不重跑 perception）
@@ -90,41 +97,58 @@ For each scene:
 ```
 data/
 ├── easy/
-│   └── scene_0/
-│       ├── gt/                    # GT 感知，1 份
-│       │   ├── summary.json
-│       │   ├── occlusion_graph.json
-│       │   └── mask/
-│       ├── perception/            # VLM 感知，1 份
-│       │   ├── summary.json
-│       │   ├── mask/
-│       │   └── ...
-│       ├── intent/                # 意图解析，3 份（不同 annotation）
-│       │   ├── split0/intent_result.json
-│       │   ├── split1/intent_result.json
-│       │   └── split2/intent_result.json
-│       └── reason/                # 推理结果，3 份（不同 annotation）
-│           ├── split0/results.csv
-│           ├── split1/results.csv
-│           └── split2/results.csv
+│   ├── scene_0/
+│   │   ├── gt/                    # GT 感知，1 份
+│   │   ├── perception/            # VLM 感知，1 份
+│   │   ├── intent/                # 意图解析，3 份（不同 annotation）
+│   │   │   ├── split0/intent_result.json
+│   │   │   ├── split1/intent_result.json
+│   │   │   └── split2/intent_result.json
+│   │   └── reason/                # 推理结果，3 份（不同 annotation）
+│   │       ├── split0/results.csv
+│   │       ├── split1/results.csv
+│   │       └── split2/results.csv
+│   └── ...
 ├── easy-ambi/
+│   ├── scene_976/
+│   └── scene_976_q1/              # 第二 query（perception → ../scene_976/perception 软链接）
 ├── medium/
+│   ├── scene_1449/
+│   ├── scene_1670/
+│   ├── scene_1755/
+│   ├── scene_1860/
+│   ├── scene_7029/
+│   └── scene_7029_q7/             # 第二 query
 ├── medium-ambi/
+│   └── scene_1860_q7/             # scene_1860 的第二 query
 ├── hard/
+│   ├── scene_3576/
+│   ├── scene_3576_q3/
+│   ├── scene_6971/
+│   └── scene_6971_q18/
 └── hard-ambi/
+    ├── scene_1365/
+    ├── scene_1365_q3/
+    ├── scene_1449_q4/
+    ├── scene_1755_q9/
+    └── ...
 ```
+
+> 带 `_qN` 后缀的目录是同一场景的第二 query object，`perception/` 和 `gt/` 通过软链接复用主场景的数据。
 
 ## 6 类场景数量
 
 | 类别 | 场景数 |
 |------|--------|
 | easy | 50 |
-| easy-ambi | 48 |
-| medium | 49 |
-| medium-ambi | 49 |
-| hard | 48 |
-| hard-ambi | 47 |
-| **总计** | **291** |
+| easy-ambi | 50 |
+| medium | 50 |
+| medium-ambi | 50 |
+| hard | 50 |
+| hard-ambi | 50 |
+| **总计** | **300** |
+
+> 注：9 个场景有 2 个 query object（不同难度），第二个 query 以 `scene_{id}_q{qid}` 命名，自动复用第一个 query 的 perception 结果。
 
 ## 计算 SSR
 

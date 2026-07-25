@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate task list for all 291 scenes with first query + 3 annotation splits.
+"""Generate task list for all 300 (scene, query) pairs with 3 annotation splits.
 
 Output: ssr/tasks.json
 """
@@ -29,29 +29,42 @@ def main() -> None:
     tasks = []
     for sid in sorted(df["sceneId"].unique()):
         scene_df = df[df["sceneId"] == sid]
+        # 取第一个出现的 query 作为 primary（与原逻辑一致）
         first_qid = int(scene_df["queryObjId"].iloc[0])
-        first_row = scene_df[scene_df["queryObjId"] == first_qid].iloc[0]
+        qids = sorted(scene_df["queryObjId"].unique())
 
-        qdf = scene_df[scene_df["queryObjId"] == first_qid]
-        annotations: dict[int, str] = {}
-        for _, row in qdf.iterrows():
-            annotations[int(row["split"])] = str(row["annotation"])
+        for qid in qids:
+            qdf = scene_df[scene_df["queryObjId"] == qid]
+            row0 = qdf.iloc[0]
 
-        if len(annotations) != 3:
-            print(f"  WARN scene={sid} query={first_qid}: {len(annotations)} splits")
+            annotations: dict[int, str] = {}
+            for _, row in qdf.iterrows():
+                annotations[int(row["split"])] = str(row["annotation"])
 
-        tasks.append({
-            "scene_id": int(sid),
-            "query_obj_id": first_qid,
-            "difficulty": str(first_row["difficulty"]),
-            "ambiguious": bool(first_row["ambiguious"]),
-            "category": category_name(str(first_row["difficulty"]), bool(first_row["ambiguious"])),
-            "annotations": {
-                "0": annotations.get(0, ""),
-                "1": annotations.get(1, ""),
-                "2": annotations.get(2, ""),
-            },
-        })
+            if len(annotations) != 3:
+                print(f"  WARN scene={sid} query={qid}: {len(annotations)} splits")
+                continue
+
+            cat = category_name(str(row0["difficulty"]), bool(row0["ambiguious"]))
+            # 多 query 场景中，第一个 query 用 scene_{sid}，其余用 scene_{sid}_q{qid}
+            if qid == first_qid:
+                dir_name = f"scene_{sid}"
+            else:
+                dir_name = f"scene_{sid}_q{qid}"
+
+            tasks.append({
+                "scene_id": int(sid),
+                "query_obj_id": int(qid),
+                "difficulty": str(row0["difficulty"]),
+                "ambiguious": bool(row0["ambiguious"]),
+                "category": cat,
+                "directory_name": dir_name,
+                "annotations": {
+                    "0": annotations.get(0, ""),
+                    "1": annotations.get(1, ""),
+                    "2": annotations.get(2, ""),
+                },
+            })
 
     # Stats
     from collections import Counter

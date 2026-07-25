@@ -1,870 +1,1056 @@
 {
   "category": "hard",
   "iou_threshold": 0.5,
-  "total": 144,
-  "success": 101,
-  "rsr": 0.7014,
+  "total": 150,
+  "success": 97,
+  "rsr": 0.6467,
   "details": [
     {
       "scene_id": 1113,
+      "query_obj_id": 0,
       "split": "split0",
       "success": true,
       "iou": 0.9938
     },
     {
       "scene_id": 1113,
+      "query_obj_id": 0,
       "split": "split1",
       "success": true,
       "iou": 0.9938
     },
     {
       "scene_id": 1113,
+      "query_obj_id": 0,
       "split": "split2",
       "success": true,
       "iou": 0.9938
     },
     {
       "scene_id": 1312,
+      "query_obj_id": 7,
       "split": "split0",
       "success": true,
       "iou": 0.9916
     },
     {
       "scene_id": 1312,
+      "query_obj_id": 7,
       "split": "split1",
       "success": true,
       "iou": 0.9916
     },
     {
       "scene_id": 1312,
+      "query_obj_id": 7,
       "split": "split2",
       "success": true,
       "iou": 0.9916
     },
     {
       "scene_id": 1318,
+      "query_obj_id": 0,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1318,
+      "query_obj_id": 0,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1318,
+      "query_obj_id": 0,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1459,
+      "query_obj_id": 2,
       "split": "split0",
       "success": true,
       "iou": 0.8488
     },
     {
       "scene_id": 1459,
+      "query_obj_id": 2,
       "split": "split1",
       "success": true,
       "iou": 0.8488
     },
     {
       "scene_id": 1459,
+      "query_obj_id": 2,
       "split": "split2",
       "success": true,
       "iou": 0.8488
     },
     {
       "scene_id": 1733,
+      "query_obj_id": 2,
       "split": "split0",
       "success": true,
       "iou": 0.9949
     },
     {
       "scene_id": 1733,
+      "query_obj_id": 2,
       "split": "split1",
       "success": true,
       "iou": 0.9949
     },
     {
       "scene_id": 1733,
+      "query_obj_id": 2,
       "split": "split2",
       "success": true,
       "iou": 0.9949
     },
     {
       "scene_id": 1784,
+      "query_obj_id": 6,
       "split": "split0",
-      "success": true,
-      "iou": 0.9912
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1784,
+      "query_obj_id": 6,
       "split": "split1",
       "success": true,
       "iou": 0.9912
     },
     {
       "scene_id": 1784,
+      "query_obj_id": 6,
       "split": "split2",
-      "success": true,
-      "iou": 0.9912
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 1942,
+      "query_obj_id": 2,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1942,
+      "query_obj_id": 2,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1942,
+      "query_obj_id": 2,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 1996,
+      "query_obj_id": 5,
       "split": "split0",
       "success": false,
       "iou": 0.0258
     },
     {
       "scene_id": 1996,
+      "query_obj_id": 5,
       "split": "split1",
       "success": false,
-      "iou": 0.4822
+      "iou": 0.0258
     },
     {
       "scene_id": 1996,
+      "query_obj_id": 5,
       "split": "split2",
       "success": false,
       "iou": 0.0258
     },
     {
       "scene_id": 2274,
+      "query_obj_id": 2,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 2274,
+      "query_obj_id": 2,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 2274,
+      "query_obj_id": 2,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 3125,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
       "iou": 0.9805
     },
     {
       "scene_id": 3125,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
       "iou": 0.9805
     },
     {
       "scene_id": 3125,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
       "iou": 0.9805
     },
     {
       "scene_id": 3576,
+      "query_obj_id": 1,
       "split": "split0",
       "success": true,
       "iou": 0.9897
     },
     {
       "scene_id": 3576,
+      "query_obj_id": 1,
       "split": "split1",
       "success": true,
       "iou": 0.9897
     },
     {
       "scene_id": 3576,
+      "query_obj_id": 1,
+      "split": "split2",
+      "success": true,
+      "iou": 0.9897
+    },
+    {
+      "scene_id": 3576,
+      "query_obj_id": 3,
+      "split": "split0",
+      "success": true,
+      "iou": 0.9897
+    },
+    {
+      "scene_id": 3576,
+      "query_obj_id": 3,
+      "split": "split1",
+      "success": true,
+      "iou": 0.9897
+    },
+    {
+      "scene_id": 3576,
+      "query_obj_id": 3,
       "split": "split2",
       "success": true,
       "iou": 0.9897
     },
     {
       "scene_id": 4992,
+      "query_obj_id": 4,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 4992,
+      "query_obj_id": 4,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 4992,
+      "query_obj_id": 4,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 5155,
+      "query_obj_id": 4,
       "split": "split0",
       "success": false,
       "iou": 0.4467
     },
     {
       "scene_id": 5155,
+      "query_obj_id": 4,
       "split": "split1",
       "success": false,
       "iou": 0.4467
     },
     {
       "scene_id": 5155,
+      "query_obj_id": 4,
       "split": "split2",
       "success": false,
       "iou": 0.4467
     },
     {
       "scene_id": 5447,
+      "query_obj_id": 5,
       "split": "split0",
       "success": false,
       "iou": 0.2956
     },
     {
       "scene_id": 5447,
+      "query_obj_id": 5,
       "split": "split1",
       "success": false,
       "iou": 0.2956
     },
     {
       "scene_id": 5447,
+      "query_obj_id": 5,
       "split": "split2",
       "success": false,
       "iou": 0.2956
     },
     {
       "scene_id": 5778,
+      "query_obj_id": 5,
       "split": "split0",
       "success": true,
       "iou": 0.9845
     },
     {
       "scene_id": 5778,
+      "query_obj_id": 5,
       "split": "split1",
       "success": true,
       "iou": 0.9845
     },
     {
       "scene_id": 5778,
+      "query_obj_id": 5,
       "split": "split2",
       "success": true,
       "iou": 0.9845
     },
     {
       "scene_id": 6732,
+      "query_obj_id": 0,
       "split": "split0",
-      "success": true,
-      "iou": 0.8128
+      "success": false,
+      "iou": 0.1238
     },
     {
       "scene_id": 6732,
+      "query_obj_id": 0,
       "split": "split1",
-      "success": true,
-      "iou": 0.8128
+      "success": false,
+      "iou": 0.1238
     },
     {
       "scene_id": 6732,
+      "query_obj_id": 0,
       "split": "split2",
-      "success": true,
-      "iou": 0.8128
+      "success": false,
+      "iou": 0.1238
     },
     {
       "scene_id": 6755,
+      "query_obj_id": 3,
       "split": "split0",
       "success": true,
       "iou": 0.9975
     },
     {
       "scene_id": 6755,
+      "query_obj_id": 3,
       "split": "split1",
       "success": true,
       "iou": 0.9975
     },
     {
       "scene_id": 6755,
+      "query_obj_id": 3,
       "split": "split2",
       "success": true,
       "iou": 0.9975
     },
     {
       "scene_id": 6760,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
       "iou": 0.9866
     },
     {
       "scene_id": 6760,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
       "iou": 0.9866
     },
     {
       "scene_id": 6760,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
       "iou": 0.9866
     },
     {
       "scene_id": 6784,
+      "query_obj_id": 7,
       "split": "split0",
       "success": true,
       "iou": 0.8916
     },
     {
       "scene_id": 6784,
+      "query_obj_id": 7,
       "split": "split1",
       "success": true,
       "iou": 0.8916
     },
     {
       "scene_id": 6784,
+      "query_obj_id": 7,
       "split": "split2",
       "success": true,
       "iou": 0.8916
     },
     {
       "scene_id": 6801,
+      "query_obj_id": 12,
       "split": "split0",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9953
     },
     {
       "scene_id": 6801,
+      "query_obj_id": 12,
       "split": "split1",
       "success": true,
       "iou": 0.9953
     },
     {
       "scene_id": 6801,
+      "query_obj_id": 12,
       "split": "split2",
       "success": true,
       "iou": 0.9953
     },
     {
       "scene_id": 6807,
+      "query_obj_id": 0,
       "split": "split0",
       "success": true,
       "iou": 0.9915
     },
     {
       "scene_id": 6807,
+      "query_obj_id": 0,
       "split": "split1",
       "success": true,
       "iou": 0.9915
     },
     {
       "scene_id": 6807,
+      "query_obj_id": 0,
       "split": "split2",
       "success": true,
       "iou": 0.9915
     },
     {
       "scene_id": 6835,
+      "query_obj_id": 6,
       "split": "split0",
-      "success": true,
-      "iou": 0.9718
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6835,
+      "query_obj_id": 6,
       "split": "split1",
-      "success": true,
-      "iou": 0.9718
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6835,
+      "query_obj_id": 6,
       "split": "split2",
-      "success": true,
-      "iou": 0.9718
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 6837,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
       "iou": 0.9852
     },
     {
       "scene_id": 6837,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
       "iou": 0.9852
     },
     {
       "scene_id": 6837,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
       "iou": 0.9852
     },
     {
       "scene_id": 6870,
+      "query_obj_id": 0,
       "split": "split0",
       "success": true,
       "iou": 0.9939
     },
     {
       "scene_id": 6870,
+      "query_obj_id": 0,
       "split": "split1",
       "success": true,
       "iou": 0.9939
     },
     {
       "scene_id": 6870,
+      "query_obj_id": 0,
       "split": "split2",
       "success": true,
       "iou": 0.9939
     },
     {
       "scene_id": 6873,
+      "query_obj_id": 5,
       "split": "split0",
       "success": true,
       "iou": 0.9919
     },
     {
       "scene_id": 6873,
+      "query_obj_id": 5,
       "split": "split1",
       "success": true,
       "iou": 0.9919
     },
     {
       "scene_id": 6873,
+      "query_obj_id": 5,
       "split": "split2",
       "success": true,
       "iou": 0.9919
     },
     {
       "scene_id": 6941,
+      "query_obj_id": 1,
       "split": "split0",
       "success": true,
       "iou": 0.9752
     },
     {
       "scene_id": 6941,
+      "query_obj_id": 1,
       "split": "split1",
       "success": true,
       "iou": 0.9752
     },
     {
       "scene_id": 6941,
+      "query_obj_id": 1,
       "split": "split2",
       "success": true,
       "iou": 0.9752
     },
     {
       "scene_id": 6949,
+      "query_obj_id": 9,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 6949,
+      "query_obj_id": 9,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 6949,
+      "query_obj_id": 9,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 6971,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
       "iou": 0.9858
     },
     {
       "scene_id": 6971,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
       "iou": 0.9858
     },
     {
       "scene_id": 6971,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
       "iou": 0.9858
     },
     {
+      "scene_id": 6971,
+      "query_obj_id": 18,
+      "split": "split0",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 6971,
+      "query_obj_id": 18,
+      "split": "split1",
+      "success": false,
+      "iou": 0.0
+    },
+    {
+      "scene_id": 6971,
+      "query_obj_id": 18,
+      "split": "split2",
+      "success": false,
+      "iou": 0.0
+    },
+    {
       "scene_id": 7074,
+      "query_obj_id": 0,
       "split": "split0",
       "success": false,
       "iou": 0.0003
     },
     {
       "scene_id": 7074,
+      "query_obj_id": 0,
       "split": "split1",
       "success": false,
       "iou": 0.0003
     },
     {
       "scene_id": 7074,
+      "query_obj_id": 0,
       "split": "split2",
       "success": false,
       "iou": 0.0003
     },
     {
       "scene_id": 7084,
+      "query_obj_id": 3,
       "split": "split0",
       "success": true,
-      "iou": 0.9799
+      "iou": 0.9748
     },
     {
       "scene_id": 7084,
+      "query_obj_id": 3,
       "split": "split1",
       "success": true,
-      "iou": 0.9799
+      "iou": 0.9748
     },
     {
       "scene_id": 7084,
+      "query_obj_id": 3,
       "split": "split2",
       "success": true,
-      "iou": 0.9799
+      "iou": 0.9748
     },
     {
       "scene_id": 7108,
+      "query_obj_id": 10,
       "split": "split0",
-      "success": true,
-      "iou": 0.9934
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7108,
+      "query_obj_id": 10,
       "split": "split1",
-      "success": true,
-      "iou": 0.9934
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7108,
+      "query_obj_id": 10,
       "split": "split2",
-      "success": true,
-      "iou": 0.9934
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7146,
+      "query_obj_id": 5,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7146,
+      "query_obj_id": 5,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7146,
+      "query_obj_id": 5,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7175,
+      "query_obj_id": 0,
       "split": "split0",
       "success": true,
       "iou": 0.9839
     },
     {
       "scene_id": 7175,
+      "query_obj_id": 0,
       "split": "split1",
       "success": true,
       "iou": 0.9839
     },
     {
       "scene_id": 7175,
+      "query_obj_id": 0,
       "split": "split2",
       "success": true,
       "iou": 0.9839
     },
     {
       "scene_id": 7228,
+      "query_obj_id": 3,
       "split": "split0",
       "success": true,
       "iou": 0.9958
     },
     {
       "scene_id": 7228,
+      "query_obj_id": 3,
       "split": "split1",
       "success": true,
       "iou": 0.9958
     },
     {
       "scene_id": 7228,
+      "query_obj_id": 3,
       "split": "split2",
       "success": true,
       "iou": 0.9958
     },
     {
       "scene_id": 7239,
+      "query_obj_id": 11,
       "split": "split0",
       "success": true,
-      "iou": 0.9484
+      "iou": 0.9581
     },
     {
       "scene_id": 7239,
+      "query_obj_id": 11,
       "split": "split1",
       "success": true,
-      "iou": 0.9484
+      "iou": 0.9581
     },
     {
       "scene_id": 7239,
+      "query_obj_id": 11,
       "split": "split2",
       "success": true,
-      "iou": 0.9484
+      "iou": 0.9581
     },
     {
       "scene_id": 7271,
+      "query_obj_id": 0,
       "split": "split0",
       "success": true,
       "iou": 0.9836
     },
     {
       "scene_id": 7271,
+      "query_obj_id": 0,
       "split": "split1",
       "success": true,
       "iou": 0.9836
     },
     {
       "scene_id": 7271,
+      "query_obj_id": 0,
       "split": "split2",
       "success": true,
       "iou": 0.9836
     },
     {
       "scene_id": 7281,
+      "query_obj_id": 5,
       "split": "split0",
       "success": true,
       "iou": 0.9906
     },
     {
       "scene_id": 7281,
+      "query_obj_id": 5,
       "split": "split1",
       "success": true,
       "iou": 0.9906
     },
     {
       "scene_id": 7281,
+      "query_obj_id": 5,
       "split": "split2",
       "success": true,
       "iou": 0.9906
     },
     {
       "scene_id": 7291,
+      "query_obj_id": 1,
       "split": "split0",
       "success": true,
-      "iou": 0.9957
+      "iou": 0.9945
     },
     {
       "scene_id": 7291,
+      "query_obj_id": 1,
       "split": "split1",
       "success": true,
-      "iou": 0.866
+      "iou": 0.9945
     },
     {
       "scene_id": 7291,
+      "query_obj_id": 1,
       "split": "split2",
       "success": true,
-      "iou": 0.9957
+      "iou": 0.9945
     },
     {
       "scene_id": 7310,
+      "query_obj_id": 0,
       "split": "split0",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9668
     },
     {
       "scene_id": 7310,
+      "query_obj_id": 0,
       "split": "split1",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9668
     },
     {
       "scene_id": 7310,
+      "query_obj_id": 0,
       "split": "split2",
-      "success": false,
-      "iou": 0.0
+      "success": true,
+      "iou": 0.9668
     },
     {
       "scene_id": 7321,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
       "iou": 0.993
     },
     {
       "scene_id": 7321,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
       "iou": 0.993
     },
     {
       "scene_id": 7321,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
       "iou": 0.993
     },
     {
       "scene_id": 7340,
+      "query_obj_id": 4,
       "split": "split0",
-      "success": true,
-      "iou": 0.993
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7340,
+      "query_obj_id": 4,
       "split": "split1",
-      "success": true,
-      "iou": 0.993
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7340,
+      "query_obj_id": 4,
       "split": "split2",
-      "success": true,
-      "iou": 0.993
+      "success": false,
+      "iou": 0.0
     },
     {
       "scene_id": 7346,
+      "query_obj_id": 3,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7346,
+      "query_obj_id": 3,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7346,
+      "query_obj_id": 3,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7348,
+      "query_obj_id": 2,
       "split": "split0",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7348,
+      "query_obj_id": 2,
       "split": "split1",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7348,
+      "query_obj_id": 2,
       "split": "split2",
       "success": false,
       "iou": 0.0
     },
     {
       "scene_id": 7368,
+      "query_obj_id": 1,
       "split": "split0",
-      "success": false,
-      "iou": 0.0188
+      "success": true,
+      "iou": 0.9911
     },
     {
       "scene_id": 7368,
+      "query_obj_id": 1,
       "split": "split1",
-      "success": false,
-      "iou": 0.0188
+      "success": true,
+      "iou": 0.9911
     },
     {
       "scene_id": 7368,
+      "query_obj_id": 1,
       "split": "split2",
-      "success": false,
-      "iou": 0.0188
+      "success": true,
+      "iou": 0.9911
     },
     {
       "scene_id": 7387,
+      "query_obj_id": 1,
       "split": "split0",
       "success": true,
       "iou": 0.9933
     },
     {
       "scene_id": 7387,
+      "query_obj_id": 1,
       "split": "split1",
       "success": true,
       "iou": 0.9933
     },
     {
       "scene_id": 7387,
+      "query_obj_id": 1,
       "split": "split2",
       "success": true,
       "iou": 0.9933
     },
     {
       "scene_id": 7404,
+      "query_obj_id": 4,
       "split": "split0",
       "success": true,
-      "iou": 0.8157
+      "iou": 0.8449
     },
     {
       "scene_id": 7404,
+      "query_obj_id": 4,
       "split": "split1",
       "success": true,
-      "iou": 0.8157
+      "iou": 0.8449
     },
     {
       "scene_id": 7404,
+      "query_obj_id": 4,
       "split": "split2",
       "success": true,
-      "iou": 0.8157
+      "iou": 0.8449
     },
     {
       "scene_id": 7433,
+      "query_obj_id": 9,
       "split": "split0",
       "success": true,
       "iou": 0.9058
     },
     {
       "scene_id": 7433,
+      "query_obj_id": 9,
       "split": "split1",
       "success": true,
       "iou": 0.9058
     },
     {
       "scene_id": 7433,
+      "query_obj_id": 9,
       "split": "split2",
       "success": true,
       "iou": 0.9058
     },
     {
       "scene_id": 827,
+      "query_obj_id": 6,
       "split": "split0",
       "success": true,
       "iou": 0.9562
     },
     {
       "scene_id": 827,
+      "query_obj_id": 6,
       "split": "split1",
       "success": true,
       "iou": 0.9562
     },
     {
       "scene_id": 827,
+      "query_obj_id": 6,
       "split": "split2",
       "success": true,
       "iou": 0.9562

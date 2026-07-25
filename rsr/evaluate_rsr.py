@@ -57,8 +57,25 @@ def main() -> None:
         details = []
 
         for scene_dir in scenes:
-            sid = int(scene_dir.name.replace("scene_", ""))
-            gt_info = gt_map.get(sid)
+            name = scene_dir.name  # e.g. "scene_1449" or "scene_1449_q4"
+            if "_q" in name:
+                parts = name.replace("scene_", "").split("_q")
+                sid = int(parts[0])
+                qid = int(parts[1])
+            else:
+                sid = int(name.replace("scene_", ""))
+                qid = None
+
+            # 查找 GT：优先用 (sid, qid)，fallback 到 (sid, first_qid)
+            if qid is not None:
+                gt_info = gt_map.get((sid, qid))
+            else:
+                gt_info = None
+                for (s, q), info in gt_map.items():
+                    if s == sid:
+                        gt_info = info
+                        break
+
             if not gt_info or not gt_info["groundTruthObjIds"]:
                 continue
 
@@ -80,24 +97,24 @@ def main() -> None:
                 reason_csv = scene_dir / "reason" / split_name / "results.csv"
                 if not reason_csv.exists():
                     total += 1
-                    details.append({"scene_id": sid, "split": split_name, "success": False, "error": "reason_csv missing"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "success": False, "error": "reason_csv missing"})
                     continue
 
                 try:
                     df = pd.read_csv(reason_csv)
                 except Exception:
                     total += 1
-                    details.append({"scene_id": sid, "split": split_name, "success": False, "error": "csv read error"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "success": False, "error": "csv read error"})
                     continue
                 if df.empty or "grasp_id" not in df.columns:
                     total += 1
-                    details.append({"scene_id": sid, "split": split_name, "success": False, "error": "no grasp_id column"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "success": False, "error": "no grasp_id column"})
                     continue
 
                 grasp_id = df["grasp_id"].iloc[0]
                 if pd.isna(grasp_id):
                     total += 1
-                    details.append({"scene_id": sid, "split": split_name, "success": False, "error": "intent_no_target"})
+                    details.append({"scene_id": sid, "query_obj_id": gt_info["query_obj_id"], "split": split_name, "success": False, "error": "intent_no_target"})
                     continue
                 grasp_id = int(grasp_id)
 
@@ -127,6 +144,7 @@ def main() -> None:
 
                 details.append({
                     "scene_id": sid,
+                    "query_obj_id": gt_info["query_obj_id"],
                     "split": split_name,
                     "success": success,
                     "iou": round(best_iou, 4),
@@ -134,7 +152,8 @@ def main() -> None:
 
                 if args.verbose:
                     status = "✓" if success else "✗"
-                    print(f"  {status} scene_{sid} {split_name}: IoU={best_iou:.4f}")
+                    scene_label = f"scene_{sid}_q{qid}" if qid else f"scene_{sid}"
+                    print(f"  {status} {scene_label} {split_name}: IoU={best_iou:.4f}")
 
         rsr = ok / total if total > 0 else 0.0
         print(f"\n{'='*50}")
