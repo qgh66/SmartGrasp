@@ -520,6 +520,49 @@ data/scene_<id>/reason/summary.json
 `segmentation.npy` 中的 PyBullet body mask 计算 IoU，确定要执行夹取的
 PyBullet body ID。
 
+默认情况下，GraspNet 仍使用整个 PyBullet 物体的点云做裁剪和候选过滤。
+如需使用 Reason 选择的 `grasp_part_mask` 聚焦抓取区域，增加：
+
+```bash
+bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene.json \
+  --instruction "抓取红色螺丝刀" \
+  --run-pipeline-after-capture \
+  --use-reason-part-mask
+```
+
+该参数不会改变整物体 mask 到 PyBullet body ID 的映射，只会将经过
+Perception 归属校验的 part mask 与已选 body 的 segmentation 求交，
+反投影为部件点云，并用于 GraspNet 输入裁剪、候选位置过滤和执行高度约束。
+若 Reason 没有给出有效 part mask，程序会明确失败，不会静默退回整物体
+点云。
+
+`part_id` 是从 1 开始的全场景连续编号，不再复用 SAM2Auto candidate id。
+Perception 直接沿用 VLM 已经给出的 SAM2 part → object 关系，不重新通过
+几何重叠寻找 owner。没有映射到任何 object、同时映射到多个 object，或其
+object 没有进入最终 graph 的候选不会加入正式 part 列表。保存的 part mask
+还会与既有 owner object mask 求交，因此所有非零 part 像素都属于该
+object。映射和诊断保存在：
+
+SAM2 label、全尺寸 candidate mask、RGB part sheet 和 VLM 合法编号不设置
+固定数量上限。`visible_parts[].sam2_ids` 会强制限制为所属 object 顶层
+`sam2_ids` 的子集；过滤后没有 mask id 的 visible part 会被删除。一个
+SAM2 id 对应一个几何 part，即使 VLM 给同一个 id 写了多个部件描述，也不会
+在没有新 mask 的情况下人为拆分。
+
+```text
+data/scene_<id>/perception/summary.json
+  object_id_to_part_ids
+  object_id_to_part_files
+  part_id_to_object_id
+  part_records
+  rejected_part_candidates
+```
+
+Reason 只允许为某个 object 返回该 object 列表中的 part scores；额外或串到
+其他 object 的 part id 会被过滤。part mask 如果本身覆盖整个物体，定位
+效果仍会接近默认整物体模式。
+
 抓取结果默认保存到：
 
 ```text

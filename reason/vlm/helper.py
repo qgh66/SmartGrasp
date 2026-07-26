@@ -25,7 +25,7 @@ def _build_user_text_partial(
         if prompt_mode == "graspability":
             part_ids = o.get("part_ids") or []
             top = "top-layer" if o.get("is_top_layer") else "non-top-layer"
-            part_text = f", layer={top}, sam2_part_ids={part_ids}"
+            part_text = f", layer={top}, part_ids={part_ids}"
         lines.append(f"  - mid={o['mid']}, label={o['label']}{part_text}")
     lines.append("")
     lines.append("Occlusion relations (a -> b means a covers b):")
@@ -54,17 +54,17 @@ def _build_user_text_partial(
             "Also estimate graspability for the next removal grasp. Return both "
             "one integrated object-level graspability score for each candidate "
             "object and part-level graspability scores for every listed "
-            "sam2_part_id of that object. Use the labeled scene image, the "
+            "part_id of that object. Use the labeled scene image, the "
             "occlusion graph, the object-ID sheet of complete assembled "
-            "objects, and the SAM2 part "
+            "objects, and the validated part "
             "contact sheet when available. Assume the robot uses a "
             "parallel gripper. Object-level graspability should still reflect "
             "whether grasping the best feasible visible part/region can move and "
             "remove the whole object safely. Part-level graspability should score "
-            "whether that exact SAM2 part is exposed, reachable, stable, thick "
+            "whether that exact validated part is exposed, reachable, stable, thick "
             "enough, has clearance, and is useful as a grasp contact/region. "
             "Penalize tiny, thin, buried, merged, occluded, collision-prone, or "
-            "unstable parts. If a candidate has no listed sam2_part_ids, return "
+            "unstable parts. If a candidate has no listed part_ids, return "
             "an empty object for it in graspability_parts. Mention the best "
             "graspable part/region and any object-level penalty in the reason."
         )
@@ -73,7 +73,7 @@ def _build_user_text_partial(
             f'"graspability": {{"<mid>": <0..1>, ...}}, '
             f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
-            f'Mids must be exactly: {mids}. Include every listed sam2_part_id '
+            f'Mids must be exactly: {mids}. Include every listed part_id '
             f'for each mid in graspability_parts.'
         )
     else:
@@ -99,7 +99,7 @@ def _build_user_text_invisible(
         part_text = ""
         if prompt_mode == "graspability":
             part_ids = o.get("part_ids") or []
-            part_text = f", sam2_part_ids={part_ids}"
+            part_text = f", part_ids={part_ids}"
         lines.append(f"  - mid={o['mid']}, label={o['label']}{part_text}")
     lines.append("")
     lines.append(
@@ -114,17 +114,17 @@ def _build_user_text_invisible(
             "Also estimate graspability for the next removal grasp. Return both "
             "one integrated object-level graspability score for each visible "
             "top-layer candidate and part-level graspability scores for every "
-            "listed sam2_part_id of that object. Use the labeled scene image, "
+            "listed part_id of that object. Use the labeled scene image, "
             "the occlusion graph, the object-ID sheet of complete assembled "
-            "objects, and the SAM2 "
+            "objects, and the validated "
             "part contact sheet when available. Assume the robot uses a "
             "parallel gripper. Object-level graspability should still reflect "
             "whether grasping the best feasible visible part/region can move and "
             "remove the whole object safely. Part-level graspability should score "
-            "whether that exact SAM2 part is exposed, reachable, stable, thick "
+            "whether that exact validated part is exposed, reachable, stable, thick "
             "enough, has clearance, and is useful as a grasp contact/region. "
             "Penalize tiny, thin, buried, merged, occluded, collision-prone, or "
-            "unstable parts. If a candidate has no listed sam2_part_ids, return "
+            "unstable parts. If a candidate has no listed part_ids, return "
             "an empty object for it in graspability_parts. Mention the best "
             "graspable part/region and any object-level penalty in the reason."
         )
@@ -135,7 +135,7 @@ def _build_user_text_invisible(
             f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
             f'"reason": "<brief reason for the scores and graspability>"}}. '
             f'Mids must be exactly: {mids}. '
-            f'Include every listed sam2_part_id for each mid in graspability_parts. '
+            f'Include every listed part_id for each mid in graspability_parts. '
             f'The scores represent mutually-exclusive hypotheses and should roughly sum to 1.0. '
             f'NO markdown, NO code fences, NO prose.'
         )
@@ -163,24 +163,24 @@ def _build_user_text_graspability(
         part_ids = obj.get("part_ids") or []
         lines.append(
             f"  - mid={obj['mid']}, label={obj['label']}, "
-            f"sam2_part_ids={part_ids}"
+            f"part_ids={part_ids}"
         )
     mids = [obj["mid"] for obj in objects]
     lines.append("")
     lines.append(
         "For each object, return one integrated object-level graspability "
         "score in [0, 1] and part-level graspability scores for every listed "
-        "sam2_part_id. Use the labeled scene image, the occlusion graph, the "
-        "object-ID sheet of complete assembled objects, and the SAM2 part "
+        "part_id. Use the labeled scene image, the occlusion graph, the "
+        "object-ID sheet of complete assembled objects, and the validated part "
         "contact sheet when "
         "available. Assume a parallel gripper. Object-level "
         "graspability should reflect whether grasping the best feasible "
         "visible part/region can move and remove the whole object safely. "
-        "Part-level graspability should score whether that exact SAM2 part is "
+        "Part-level graspability should score whether that exact validated part is "
         "exposed, reachable, stable, thick enough, has clearance, and is useful "
         "as a grasp contact/region. Penalize tiny, thin, buried, merged, "
         "occluded, collision-prone, or unstable parts. If an object has no "
-        "listed sam2_part_ids, return an empty object for it in "
+        "listed part_ids, return an empty object for it in "
         "graspability_parts."
     )
     lines.append("")
@@ -188,7 +188,7 @@ def _build_user_text_graspability(
         f'Reply ONLY with JSON: {{"graspability": {{"<mid>": <0..1>, ...}}, '
         f'"graspability_parts": {{"<mid>": {{"<part_id>": <0..1>, ...}}, ...}}, '
         f'"reason": "<brief reason for the object and part scores>"}}. '
-        f'Mids must be exactly: {mids}. Include every listed sam2_part_id for '
+        f'Mids must be exactly: {mids}. Include every listed part_id for '
         f'each mid in graspability_parts. NO markdown, NO code fences, NO prose.'
     )
     return "\n".join(lines)
@@ -245,6 +245,7 @@ def _clean_json_text(text: str) -> str:
 def _parse_score_payload_independent(
     text: str,
     occluder_mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[str, Any]:
     """Parse independent semantic scores plus optional graspability."""
     try:
@@ -255,12 +256,17 @@ def _parse_score_payload_independent(
                 data.get("graspability", {}),
                 data.get("graspability_parts", {}),
                 occluder_mids,
+                allowed_part_ids,
             ),
             "graspability_part_id": _parse_graspability_part_id(
-                data.get("graspability_parts", {}), occluder_mids
+                data.get("graspability_parts", {}),
+                occluder_mids,
+                allowed_part_ids,
             ),
             "graspability_parts": _normalize_graspability_parts(
-                data.get("graspability_parts", {}), occluder_mids
+                data.get("graspability_parts", {}),
+                occluder_mids,
+                allowed_part_ids,
             ),
             "reason": _parse_reason(data),
         }
@@ -277,6 +283,7 @@ def _parse_score_payload_independent(
 def _parse_score_payload_normalized(
     text: str,
     occluder_mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[str, Any]:
     """Parse normalized hidden-target probabilities plus optional graspability."""
     try:
@@ -296,12 +303,17 @@ def _parse_score_payload_normalized(
                 data.get("graspability", {}),
                 data.get("graspability_parts", {}),
                 occluder_mids,
+                allowed_part_ids,
             ),
             "graspability_part_id": _parse_graspability_part_id(
-                data.get("graspability_parts", {}), occluder_mids
+                data.get("graspability_parts", {}),
+                occluder_mids,
+                allowed_part_ids,
             ),
             "graspability_parts": _normalize_graspability_parts(
-                data.get("graspability_parts", {}), occluder_mids
+                data.get("graspability_parts", {}),
+                occluder_mids,
+                allowed_part_ids,
             ),
             "reason": _parse_reason(data),
         }
@@ -320,6 +332,7 @@ def _parse_score_payload_normalized(
 def _parse_graspability_payload(
     text: str,
     mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[str, Any]:
     """Parse object-level and part-level graspability only."""
     try:
@@ -329,12 +342,17 @@ def _parse_graspability_payload(
                 data.get("graspability", {}),
                 data.get("graspability_parts", {}),
                 mids,
+                allowed_part_ids,
             ),
             "graspability_part_id": _parse_graspability_part_id(
-                data.get("graspability_parts", {}), mids
+                data.get("graspability_parts", {}),
+                mids,
+                allowed_part_ids,
             ),
             "graspability_parts": _normalize_graspability_parts(
-                data.get("graspability_parts", {}), mids
+                data.get("graspability_parts", {}),
+                mids,
+                allowed_part_ids,
             ),
             "reason": _parse_reason(data),
         }
@@ -363,6 +381,7 @@ def _parse_value_map(
 def _normalize_graspability_parts(
     raw_values: Any,
     mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[int, dict[int, float]]:
     raw_values = raw_values if isinstance(raw_values, dict) else {}
     out: dict[int, dict[int, float]] = {}
@@ -371,12 +390,23 @@ def _normalize_graspability_parts(
         if not isinstance(part_map, dict):
             part_map = {}
         normalized: dict[int, float] = {}
+        allowed = allowed_part_ids.get(mid, set()) if allowed_part_ids is not None else None
         for part_id, value in part_map.items():
             try:
                 pid = int(part_id)
+                if allowed is not None and pid not in allowed:
+                    continue
                 normalized[pid] = min(1.0, max(0.0, float(value)))
             except (TypeError, ValueError):
                 continue
+        # Missing requested parts are conservatively scored as unavailable.
+        # This also ensures the returned key set exactly matches the mapping
+        # supplied for this object.
+        if allowed is not None:
+            normalized = {
+                pid: normalized.get(pid, 0.0)
+                for pid in sorted(allowed)
+            }
         out[mid] = normalized
     return out
 
@@ -384,8 +414,13 @@ def _normalize_graspability_parts(
 def _parse_graspability_parts(
     raw_values: Any,
     mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[int, float]:
-    parts = _normalize_graspability_parts(raw_values, mids)
+    parts = _normalize_graspability_parts(
+        raw_values,
+        mids,
+        allowed_part_ids,
+    )
     out: dict[int, float] = {}
     for mid in mids:
         part_scores = parts.get(mid, {})
@@ -397,9 +432,14 @@ def _parse_object_graspability(
     raw_object_values: Any,
     raw_part_values: Any,
     mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[int, float]:
     """Parse object-level graspability, falling back to max part score."""
-    fallback = _parse_graspability_parts(raw_part_values, mids)
+    fallback = _parse_graspability_parts(
+        raw_part_values,
+        mids,
+        allowed_part_ids,
+    )
     raw_object_values = raw_object_values if isinstance(raw_object_values, dict) else {}
     out: dict[int, float] = {}
     for mid in mids:
@@ -417,8 +457,13 @@ def _parse_object_graspability(
 def _parse_graspability_part_id(
     raw_values: Any,
     mids: list[int],
+    allowed_part_ids: dict[int, set[int]] | None = None,
 ) -> dict[int, int | None]:
-    parts = _normalize_graspability_parts(raw_values, mids)
+    parts = _normalize_graspability_parts(
+        raw_values,
+        mids,
+        allowed_part_ids,
+    )
     out: dict[int, int | None] = {}
     for mid in mids:
         part_scores = parts.get(mid, {})
@@ -426,7 +471,7 @@ def _parse_graspability_part_id(
             out[mid] = None
             continue
         best_part = max(part_scores, key=lambda pid: (part_scores[pid], -pid))
-        out[mid] = best_part
+        out[mid] = best_part if part_scores[best_part] > 0.0 else None
     return out
 
 

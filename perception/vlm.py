@@ -120,6 +120,7 @@ def review_and_assign_sam2(
         "SAM2 rules:",
         "- Each SAM2 id can be assigned to at most one object.",
         "- An object may have multiple SAM2 ids if fragmented.",
+        "- Every id in visible_parts[].sam2_ids must also appear in that object's top-level sam2_ids.",
         "- Do not force a nearby mask into an object if it is better explained as another instance.",
         "- Name each object by the complete physical instance in the RGB image. Use neutral descriptions when uncertain.",
         "",
@@ -173,6 +174,7 @@ def review_and_assign_sam2(
         if not isinstance(ids, list):
             ids = [ids]
         sam2_ids = sorted(set(int(i) for i in ids if str(i).isdigit() and 1 <= int(i) <= max_id))
+        object_sam2_id_set = set(sam2_ids)
 
         visible_parts: list[dict[str, Any]] = []
         for part in item.get("visible_parts", []) or []:
@@ -184,7 +186,19 @@ def review_and_assign_sam2(
             pids = part.get("sam2_ids", []) or []
             if not isinstance(pids, list):
                 pids = [pids]
-            part_ids = sorted(set(int(p) for p in pids if str(p).isdigit() and 1 <= int(p) <= max_id))
+            part_ids = sorted(
+                set(
+                    int(p)
+                    for p in pids
+                    if (
+                        str(p).isdigit()
+                        and 1 <= int(p) <= max_id
+                        and int(p) in object_sam2_id_set
+                    )
+                )
+            )
+            if not part_ids:
+                continue
             visible_parts.append({"description": pd, "sam2_ids": part_ids})
 
         normalized.append({

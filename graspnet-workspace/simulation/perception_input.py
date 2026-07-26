@@ -226,6 +226,32 @@ def _resolve_graph_mask_path(
     )
 
 
+def _resolve_reason_part_mask_path(
+    *,
+    reason_summary_path: Path,
+    part_mask: Any,
+) -> Path | None:
+    """Resolve Reason's optional part-mask path without requiring it to exist."""
+    if not isinstance(part_mask, dict):
+        return None
+    path_value = part_mask.get("path")
+    if not path_value:
+        return None
+
+    raw_path = Path(os.path.expanduser(str(path_value)))
+    if raw_path.is_absolute():
+        return raw_path.resolve()
+
+    candidates = [
+        reason_summary_path.parent / raw_path,
+        REPO_ROOT / raw_path,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
 def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
     """Run Perception + Intent + Reason and resolve the selected object mask."""
     scene_id = int(scene_id)
@@ -275,6 +301,11 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
         graph_path=graph_path,
         object_id=object_id,
     )
+    grasp_part_mask = reason_summary.get("grasp_part_mask")
+    grasp_part_mask_path = _resolve_reason_part_mask_path(
+        reason_summary_path=reason_summary_path,
+        part_mask=grasp_part_mask,
+    )
 
     return {
         "scene_id": scene_id,
@@ -288,6 +319,11 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
         "occlusion_graph_path": str(graph_path.resolve()),
         "reason_output_dir": str(reason_output_dir.resolve()),
         "reason_summary_path": str(reason_summary_path.resolve()),
-        "grasp_part_mask": reason_summary.get("grasp_part_mask"),
+        "grasp_part_mask": grasp_part_mask,
+        "grasp_part_mask_path": (
+            str(grasp_part_mask_path)
+            if grasp_part_mask_path is not None
+            else None
+        ),
         "graspability": reason_summary.get("graspability"),
     }

@@ -29,6 +29,20 @@ if load_dotenv is not None:
     load_dotenv()
 
 
+def _allowed_part_ids_by_mid(
+    objects: list[dict[str, Any]],
+) -> dict[int, set[int]]:
+    """Return the only part IDs each object may receive scores for."""
+    allowed: dict[int, set[int]] = {}
+    for obj in objects:
+        mid = int(obj["mid"])
+        allowed[mid] = {
+            int(part_id)
+            for part_id in (obj.get("part_ids") or [])
+        }
+    return allowed
+
+
 _SYSTEM_PROMPT_PARTIAL = """You are a vision/spatial reasoning expert helping a robot
 decide which object is most relevant to "uncover" a partially visible target.
 
@@ -80,22 +94,22 @@ _SYSTEM_PROMPT_PARTIAL_GRASPABILITY = _SYSTEM_PROMPT_PARTIAL + """
 In addition to occlusion-chain importance, estimate:
 1. ONE integrated object-level graspability coefficient in [0, 1] for each
    candidate object.
-2. A part-level graspability coefficient in [0, 1] for every listed SAM2
+2. A part-level graspability coefficient in [0, 1] for every listed validated
    part id of each candidate object.
 
 Additional visual references may be supplied:
 - An object-ID sheet. Each cell isolates one complete assembled object from
   the scene and labels it as Object <mid>. Use it to understand the whole
   object's identity, shape, extent, and which visible regions belong together.
-- A SAM2 part-ID sheet. Each cell isolates one visible part and labels it with
-  its SAM2 part id. Use the candidate list's part_ids to determine which parts
+- A validated part-ID sheet. Each cell isolates one visible part and labels it
+  with its part id. Use the candidate list's part_ids to determine which parts
   belong to each Object <mid>.
 
 Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
 covering hierarchy, surrounding clearance, and collision risk; use the
 object-ID sheet for whole-object appearance and extent; and use the part-ID
-sheet for exact grasp contacts. Object ids and
-SAM2 part ids are different namespaces and must not be confused.
+sheet for exact grasp contacts. Object ids and validated part ids are
+different namespaces and must not be confused.
 
 This is NOT a second semantic relevance score. It should measure whether a
 parallel gripper can safely and stably remove the candidate now.
@@ -114,9 +128,10 @@ remove. It must jointly consider:
 - Penalize tiny, thin, buried, merged, slippery-looking, occluded, or unstable
   parts, and also penalize whole-object collision or removal instability.
 
-The part-level graspability score measures how suitable that specific SAM2
+The part-level graspability score measures how suitable that specific
+validated
 part is as a visible grasp contact/region. Score every provided part id for
-each candidate. If a candidate has no listed SAM2 part ids, return an empty
+each candidate. If a candidate has no listed part ids, return an empty
 object for that candidate in graspability_parts.
 
 Mention the best graspable part/region and any whole-object penalty in the
@@ -169,22 +184,22 @@ _SYSTEM_PROMPT_INVISIBLE_GRASPABILITY = _SYSTEM_PROMPT_INVISIBLE + """
 In addition to hidden-target probability, estimate:
 1. ONE integrated object-level graspability coefficient in [0, 1] for each
    visible top-layer candidate.
-2. A part-level graspability coefficient in [0, 1] for every listed SAM2
+2. A part-level graspability coefficient in [0, 1] for every listed validated
    part id of each candidate object.
 
 Additional visual references may be supplied:
 - An object-ID sheet. Each cell isolates one complete assembled object from
   the scene and labels it as Object <mid>. Use it to understand the whole
   object's identity, shape, extent, and which visible regions belong together.
-- A SAM2 part-ID sheet. Each cell isolates one visible part and labels it with
-  its SAM2 part id. Use the candidate list's part_ids to determine which parts
+- A validated part-ID sheet. Each cell isolates one visible part and labels it
+  with its part id. Use the candidate list's part_ids to determine which parts
   belong to each Object <mid>.
 
 Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
 covering hierarchy, surrounding clearance, and collision risk; use the
 object-ID sheet for whole-object appearance and extent; and use the part-ID
-sheet for exact grasp contacts. Object ids and
-SAM2 part ids are different namespaces and must not be confused.
+sheet for exact grasp contacts. Object ids and validated part ids are
+different namespaces and must not be confused.
 
 This is NOT another hidden-target probability. It should measure whether a
 parallel gripper can safely and stably remove the candidate now.
@@ -203,9 +218,10 @@ remove. It must jointly consider:
 - Penalize tiny, thin, buried, merged, slippery-looking, occluded, or unstable
   parts, and also penalize whole-object collision or removal instability.
 
-The part-level graspability score measures how suitable that specific SAM2
+The part-level graspability score measures how suitable that specific
+validated
 part is as a visible grasp contact/region. Score every provided part id for
-each candidate. If a candidate has no listed SAM2 part ids, return an empty
+each candidate. If a candidate has no listed part ids, return an empty
 object for that candidate in graspability_parts.
 
 Mention the best graspable part/region and any whole-object penalty in the
@@ -224,26 +240,26 @@ You will see:
   covers Object B; the arrow points to the covered object B.
 - Optionally, an object-ID sheet where each cell isolates one complete
   assembled object and labels it as Object <mid>.
-- Optionally, a SAM2 part contact sheet showing candidate part ids.
+- Optionally, a validated part contact sheet showing candidate part ids.
 - A list of current object ids that the robot may grasp now.
 
 Use the labeled scene RGB and occlusion graph for spatial layout, overlap,
 covering hierarchy, surrounding clearance, and collision risk. Use the
 object-ID sheet for whole-object identity, shape,
-extent, and grouping. Use the SAM2 part-ID sheet for exact visible grasp
+extent, and grouping. Use the validated part-ID sheet for exact visible grasp
 contacts, following the supplied mapping from Object <mid> to part ids.
-Object ids and SAM2 part ids are different namespaces and must not be confused.
+Object ids and part ids are different namespaces and must not be confused.
 
 For EACH listed object, estimate:
 1. ONE integrated object-level graspability coefficient in [0, 1].
-2. A part-level graspability coefficient in [0, 1] for every listed SAM2
+2. A part-level graspability coefficient in [0, 1] for every listed validated
    part id of that object.
 
 The object-level score should measure whether a parallel gripper can grasp the
 best feasible visible part/region and remove the whole object safely. Consider
 exposed area, stable antipodal/contact geometry, thickness, clearance from
 neighbors, collision risk, and whether the grasped part can move the whole
-object. Part-level scores should judge that exact SAM2 part as a visible grasp
+object. Part-level scores should judge that exact validated part as a visible grasp
 contact/region.
 
 Output strictly as JSON, no prose, no markdown, no code fences:
@@ -378,6 +394,7 @@ class OpenAIVisionClient(VLMClient):
         occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
+        allowed_part_ids = _allowed_part_ids_by_mid(occluders)
         print(
             f"[VLM] calling {self.model}, target={target_mid}, "
             f"occluders={mids}, prompt_mode={prompt_mode}"
@@ -399,7 +416,7 @@ class OpenAIVisionClient(VLMClient):
                 "text": (
                     "Labeled scene RGB: use the full spatial layout, object "
                     "outlines, and numeric object IDs. These labels are object "
-                    "mids, not SAM2 part IDs."
+                    "mids, not validated part IDs."
                 ),
             },
             {
@@ -452,7 +469,7 @@ class OpenAIVisionClient(VLMClient):
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
             content.extend(
                 [
-                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {"type": "text", "text": "Validated part-ID sheet: object-owned visible parts."},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -485,7 +502,11 @@ class OpenAIVisionClient(VLMClient):
                 )
                 text = resp.choices[0].message.content or ""
                 if prompt_mode == "graspability":
-                    payload = _parse_score_payload_independent(text, mids)
+                    payload = _parse_score_payload_independent(
+                        text,
+                        mids,
+                        allowed_part_ids,
+                    )
                 else:
                     payload = {
                         "scores": _parse_scores_independent(text, mids),
@@ -537,6 +558,7 @@ class OpenAIVisionClient(VLMClient):
         occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [o["mid"] for o in occluders]
+        allowed_part_ids = _allowed_part_ids_by_mid(occluders)
         print(f"[VLM-INV] calling {self.model}, "
               f"target_label={target_label!r}, occluders={mids}, "
               f"prompt_mode={prompt_mode}")
@@ -553,7 +575,7 @@ class OpenAIVisionClient(VLMClient):
                 "text": (
                     "Labeled scene RGB: use the full spatial layout, object "
                     "outlines, and numeric object IDs. These labels are object "
-                    "mids, not SAM2 part IDs."
+                    "mids, not validated part IDs."
                 ),
             },
             {
@@ -606,7 +628,7 @@ class OpenAIVisionClient(VLMClient):
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
             content.extend(
                 [
-                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {"type": "text", "text": "Validated part-ID sheet: object-owned visible parts."},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -636,7 +658,11 @@ class OpenAIVisionClient(VLMClient):
             )
             text = resp.choices[0].message.content or ""
             if prompt_mode == "graspability":
-                payload = _parse_score_payload_normalized(text, mids)
+                payload = _parse_score_payload_normalized(
+                    text,
+                    mids,
+                    allowed_part_ids,
+                )
             else:
                 scores = _parse_scores_normalized(text, mids)
                 payload = {
@@ -678,6 +704,7 @@ class OpenAIVisionClient(VLMClient):
         occlusion_graph_rgb: np.ndarray | None = None,
     ) -> dict[str, Any]:
         mids = [obj["mid"] for obj in objects]
+        allowed_part_ids = _allowed_part_ids_by_mid(objects)
         print(f"[VLM-GRASP] calling {self.model}, objects={mids}")
 
         user_text = _build_user_text_graspability(objects)
@@ -735,7 +762,7 @@ class OpenAIVisionClient(VLMClient):
             parts_b64 = _encode_image_b64(parts_sheet_rgb)
             content.extend(
                 [
-                    {"type": "text", "text": "SAM2 part-ID sheet: visible candidate parts."},
+                    {"type": "text", "text": "Validated part-ID sheet: object-owned visible parts."},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -757,7 +784,11 @@ class OpenAIVisionClient(VLMClient):
                 response_format={"type": "json_object"},
             )
             text = resp.choices[0].message.content or ""
-            payload = _parse_graspability_payload(text, mids)
+            payload = _parse_graspability_payload(
+                text,
+                mids,
+                allowed_part_ids,
+            )
             print(
                 f"[VLM-GRASP] got graspability: {payload['graspability']}; "
                 f"reason: {payload.get('reason', '')}"

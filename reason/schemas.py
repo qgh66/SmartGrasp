@@ -35,6 +35,11 @@ class PerceptionOutput:
     final_objects_sheet_path: Optional[Path] = None
     sam2_rgb_parts_sheet: Optional[np.ndarray] = None
     sam2_rgb_parts_sheet_path: Optional[Path] = None
+    # Canonical validated object/part ownership from perception/summary.json.
+    object_id_to_part_ids: Optional[dict[int, tuple[int, ...]]] = None
+    part_id_to_object_id: Optional[dict[int, int]] = None
+
+    # Backward-compatible aliases for older summaries and callers.
     object_id_to_sam2_part_ids: Optional[dict[int, tuple[int, ...]]] = None
     object_id_to_sam2_part_files: Optional[dict[int, tuple[str, ...]]] = None
     prior_prompt_mode: str = "original"

@@ -973,10 +973,16 @@ def _save_sam2_rgb_parts_sheet(
     image_np = np.asarray(image)
     parts_dir = out_dir / "sam2_rgb_parts"
     parts_dir.mkdir(parents=True, exist_ok=True)
+    masks_dir = out_dir / "sam2_part_masks"
+    masks_dir.mkdir(parents=True, exist_ok=True)
     part_images: list[tuple[int, Image.Image]] = []
 
     for index, candidate in enumerate(candidates[:max_labels], start=1):
         mask = np.asarray(candidate["mask"], dtype=bool)
+        # RGB crops are only VLM visualizations.  Persist the original
+        # full-frame binary candidate separately so downstream mapping never
+        # treats crop padding or a resized RGB image as mask pixels.
+        _save_mask_png(mask, masks_dir / f"part_{index:03d}.png")
         x, y, width, height = _mask_bbox(mask)
         if width <= 0 or height <= 0:
             continue

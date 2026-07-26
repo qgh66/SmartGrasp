@@ -238,6 +238,59 @@ def _selected_graspability_fields(decision) -> dict:
     return fields
 
 
+def _validate_selected_part_fields(row: dict, perception) -> None:
+    """Keep selected part scores inside the selected object's part mapping."""
+    object_id = row.get("selected_object_id")
+    if object_id is None:
+        return
+    try:
+        object_id = int(object_id)
+    except (TypeError, ValueError):
+        return
+
+    part_mapping = (
+        getattr(perception, "object_id_to_part_ids", None)
+        or perception.object_id_to_sam2_part_ids
+        or {}
+    )
+    allowed_part_ids = set(part_mapping.get(object_id, ()))
+    raw_scores = row.get("selected_object_graspability_parts")
+    raw_scores = raw_scores if isinstance(raw_scores, dict) else {}
+    validated_scores: dict[str, float] = {}
+    for part_id in sorted(allowed_part_ids):
+        value = raw_scores.get(str(part_id), raw_scores.get(part_id, 0.0))
+        try:
+            validated_scores[str(part_id)] = min(
+                1.0,
+                max(0.0, float(value)),
+            )
+        except (TypeError, ValueError):
+            validated_scores[str(part_id)] = 0.0
+
+    positive_scores = {
+        int(part_id): score
+        for part_id, score in validated_scores.items()
+        if score > 0.0
+    }
+    best_part_id = (
+        max(
+            positive_scores,
+            key=lambda part_id: (
+                positive_scores[part_id],
+                -part_id,
+            ),
+        )
+        if positive_scores
+        else None
+    )
+    row["selected_object_graspability_part_id"] = best_part_id
+    row["selected_object_graspability_parts"] = validated_scores
+    vlm_result = row.get("selected_object_vlm_result")
+    if isinstance(vlm_result, dict):
+        vlm_result["graspability_part_id"] = best_part_id
+        vlm_result["graspability_parts"] = validated_scores
+
+
 def _selected_summary_row(row: dict) -> dict:
     return {
         "scene_key": row.get("scene_key"),
@@ -294,32 +347,37 @@ def _object_label(perception, object_id, object_labels: dict[int, str] | None = 
     return perception.node_info[node_id].get("label") or f"object_{object_id}"
 
 
-def _part_mask_path(perception, reason_dir: Path, part_id):
-    if part_id is None:
+def _part_mask_path(perception, reason_dir: Path, object_id, part_id):
+    """Resolve a flat part mask through summary.json's ownership mappings."""
+    if object_id is None or part_id is None:
         return None
     try:
+        object_id = int(object_id)
         part_id = int(part_id)
     except (TypeError, ValueError):
         return None
 
-    for files in (perception.object_id_to_sam2_part_files or {}).values():
-        for part_file in files:
-            try:
-                stem = Path(part_file).stem
-                if int(stem.rsplit("_", 1)[-1]) != part_id:
-                    continue
-            except (IndexError, TypeError, ValueError):
-                continue
+    object_to_parts = (
+        getattr(perception, "object_id_to_part_ids", None)
+        or perception.object_id_to_sam2_part_ids
+        or {}
+    )
+    if part_id not in set(object_to_parts.get(object_id, ())):
+        return None
 
-            if perception.output_dir is None:
-                return str(part_file)
-            mask_path = perception.output_dir / part_file
-            try:
-                return str(mask_path.resolve().relative_to(reason_dir.resolve()))
-            except ValueError:
-                return os.path.relpath(mask_path.resolve(), reason_dir.resolve())
+    part_to_object = getattr(perception, "part_id_to_object_id", None) or {}
+    if part_to_object and part_to_object.get(part_id) != object_id:
+        return None
 
-    return None
+    if perception.output_dir is None:
+        return None
+    mask_path = perception.output_dir / "object_parts" / f"part_{part_id}.png"
+    if not mask_path.is_file():
+        return None
+    try:
+        return str(mask_path.resolve().relative_to(reason_dir.resolve()))
+    except ValueError:
+        return os.path.relpath(mask_path.resolve(), reason_dir.resolve())
 
 
 def _scene_reason_summary(
@@ -332,6 +390,12 @@ def _scene_reason_summary(
     grasp_object_id = row.get("selected_object_id")
     part_id = row.get("selected_object_graspability_part_id")
     object_labels = _summary_object_labels(summary_path)
+    part_mask_path = _part_mask_path(
+        perception,
+        reason_dir,
+        grasp_object_id,
+        part_id,
+    )
     return {
         "scene_id": row.get("scene_id"),
         "instruction": row.get("intent_instruction") or perception.annotation,
@@ -346,8 +410,10 @@ def _scene_reason_summary(
             "label": _object_label(perception, grasp_object_id, object_labels),
         },
         "grasp_part_mask": {
+            "object_id": grasp_object_id,
             "part_id": part_id,
-            "path": _part_mask_path(perception, reason_dir, part_id),
+            "path": part_mask_path,
+            "validated": bool(part_mask_path),
         },
         "graspability": row.get("selected_object_graspability"),
     }
@@ -703,6 +769,7 @@ def main():
                     str(getattr(a, "message", "") or "") for a in actions_seq
                 ) if actions_seq else ""
             row.update(_selected_graspability_fields(decision))
+            _validate_selected_part_fields(row, perception)
             csv_rows.append(row)
             scene_detail_rows.append(row)
             selected_graspability_summary.append(_selected_summary_row(row))

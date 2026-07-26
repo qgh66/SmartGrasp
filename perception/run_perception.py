@@ -447,7 +447,369 @@ def save_final_objects_sheet(
     return output_path
 
 
-def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], scene_dir: Path) -> dict[str, Any]:
+def _resolve_existing_mask_path(path_value: Any, out_dir: Path) -> Path | None:
+    """Resolve an artifact path emitted by Perception."""
+    if not path_value:
+        return None
+    path = Path(str(path_value))
+    candidates = [path] if path.is_absolute() else [out_dir / path, out_dir / "mask" / path]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def _load_binary_mask(path: Path, expected_shape: tuple[int, int] | None = None) -> np.ndarray | None:
+    mask = np.asarray(Image.open(path).convert("L")) > 0
+    if expected_shape is not None and mask.shape != expected_shape:
+        return None
+    return mask
+
+
+def _visible_part_descriptions(
+    objects: list[dict[str, Any]],
+) -> dict[tuple[int, int], list[str]]:
+    """Index VLM descriptions without trusting the VLM ownership assignment."""
+    descriptions: dict[tuple[int, int], list[str]] = {}
+    for obj in objects:
+        object_id = int(obj["object_id"])
+        for part in obj.get("parts", []) or []:
+            description = str(part.get("description") or "").strip()
+            if not description:
+                continue
+            for source_sam2_id in part.get("sam2_ids", []) or []:
+                key = (object_id, int(source_sam2_id))
+                descriptions.setdefault(key, [])
+                if description not in descriptions[key]:
+                    descriptions[key].append(description)
+    return descriptions
+
+
+def _save_validated_parts_sheet(
+    image_path: Path,
+    part_records: list[dict[str, Any]],
+    out_dir: Path,
+    columns: int = 5,
+) -> Path:
+    """Render only object-owned part masks, labeled with the new part IDs."""
+    output_path = out_dir / "object_parts_sheet.png"
+    image = Image.open(image_path).convert("RGB")
+    image_np = np.asarray(image)
+    items: list[tuple[int, Image.Image]] = []
+    for record in part_records:
+        mask_path = out_dir / str(record["mask_path"])
+        mask = _load_binary_mask(mask_path, image_np.shape[:2])
+        if mask is None or not np.any(mask):
+            continue
+        ys, xs = np.nonzero(mask)
+        width = int(xs.max() - xs.min() + 1)
+        height = int(ys.max() - ys.min() + 1)
+        pad = max(8, int(round(max(width, height) * 0.08)))
+        x0 = max(0, int(xs.min()) - pad)
+        y0 = max(0, int(ys.min()) - pad)
+        x1 = min(image_np.shape[1], int(xs.max()) + pad + 1)
+        y1 = min(image_np.shape[0], int(ys.max()) + pad + 1)
+        crop = image_np[y0:y1, x0:x1]
+        crop_mask = mask[y0:y1, x0:x1]
+        visible = np.where(crop_mask[..., None], crop, 255).astype(np.uint8)
+        items.append(
+            (
+                int(record["part_id"]),
+                Image.fromarray(visible, mode="RGB"),
+            )
+        )
+
+    if not items:
+        Image.new("RGB", (256, 256), "white").save(output_path)
+        return output_path
+
+    try:
+        font = ImageFont.truetype("Arial.ttf", 38)
+    except Exception:
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 38)
+        except Exception:
+            font = ImageFont.load_default(size=38)
+
+    label_height = 56
+    rows = int(np.ceil(len(items) / columns))
+    cell_width = max(crop.width for _part_id, crop in items)
+    cell_height = max(crop.height for _part_id, crop in items)
+    sheet = Image.new(
+        "RGB",
+        (columns * cell_width, rows * (cell_height + label_height)),
+        "white",
+    )
+    draw = ImageDraw.Draw(sheet)
+    for index, (part_id, crop) in enumerate(items):
+        row, col = divmod(index, columns)
+        cell_x = col * cell_width
+        cell_y = row * (cell_height + label_height)
+        x = cell_x + (cell_width - crop.width) // 2
+        y = cell_y + label_height + (cell_height - crop.height) // 2
+        text = str(part_id)
+        text_box = draw.textbbox((0, 0), text, font=font)
+        text_width = text_box[2] - text_box[0]
+        draw.text(
+            (cell_x + (cell_width - text_width) // 2, cell_y + 4),
+            text,
+            fill="black",
+            font=font,
+        )
+        sheet.paste(crop, (x, y))
+    sheet.save(output_path)
+    return output_path
+
+
+def _build_object_part_mapping(
+    objects: list[dict[str, Any]],
+    nodes: list[dict[str, Any]],
+    out_dir: Path,
+    image_path: Path | None,
+) -> dict[str, Any]:
+    """Materialize only SAM2 parts already assigned to recognized objects.
+
+    VLM review is the source of truth for ownership.  This stage does not
+    search for a new owner by geometry: it drops unmapped or ambiguous SAM2
+    candidates, assigns the remaining candidates consecutive public part IDs,
+    and clips every saved part mask by its existing owner object's final mask.
+    """
+    if image_path is None:
+        return {
+            "part_id_scheme": "global_sequential_1_based",
+            "part_mapping_source": "vlm_object_assignment",
+            "object_id_to_part_ids": {},
+            "object_id_to_part_files": {},
+            "part_id_to_object_id": {},
+            "part_file_to_object_id": {},
+            "part_records": [],
+            "rejected_part_candidates": [],
+            "object_parts_sheet_png": None,
+        }
+
+    object_masks: dict[int, np.ndarray] = {}
+    object_labels: dict[int, str] = {}
+    expected_shape: tuple[int, int] | None = None
+    rejected: list[dict[str, Any]] = []
+    for node in nodes:
+        object_id = int(node.get("object_id", node.get("node_id", 0)))
+        mask_path = _resolve_existing_mask_path(
+            node.get("mask_path") or node.get("mask_file"),
+            out_dir,
+        )
+        if mask_path is None:
+            continue
+        mask = _load_binary_mask(mask_path, expected_shape)
+        if mask is None or not np.any(mask):
+            continue
+        if expected_shape is None:
+            expected_shape = mask.shape
+        object_masks[object_id] = mask
+        object_labels[object_id] = str(
+            node.get("label") or node.get("description") or f"object_{object_id}"
+        )
+
+    descriptions = _visible_part_descriptions(objects)
+    source_sam2_id_to_object_ids: dict[int, set[int]] = {}
+    for obj in objects:
+        object_id = int(obj["object_id"])
+        mapped_source_ids = {
+            int(source_sam2_id)
+            for source_sam2_id in (obj.get("sam2_ids", []) or [])
+        }
+        for part in obj.get("parts", []) or []:
+            mapped_source_ids.update(
+                int(source_sam2_id)
+                for source_sam2_id in (part.get("sam2_ids", []) or [])
+            )
+        for source_sam2_id in mapped_source_ids:
+            source_sam2_id_to_object_ids.setdefault(source_sam2_id, set()).add(
+                object_id
+            )
+
+    assignments: list[dict[str, Any]] = []
+    source_mask_dir = out_dir / "sam2_part_masks"
+    source_mask_paths: dict[int, Path] = {}
+    for source_mask_path in source_mask_dir.glob("part_*.png"):
+        try:
+            source_sam2_id = int(source_mask_path.stem.rsplit("_", 1)[-1])
+        except (IndexError, ValueError):
+            continue
+        source_mask_paths[source_sam2_id] = source_mask_path
+
+    all_source_sam2_ids = sorted(
+        set(source_mask_paths) | set(source_sam2_id_to_object_ids)
+    )
+    for source_sam2_id in all_source_sam2_ids:
+        mapped_object_ids = source_sam2_id_to_object_ids.get(
+            source_sam2_id,
+            set(),
+        )
+        if not mapped_object_ids:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "not_mapped_to_any_object",
+                }
+            )
+            continue
+        if len(mapped_object_ids) != 1:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "mapped_to_multiple_objects",
+                    "mapped_object_ids": sorted(mapped_object_ids),
+                }
+            )
+            continue
+
+        object_id = next(iter(mapped_object_ids))
+        if object_id not in object_masks:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "mapped_object_not_in_final_graph",
+                    "mapped_object_id": object_id,
+                }
+            )
+            continue
+
+        source_mask_path = source_mask_paths.get(source_sam2_id)
+        if source_mask_path is None:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "full_frame_source_mask_missing",
+                    "mapped_object_id": object_id,
+                }
+            )
+            continue
+        source_mask = _load_binary_mask(source_mask_path, expected_shape)
+        if source_mask is None:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "shape_mismatch",
+                }
+            )
+            continue
+        source_pixels = int(np.count_nonzero(source_mask))
+        if source_pixels == 0:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "empty_source_mask",
+                    "source_pixels": source_pixels,
+                }
+            )
+            continue
+
+        object_mask = object_masks[object_id]
+        object_pixels = int(np.count_nonzero(object_mask))
+        clipped_mask = source_mask & object_mask
+        clipped_pixels = int(np.count_nonzero(clipped_mask))
+        if clipped_pixels == 0:
+            rejected.append(
+                {
+                    "source_sam2_id": source_sam2_id,
+                    "reason": "empty_after_object_intersection",
+                    "mapped_object_id": object_id,
+                }
+            )
+            continue
+
+        union_pixels = source_pixels + object_pixels - clipped_pixels
+        assignments.append(
+            {
+                "object_id": object_id,
+                "object_label": object_labels[object_id],
+                "source_sam2_id": source_sam2_id,
+                "source_pixels": source_pixels,
+                "mask": clipped_mask,
+                "mask_pixels": clipped_pixels,
+                "source_coverage": round(clipped_pixels / source_pixels, 6),
+                "object_coverage": round(
+                    clipped_pixels / object_pixels if object_pixels else 0.0,
+                    6,
+                ),
+                "iou": round(
+                    clipped_pixels / union_pixels if union_pixels else 0.0,
+                    6,
+                ),
+                "mapping_source": "vlm_object_assignment",
+            }
+        )
+
+    assignments.sort(key=lambda item: item["source_sam2_id"])
+    object_part_counts: dict[int, int] = {}
+    part_records: list[dict[str, Any]] = []
+    object_id_to_part_ids: dict[str, list[int]] = {
+        str(object_id): [] for object_id in sorted(object_masks)
+    }
+    object_id_to_part_files: dict[str, list[str]] = {
+        str(object_id): [] for object_id in sorted(object_masks)
+    }
+    part_id_to_object_id: dict[str, int] = {}
+    part_file_to_object_id: dict[str, int] = {}
+    for part_id, assignment in enumerate(assignments, start=1):
+        object_id = int(assignment["object_id"])
+        local_index = object_part_counts.get(object_id, 0) + 1
+        object_part_counts[object_id] = local_index
+        # Part ownership lives in summary.json.  Keep the mask directory flat
+        # so no consumer needs to infer an object ID from a folder name.
+        relative_mask_path = Path("object_parts", f"part_{part_id}.png")
+        absolute_mask_path = out_dir / relative_mask_path
+        absolute_mask_path.parent.mkdir(parents=True, exist_ok=True)
+        _save_mask_png(assignment.pop("mask"), absolute_mask_path)
+
+        source_sam2_id = int(assignment["source_sam2_id"])
+        description_values = descriptions.get((object_id, source_sam2_id), [])
+        record = {
+            "part_id": part_id,
+            **assignment,
+            "source_sam2_ids": [source_sam2_id],
+            "description": (
+                " / ".join(description_values)
+                if description_values
+                else f"validated visible region {local_index}"
+            ),
+            "mask_path": str(relative_mask_path),
+            "validated": True,
+        }
+        part_records.append(record)
+        object_id_to_part_ids[str(object_id)].append(part_id)
+        object_id_to_part_files[str(object_id)].append(str(relative_mask_path))
+        part_id_to_object_id[str(part_id)] = object_id
+        part_file_to_object_id[str(relative_mask_path)] = object_id
+
+    parts_sheet_path = None
+    if image_path is not None and image_path.exists():
+        parts_sheet_path = _save_validated_parts_sheet(
+            image_path,
+            part_records,
+            out_dir,
+        )
+    return {
+        "part_id_scheme": "global_sequential_1_based",
+        "part_mapping_source": "vlm_object_assignment",
+        "object_id_to_part_ids": object_id_to_part_ids,
+        "object_id_to_part_files": object_id_to_part_files,
+        "part_id_to_object_id": part_id_to_object_id,
+        "part_file_to_object_id": part_file_to_object_id,
+        "part_records": part_records,
+        "rejected_part_candidates": rejected,
+        "object_parts_sheet_png": (
+            str(parts_sheet_path.resolve()) if parts_sheet_path is not None else None
+        ),
+    }
+
+
+def build_summary_scene_graph(
+    points_path: Path,
+    graph_payload: dict[str, Any],
+    scene_dir: Path,
+    image_path: Path | None = None,
+) -> dict[str, Any]:
     """Build summary fields while preserving the original matrix interface."""
     graph = graph_payload["graph"]
     nodes = sorted(graph.get("nodes", []), key=lambda node: int(node["node_id"]))
@@ -544,29 +906,12 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], 
                 "parts": parts,
             })
 
-    object_id_to_sam2_part_ids: dict[str, list[int]] = {}
-    object_id_to_sam2_part_files: dict[str, list[str]] = {}
-    sam2_part_id_to_object_id: dict[str, int] = {}
-    sam2_part_file_to_object_id: dict[str, int] = {}
-    for obj in objects:
-        object_id = int(obj["object_id"])
-        part_ids: set[int] = set()
-        for sid in obj.get("sam2_ids", []) or []:
-            part_ids.add(int(sid))
-        for part in obj.get("parts", []) or []:
-            for sid in part.get("sam2_ids", []) or []:
-                part_ids.add(int(sid))
-
-        sorted_part_ids = sorted(part_ids)
-        object_id_to_sam2_part_ids[str(object_id)] = sorted_part_ids
-        part_files: list[str] = []
-        for sid in sorted_part_ids:
-            part_file = f"sam2_rgb_parts/part_{sid:03d}.png"
-            if (out_dir / part_file).exists():
-                part_files.append(part_file)
-                sam2_part_file_to_object_id[part_file] = object_id
-            sam2_part_id_to_object_id[str(sid)] = object_id
-        object_id_to_sam2_part_files[str(object_id)] = part_files
+    validated_parts = _build_object_part_mapping(
+        objects=objects,
+        nodes=nodes,
+        out_dir=out_dir,
+        image_path=image_path,
+    )
 
     return {
         "object_points": object_points,
@@ -574,10 +919,13 @@ def build_summary_scene_graph(points_path: Path, graph_payload: dict[str, Any], 
         "occlusion_matrix_direction": "row object occludes column object",
         "occlusion_matrix_metric": "contact_ratio",
         "occlusion_matrix": occlusion_matrix,
-        "object_id_to_sam2_part_ids": object_id_to_sam2_part_ids,
-        "object_id_to_sam2_part_files": object_id_to_sam2_part_files,
-        "sam2_part_id_to_object_id": sam2_part_id_to_object_id,
-        "sam2_part_file_to_object_id": sam2_part_file_to_object_id,
+        **validated_parts,
+        # Backward-compatible aliases consumed by the current Reason loader.
+        # Values are the new validated part IDs, not raw SAM2 candidate IDs.
+        "object_id_to_sam2_part_ids": validated_parts["object_id_to_part_ids"],
+        "object_id_to_sam2_part_files": validated_parts["object_id_to_part_files"],
+        "sam2_part_id_to_object_id": validated_parts["part_id_to_object_id"],
+        "sam2_part_file_to_object_id": validated_parts["part_file_to_object_id"],
     }
 
 
@@ -841,7 +1189,12 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         points_path = out_dir / "points.json"
         points_path.write_text(json.dumps(points_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        scene_graph_summary = build_summary_scene_graph(points_path, graph_payload, scene_dir)
+        scene_graph_summary = build_summary_scene_graph(
+            points_path,
+            graph_payload,
+            scene_dir,
+            image_path=image_path,
+        )
         final_objects_sheet_path = save_final_objects_sheet(
             image_path,
             graph_payload,

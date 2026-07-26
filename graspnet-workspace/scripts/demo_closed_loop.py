@@ -26,7 +26,11 @@ from simulation.scene import SimulationScene
 from simulation.camera import VirtualCamera
 from simulation.gripper_factory import GRIPPER_MODELS, create_gripper
 from simulation.evaluator import GraspEvaluator
-from simulation.object_mapping import match_scene_object_by_mask
+from simulation.object_mapping import (
+    decode_body_ids,
+    load_object_mask,
+    match_scene_object_by_mask,
+)
 from simulation.perception_input import (
     export_perception_input,
     generate_capture_scene_id,
@@ -152,12 +156,56 @@ def crop_to_object(pc, object_points=None, margin=0.05, num_points=20000, table_
     return cropped[idx][np.newaxis].astype(np.float32)
 
 
+def point_cloud_from_reason_part_mask(
+    camera,
+    depth,
+    segmentation,
+    body_id,
+    mask_path,
+):
+    """Back-project Reason's selected part mask, restricted to one body ID."""
+    body_ids = decode_body_ids(segmentation)
+    part_mask, diagnostics = load_object_mask(
+        mask_path,
+        target_shape=body_ids.shape,
+    )
+    body_mask = body_ids == int(body_id)
+    region_mask = part_mask & body_mask
+    region_pixels = int(np.count_nonzero(region_mask))
+    if region_pixels == 0:
+        raise RuntimeError(
+            "Reason part mask does not overlap the selected PyBullet body: "
+            f"body_id={int(body_id)}, mask={diagnostics['mask_path']}"
+        )
+
+    masked_depth = np.where(region_mask, depth, np.nan)
+    region_points = camera.backproject_depth(masked_depth).astype(np.float32)
+    body_pixels = int(np.count_nonzero(body_mask))
+    diagnostics.update(
+        {
+            "source": "reason_part_mask",
+            "selected_body_id": int(body_id),
+            "body_pixels": body_pixels,
+            "intersection_pixels": region_pixels,
+            "reference_coverage": float(
+                region_pixels / diagnostics["mask_pixels"]
+            ),
+            "body_coverage": float(
+                region_pixels / body_pixels
+            ) if body_pixels else 0.0,
+            "point_count": int(len(region_points)),
+        }
+    )
+    return region_points, diagnostics
+
+
 def filter_grasps_to_object(
     gg,
     object_points,
     max_center_dist=0.04,
     bbox_margin=0.04,
     min_inner_points=5,
+    enforce_center_distance=False,
 ):
     """Keep candidates whose closing region contains visible target points."""
     if object_points is None or len(object_points) == 0 or len(gg) == 0:
@@ -190,7 +238,12 @@ def filter_grasps_to_object(
         inner_counts[index] = int(np.count_nonzero(within_height & within_depth & between_fingers))
 
     inner_mask = inner_counts >= int(min_inner_points)
-    keep_mask = bbox_mask & inner_mask
+    center_mask = (
+        min_dists <= float(max_center_dist)
+        if enforce_center_distance
+        else np.ones(len(gg), dtype=bool)
+    )
+    keep_mask = bbox_mask & inner_mask & center_mask
     kept = int(keep_mask.sum())
     stats = {
         "enabled": True,
@@ -199,6 +252,7 @@ def filter_grasps_to_object(
         "max_center_dist": float(max_center_dist),
         "bbox_margin": float(bbox_margin),
         "min_inner_points": int(min_inner_points),
+        "center_distance_enforced": bool(enforce_center_distance),
         "best_inner_point_count": int(inner_counts.max()) if len(inner_counts) else 0,
         "best_center_dist": float(min_dists.min()) if len(min_dists) else None,
     }
@@ -284,6 +338,8 @@ def parse_args():
                    help='导出同帧输入后，把本次拍照 ID 传给 perception/run_perception.sh')
     p.add_argument('--run-pipeline-after-capture', action='store_true',
                    help='导出同帧输入后运行 Perception+Intent+Reason，并将 Reason Object ID 映射为当前 PyBullet 目标')
+    p.add_argument('--use-reason-part-mask', action='store_true',
+                   help='完整 Pipeline 模式下使用 Reason 选择的 part mask 聚焦 GraspNet 裁剪和候选过滤；默认仍使用整物体点云')
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
@@ -354,6 +410,10 @@ def main():
         raise ValueError(
             "--run-pipeline-after-capture is currently a single-target flow "
             "and cannot be combined with --all-objects"
+        )
+    if args.use_reason_part_mask and not args.run_pipeline_after_capture:
+        raise ValueError(
+            "--use-reason-part-mask requires --run-pipeline-after-capture"
         )
 
     if args.all_objects:
@@ -551,14 +611,62 @@ def main():
     n_obj_pts = (pc[0, :, 2] > 0.005).sum()
     print(f'  ✅ 点云: {pc.shape}, 物体点数: {n_obj_pts}')
 
-    # 按物体点云 xy 包围盒裁剪，裁掉远处大片桌面，只保留物体及周围一圈支撑面。
+    target_points = object_clouds.get(int(obj_id))
+    grasp_region_points = target_points
+    grasp_region_source = "whole_object"
+    part_mask_diagnostics = None
+    if args.use_reason_part_mask:
+        part_mask_info = reason_target.get("grasp_part_mask") or {}
+        part_mask_path = reason_target.get("grasp_part_mask_path")
+        if not part_mask_path:
+            raise RuntimeError(
+                "Reason did not produce grasp_part_mask.path for "
+                "--use-reason-part-mask"
+            )
+        try:
+            part_object_id = int(part_mask_info.get("object_id"))
+        except (TypeError, ValueError):
+            part_object_id = None
+        if (
+            part_object_id != int(reason_target["object_id"])
+            or not bool(part_mask_info.get("validated"))
+        ):
+            raise RuntimeError(
+                "Reason part mask is not validated for the selected object: "
+                f"selected_object_id={reason_target['object_id']}, "
+                f"part_object_id={part_object_id}, "
+                f"validated={part_mask_info.get('validated')}"
+            )
+        grasp_region_points, part_mask_diagnostics = (
+            point_cloud_from_reason_part_mask(
+                cam,
+                depth,
+                seg,
+                obj_id,
+                part_mask_path,
+            )
+        )
+        part_mask_diagnostics["part_id"] = part_mask_info.get("part_id")
+        part_mask_diagnostics["object_id"] = part_object_id
+        grasp_region_source = "reason_part_mask"
+        print(
+            f'  🎯 Part mask 定位: part_id={part_mask_info.get("part_id")}, '
+            f'points={len(grasp_region_points)}, '
+            f'body_coverage={part_mask_diagnostics["body_coverage"]:.3f}'
+        )
+        if part_mask_diagnostics["body_coverage"] >= 0.95:
+            print(
+                '  ⚠️ Part mask 覆盖了至少 95% 的可见物体，'
+                '本轮定位效果接近整物体 mask'
+            )
+
+    # 按抓取区域点云 xy 包围盒裁剪，裁掉远处大片桌面，只保留目标区域及支撑面。
     # 参照参考流程的 crop_pointcloud（此处无 VLM，直接用物体点 bbox + margin），
     # 避免 GraspNet 在平坦桌面上生成大量落在桌面、偏离物体的抓取。
     crop_cfg = scene_config.get("crop", {}) if scene_config else {}
-    target_points = object_clouds.get(int(obj_id))
     pc = crop_to_object(
         pc,
-        object_points=target_points,
+        object_points=grasp_region_points,
         margin=float(crop_cfg.get("margin", 0.05)),
         num_points=int(crop_cfg.get("num_points", 20000)),
         table_z=float(crop_cfg.get("table_z", 0.005)),
@@ -593,16 +701,23 @@ def main():
         filter_cfg = scene_config.get("grasp_filter", {})
         gg, grasp_filter_stats = filter_grasps_to_object(
             gg,
-            target_points,
+            grasp_region_points,
             max_center_dist=float(filter_cfg.get("max_center_dist", 0.04)),
             bbox_margin=float(filter_cfg.get("bbox_margin", 0.04)),
             min_inner_points=int(filter_cfg.get("min_inner_points", 5)),
+            enforce_center_distance=args.use_reason_part_mask,
         )
+        grasp_filter_stats["region_source"] = grasp_region_source
         print(
-            f'  🎯 目标过滤: {grasp_filter_stats.get("kept")}/'
+            f'  🎯 抓取区域过滤 ({grasp_region_source}): '
+            f'{grasp_filter_stats.get("kept")}/'
             f'{grasp_filter_stats.get("total")} 个候选, '
             f'最近中心距={grasp_filter_stats.get("best_center_dist")}'
         )
+        if args.use_reason_part_mask and len(gg) == 0:
+            raise RuntimeError(
+                "No GraspNet candidates overlap the selected Reason part mask"
+            )
         collision_cfg = scene_config.get("collision_filter", {})
         gg, collision_filter_stats = filter_collision_grasps(gg, pc[0], collision_cfg)
         print(
@@ -665,7 +780,7 @@ def main():
     evaluator = GraspEvaluator(
         object_id=obj_id,
         gripper=gripper,
-        point_cloud=target_points,
+        point_cloud=grasp_region_points,
         gui=args.gui,
         assisted_grasp=args.assisted_grasp,
         # The closing-region filter already validates target occupancy and is
@@ -720,6 +835,11 @@ def main():
             else None
         ),
         'reason_target': reason_target,
+        'grasp_region': {
+            'source': grasp_region_source,
+            'point_count': int(len(grasp_region_points)),
+            'part_mask': part_mask_diagnostics,
+        },
         'graspnet_input_frame': 'camera',
         'candidate_execution_frame': 'world',
         'objects': scene.get_object_poses(),
@@ -733,6 +853,7 @@ def main():
         'gui_speed': float(args.gui_speed),
         'test_all_candidates': bool(args.test_all_candidates),
         'test_all_raw_candidates': bool(args.test_all_raw_candidates),
+        'use_reason_part_mask': bool(args.use_reason_part_mask),
         'stop_on_success': bool(args.stop_on_success),
         'assisted_grasp': bool(args.assisted_grasp),
         'object_position': list(obj_pos),
@@ -794,11 +915,18 @@ def main():
                          else None
                      ),
                      'reason_target': reason_target,
+                     'grasp_region': {
+                         'source': grasp_region_source,
+                         'point_count': int(len(grasp_region_points)),
+                         'part_mask': part_mask_diagnostics,
+                     },
+                     'grasp_region_points': grasp_region_points,
                      'objects': scene.get_object_poses(),
                       'grasp_filter': grasp_filter_stats,
                      'collision_filter': collision_filter_stats,
                      'topdown_filter': topdown_filter_stats,
                      'seed': int(args.seed),
+                     'use_reason_part_mask': bool(args.use_reason_part_mask),
                      'target_body_id': int(obj_id),
                      'target_object_name': target_object.name,
                      'scene_config': scene_config.get("_path") if scene_config else None,

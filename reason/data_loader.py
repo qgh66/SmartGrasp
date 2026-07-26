@@ -26,6 +26,15 @@ def load_sample(
     with open(summary_path, "r", encoding="utf-8") as f:
         summary = json.load(f)
 
+    object_id_to_part_ids = _parse_int_tuple_mapping(
+        summary.get("object_id_to_part_ids")
+        or summary.get("object_id_to_sam2_part_ids", {})
+    )
+    part_id_to_object_id = _parse_int_scalar_mapping(
+        summary.get("part_id_to_object_id")
+        or summary.get("sam2_part_id_to_object_id", {})
+    )
+
     target_mid = summary.get("query_obj_id")
     # New perception summaries use ``object_points``.  Keep the legacy
     # ``molmo_points`` fallback so older generated scenes remain readable.
@@ -63,11 +72,12 @@ def load_sample(
         final_objects_sheet_path=objects_sheet_path,
         sam2_rgb_parts_sheet=sam2_rgb_parts_sheet,
         sam2_rgb_parts_sheet_path=parts_sheet_path,
-        object_id_to_sam2_part_ids=_parse_int_tuple_mapping(
-            summary.get("object_id_to_sam2_part_ids", {})
-        ),
+        object_id_to_part_ids=object_id_to_part_ids,
+        part_id_to_object_id=part_id_to_object_id,
+        object_id_to_sam2_part_ids=object_id_to_part_ids,
         object_id_to_sam2_part_files=_parse_str_tuple_mapping(
-            summary.get("object_id_to_sam2_part_files", {})
+            summary.get("object_id_to_part_files")
+            or summary.get("object_id_to_sam2_part_files", {})
         ),
         scene_id=summary.get("scene_id"),
         annotation=summary.get("annotation"),
@@ -147,8 +157,11 @@ def _load_depth(depth_path: str | None, scene_dir: Path) -> np.ndarray | None:
 
 def _resolve_parts_sheet_path(summary: dict, scene_dir: Path) -> Path | None:
     candidates = []
+    if summary.get("object_parts_sheet_png"):
+        candidates.append(Path(summary["object_parts_sheet_png"]))
     if summary.get("sam2_rgb_parts_sheet_png"):
         candidates.append(Path(summary["sam2_rgb_parts_sheet_png"]))
+    candidates.append(scene_dir / "object_parts_sheet.png")
     candidates.append(scene_dir / "sam2_rgb_parts_sheet.png")
 
     for path in candidates:
@@ -207,6 +220,18 @@ def _parse_int_tuple_mapping(raw: dict) -> dict[int, tuple[int, ...]]:
             except (TypeError, ValueError):
                 continue
         out[object_id] = tuple(sorted(set(parsed)))
+    return out
+
+
+def _parse_int_scalar_mapping(raw: dict) -> dict[int, int]:
+    out: dict[int, int] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, value in raw.items():
+        try:
+            out[int(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
     return out
 
 

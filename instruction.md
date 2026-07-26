@@ -73,6 +73,40 @@ bash run_grasp_simulation.sh \
   --stop-on-success
 ```
 
+默认使用整物体点云定位 GraspNet 候选。若要使用 Reason 输出的最佳部件
+mask 聚焦抓取区域，增加：
+
+```bash
+bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene.json \
+  --instruction "抓取红色螺丝刀" \
+  --run-pipeline-after-capture \
+  --use-reason-part-mask
+```
+
+`--use-reason-part-mask` 仅改变 GraspNet 的抓取区域：
+
+1. 整物体 mask 仍用于将 Reason Object ID 映射到 PyBullet body ID。
+2. `part_id` 从 1 开始连续编号，与 SAM2Auto candidate id 分离。
+3. part → object 直接沿用 VLM 已经建立的关系；未映射、重复映射或 owner
+   未进入最终 graph 的 SAM2 候选不会进入正式 part 列表。
+4. 不限制进入 SAM2 label、全尺寸 mask、part sheet 和 VLM 编号的候选数量；
+   `visible_parts[].sam2_ids` 必须是所属 object 顶层 `sam2_ids` 的子集。
+5. 一个 SAM2 id 对应一个几何 part；同一 id 的多个文字描述不会被人为
+   拆成多个 part。
+6. Reason 只能为当前 object 的 `object_id_to_part_ids` 列表返回和选择 part。
+7. 正式 part mask 保存前与所属 object mask 求交，并保持原图坐标下的
+   全尺寸二值格式。
+8. part mask 与已选 body 的 segmentation 求交后反投影为部件点云。
+9. 部件点云用于裁剪 GraspNet 输入、过滤候选和约束执行高度。
+10. part mask 缺失、归属不匹配、为空或与已选 body 无重叠时直接报错，
+   不静默回退。
+
+具体映射、mask 路径、源 SAM2 id、覆盖率与拒绝原因保存在 Perception
+`summary.json` 的 `part_records`、`object_id_to_part_ids`、
+`part_id_to_object_id` 和 `rejected_part_candidates` 中。如果候选 mask 本身
+接近整个物体，程序仍会在其覆盖至少 95% 的可见 body 时输出警告。
+
 正常使用时不需要传 `--scene-id`。程序会自动分配：
 
 ```text
@@ -520,6 +554,8 @@ Perception，不会自动统一覆盖 Intent 和 Reason。
 - Reason Object ID 不在遮挡图节点中。
 - 对应整物体 mask 不存在或为空。
 - mask 与所有 PyBullet body 的最大 IoU 低于阈值。
+- 使用 `--use-reason-part-mask` 时，Reason 没有输出有效 part mask、part
+  不属于选中的 object，或 part mask 与选中的 PyBullet body 没有重叠。
 - GraspNet 没有生成有效候选。
 
 ## 9. 当前限制
@@ -533,7 +569,8 @@ Perception，不会自动统一覆盖 Intent 和 Reason。
 - 如果 `branch=fully_visible`，本轮通常夹取用户目标。
 - 如果 `branch=partially_occluded` 或 `fully_occluded`，本轮夹取 Reason
   选择的遮挡物，然后结束；不会自动重新拍照继续处理原目标。
-- Reason 返回的 part graspability 和最佳部件信息会保存到结果中，但当前
-  GraspNet 仍按整物体点云生成抓取，不会使用部件 mask 限制具体抓取位置。
+- 默认仍按整物体点云生成抓取；传入 `--use-reason-part-mask` 后会使用
+  Reason 的最佳部件 mask 聚焦 GraspNet，但精度受 Perception 部件 mask
+  粒度限制。
 - 当前代码已经完成静态检查，但仍需要一次真实的 GPU、API 和 PyBullet
   端到端运行来验证服务器环境。

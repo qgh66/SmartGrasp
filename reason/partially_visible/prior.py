@@ -155,5 +155,9 @@ def compute_semantic_prior(
 
 
 def _part_ids(perception, mid: int) -> list[int]:
-    mapping = getattr(perception, "object_id_to_sam2_part_ids", None) or {}
+    mapping = (
+        getattr(perception, "object_id_to_part_ids", None)
+        or getattr(perception, "object_id_to_sam2_part_ids", None)
+        or {}
+    )
     return list(mapping.get(mid, ()))
