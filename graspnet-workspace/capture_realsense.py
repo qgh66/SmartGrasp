@@ -62,7 +62,7 @@ def select_realsense_device(devices, camera_serial=None, camera_index=DEFAULT_CA
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Capture aligned RealSense RGB-D frames.")
     parser.add_argument("--camera-index", type=int, default=DEFAULT_CAMERA_INDEX, help="没有指定序列号时的备用 RealSense 设备 index。")
-    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense 完整序列号或唯一后缀；默认匹配 72508 结尾的相机。")
+    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense 完整序列号或唯一后缀；默认匹配 72659 结尾的相机。")
     parser.add_argument("--save-path", default="./data", help="保存 color/depth 的目录。")
     parser.add_argument("--list-devices", action="store_true", help="只列出 RealSense 设备，不启动相机。")
     return parser

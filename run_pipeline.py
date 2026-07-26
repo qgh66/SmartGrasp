@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
@@ -133,6 +134,17 @@ def run_intent(scene_dir: Path, instruction: str, args: argparse.Namespace) -> b
 def run_reason(scene_dir: Path, args: argparse.Namespace) -> dict[str, Any] | None:
     """Run reason on the scene, return the decision."""
     scene_id = scene_dir.name
+    intent_id_path = scene_dir / "intent" / "id.txt"
+    if not intent_id_path.is_file():
+        _log(f"  ERROR: intent result not found at {intent_id_path}")
+        return None
+    intent_id_text = intent_id_path.read_text(encoding="utf-8").strip()
+    try:
+        intent_id = int(intent_id_text)
+    except ValueError:
+        _log(f"  ERROR: invalid intent object id in {intent_id_path}: {intent_id_text!r}")
+        return None
+
     reason_script = str(SMARTGRASP_ROOT / "reason" / "run_reason.py")
     cmd = [
         sys.executable, "-u",
@@ -140,7 +152,8 @@ def run_reason(scene_dir: Path, args: argparse.Namespace) -> dict[str, Any] | No
         "--root", str(DATA_REALWORLD_ROOT),
         "--scene-root", str(DATA_REALWORLD_ROOT),
         "--scene-id", scene_id,
-        "--target-source", "intent",
+        "--target-source", "id",
+        "--target-id", str(intent_id),
         "--prior-prompt", "graspability",
         "--ranking-score", "ig_graspability",
         "--closed-loop",
@@ -160,61 +173,45 @@ def run_reason(scene_dir: Path, args: argparse.Namespace) -> dict[str, Any] | No
     import pandas as pd
     df = pd.read_csv(reason_results)
     if df.empty:
+        _log(f"  ERROR: reason output is empty: {reason_results}")
         return None
     row = df.iloc[0].to_dict()
+    status = str(row.get("status") or "").strip().lower()
+    if status != "ok":
+        _log(f"  ERROR: reason returned status={row.get('status')!r}")
+        return None
+    selected_object_id = row.get("selected_object_id")
+    if selected_object_id is None or pd.isna(selected_object_id):
+        _log("  ERROR: reason did not select an object")
+        return None
     return row
 
 
 def get_part_mask_path(scene_dir: Path, reason_result: dict[str, Any] | None) -> Path | None:
-    """Determine SAM2 part mask path from reason output."""
+    """Return the binary SAM2 part mask selected by Reason."""
     if reason_result is None:
         return None
-
-    summary_path = scene_dir / "perception" / "summary.json"
-    if not summary_path.exists():
-        _log(f"  WARNING: perception summary not found")
+    part_id = reason_result.get("selected_object_graspability_part_id")
+    try:
+        part_id_value = float(part_id)
+        if not math.isfinite(part_id_value) or not part_id_value.is_integer():
+            raise ValueError
+        part_id_int = int(part_id_value)
+    except (TypeError, ValueError, OverflowError):
+        _log("  ERROR: Reason did not return a valid SAM2 part id")
         return None
 
-    with open(summary_path, "r", encoding="utf-8") as f:
-        summary = json.load(f)
-
-    part_id = reason_result.get("selected_object_graspability_part_id")
-    if part_id is not None:
-        part_file = f"mask_sam2/part_{int(part_id):03d}.png"
-        part_mask_path = scene_dir / "perception" / part_file
-        if part_mask_path.exists():
-            _log(f"  Using SAM2 binary mask: {part_mask_path}")
-            return part_mask_path
-        part_file = f"sam2_rgb_parts/part_{int(part_id):03d}.png"
-        part_mask_path = scene_dir / "perception" / part_file
-        if part_mask_path.exists():
-            _log(f"  Using SAM2 cropped part image: {part_mask_path}")
-            return part_mask_path
-
-    selected_id = reason_result.get("selected_object_id")
-    if selected_id is not None:
-        object_id_to_part_files = summary.get("object_id_to_sam2_part_files", {})
-        part_files = object_id_to_part_files.get(str(int(selected_id)), [])
-        if part_files:
-            first_part = part_files[0]
-            part_mask_path = scene_dir / "perception" / first_part
-            if part_mask_path.exists():
-                _log(f"  Using first SAM2 part mask for object {selected_id}: {part_mask_path}")
-                return part_mask_path
-
-    mask_dir = scene_dir / "perception" / "mask"
-    if mask_dir.exists():
-        anchor_masks = sorted(mask_dir.glob("*_anchor_*.png"))
-        if anchor_masks:
-            _log(f"  Using anchor mask: {anchor_masks[0]}")
-            return anchor_masks[0]
-
-    _log(f"  WARNING: no SAM2 part mask found for selected object")
-    return None
+    part_mask_path = scene_dir / "perception" / "mask_sam2" / f"part_{part_id_int:03d}.png"
+    if not part_mask_path.is_file():
+        _log(f"  ERROR: Reason-selected binary SAM2 mask not found: {part_mask_path}")
+        return None
+    _log(f"  Using Reason-selected SAM2 binary mask: {part_mask_path}")
+    return part_mask_path
 
 
-def run_grasp(scene_dir: Path, perception_mask: Path | None, args: argparse.Namespace) -> bool:
+def run_grasp(scene_dir: Path, perception_mask: Path, args: argparse.Namespace) -> bool:
     """Run GraspNet + JAKA execution on the scene."""
+    scene_id = scene_dir.name
     input_dir = scene_dir / "input"
     if not input_dir.exists():
         input_dir = scene_dir  # legacy layout fallback
@@ -225,20 +222,45 @@ def run_grasp(scene_dir: Path, perception_mask: Path | None, args: argparse.Name
         "--calibration-mode", args.calibration_mode,
         "--reuse-capture",
         "--execute",
+        "--perception-mask", str(perception_mask),
+        "--use-sam-mask",
     ]
-    if perception_mask is not None:
-        cmd.extend(["--perception-mask", str(perception_mask)])
-        cmd.extend(["--use-sam-mask"])  # enable mask-based cropping
-    else:
-        cmd.extend(["--no-use-sam-mask"])  # use full point cloud, no interactive SAM
 
     if args.top_k:
         cmd.extend(["--top-k", str(args.top_k)])
     if args.candidate_index is not None:
         cmd.extend(["--candidate-index", str(args.candidate_index)])
 
-    result = _run(cmd, f"Grasp on {scene_id}")
-    return result.returncode == 0
+    candidates_path = input_dir / "grasp_candidates.json"
+    for attempt in (1, 2):
+        attempt_started = time.time()
+        result = _run(cmd, f"Grasp on {scene_id} (attempt {attempt}/2)")
+        if result.returncode == 0:
+            return True
+        if attempt == 2 or not _failed_before_execution_with_no_candidates(
+            candidates_path,
+            attempt_started,
+        ):
+            return False
+        _log(
+            "  GraspNet produced no candidate after safety filters; "
+            "retrying inference once without changing the capture or mask."
+        )
+    return False
+
+
+def _failed_before_execution_with_no_candidates(
+    candidates_path: Path,
+    attempt_started: float,
+) -> bool:
+    """Allow a retry only when this attempt wrote zero filtered candidates."""
+    try:
+        if candidates_path.stat().st_mtime < attempt_started - 1.0:
+            return False
+        payload = json.loads(candidates_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload.get("num_candidates_after_filter") == 0
 
 
 def main():
@@ -297,6 +319,8 @@ def _main_impl(args: argparse.Namespace) -> None:
             "--instruction", args.instruction,
             "--calibration-mode", args.calibration_mode,
             "--no-trial-log",
+            "--no-data-realworld",
+            "--capture-only",
             "--num-cycles", "1",
         ]
         result = _run(capture_cmd, "Step 1: Capture RGB-D")
@@ -341,6 +365,10 @@ def _main_impl(args: argparse.Namespace) -> None:
     if args.no_grasp:
         _log(f"[pipeline] skipping grasp. perception_mask={perception_mask}")
         return
+
+    if perception_mask is None:
+        _log("ERROR: cannot run grasp without the binary SAM2 part mask selected by Reason")
+        sys.exit(1)
 
     # === Step 5: Grasp ===
     if not run_grasp(scene_dir, perception_mask, args):

@@ -22,6 +22,7 @@ DEFAULT_MODEL = "gpt-5.5"
 with open(Path(__file__).resolve().parents[2] / "api_config.json", encoding="utf-8") as _f:
     _cfg = json.load(_f)
 DEFAULT_BASE_URL: str = _cfg["base_url"]
+DEFAULT_API_KEY = str(_cfg.get("api_key") or "")
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT = 600.0
 
@@ -157,7 +158,11 @@ class ResponsesVLMClient:
         model: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> "ResponsesVLMClient":
-        api_key = os.environ.get(api_key_env) or os.environ.get("OPENAI_API_KEY", "")
+        api_key = (
+            DEFAULT_API_KEY
+            or os.environ.get(api_key_env)
+            or os.environ.get("OPENAI_API_KEY", "")
+        )
         return cls(
             api_key,
             base_url=base_url or DEFAULT_BASE_URL,

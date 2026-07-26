@@ -28,6 +28,7 @@ with open(ROOT / "api_config.json", encoding="utf-8") as _f:
 
 RUN_INTENT_MODEL = "gpt-5.5"
 RUN_INTENT_BASE_URL: str = _cfg["base_url"]
+RUN_INTENT_API_KEY: str = str(_cfg.get("api_key") or "")
 RUN_INTENT_API_KEY_ENV = "OPENAI_API_KEY"
 RUN_INTENT_TIMEOUT = 300.0
 
@@ -234,7 +235,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not os.environ.get(args.api_key_env) and not os.environ.get("OPENAI_API_KEY"):
+    if (
+        not RUN_INTENT_API_KEY
+        and not os.environ.get(args.api_key_env)
+        and not os.environ.get("OPENAI_API_KEY")
+    ):
         raise RuntimeError(
             f"Missing API key. Export {args.api_key_env}=... before running python -m intent.run_intent."
         )

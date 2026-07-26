@@ -16,6 +16,11 @@ from PIL import Image
 from SmartGrasp.perception._shared import _log_step
 
 VLM_MAX_IMAGE_DIM = 768
+_ROOT = Path(__file__).resolve().parents[1]
+with open(_ROOT / "api_config.json", encoding="utf-8") as _config_file:
+    _API_CONFIG = json.load(_config_file)
+DEFAULT_API_KEY = str(_API_CONFIG.get("api_key") or "")
+DEFAULT_BASE_URL = str(_API_CONFIG.get("base_url") or "")
 
 
 # ── utilities ────────────────────────────────────────────────────────────────
@@ -69,11 +74,12 @@ def _openai_client(api_key_env: str, base_url: str | None, timeout: float) -> An
         "timeout": min(float(timeout), 600.0),
         "max_retries": 0,
     }
-    key = os.environ.get(api_key_env)
+    key = DEFAULT_API_KEY or os.environ.get(api_key_env)
     if key:
         kwargs["api_key"] = key
-    if base_url:
-        kwargs["base_url"] = base_url
+    resolved_base_url = base_url or DEFAULT_BASE_URL
+    if resolved_base_url:
+        kwargs["base_url"] = resolved_base_url
     return OpenAI(**kwargs)
 
 

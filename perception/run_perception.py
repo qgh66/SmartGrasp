@@ -34,15 +34,44 @@ DATA_REALWORLD_ROOT = SMARTGRASP_ROOT / "data_realworld"
 
 
 def _convert_depth_raw_to_npy(depth_raw_path: Path, out_dir: Path) -> Path:
+    """Convert RealSense Z16 depth to the centimetres used by Perception."""
     depth_npy_path = out_dir / "depth.npy"
+    meta_path = depth_raw_path.parent / "camera_meta.json"
+    if not meta_path.is_file():
+        raise FileNotFoundError(
+            f"Cannot convert {depth_raw_path}: missing camera metadata {meta_path}"
+        )
+
+    metadata = load_json_file(meta_path)
+    try:
+        width = int(metadata["width"])
+        height = int(metadata["height"])
+        depth_scale_m = float(metadata["depth_scale_m"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Invalid camera metadata in {meta_path}: width, height and "
+            "depth_scale_m are required"
+        ) from exc
+    if width < 1 or height < 1:
+        raise ValueError(f"Invalid camera resolution in {meta_path}: {width}x{height}")
+    if not np.isfinite(depth_scale_m) or depth_scale_m <= 0.0:
+        raise ValueError(
+            f"Invalid depth_scale_m in {meta_path}: {depth_scale_m!r}"
+        )
+
     raw_bytes = depth_raw_path.read_bytes()
-    depth_flat = np.frombuffer(raw_bytes, dtype=np.uint16)
-    h, w = 720, 1280
-    if len(depth_flat) == h * w:
-        depth = depth_flat.reshape(h, w).astype(np.float32)
-    else:
-        raise ValueError(f"Unexpected depth.raw size: {len(depth_flat)} bytes, expected {h * w * 2}")
-    np.save(depth_npy_path, depth)
+    expected_bytes = width * height * np.dtype(np.uint16).itemsize
+    if len(raw_bytes) != expected_bytes:
+        raise ValueError(
+            f"Unexpected depth.raw size: {len(raw_bytes)} bytes, "
+            f"expected {expected_bytes} for {width}x{height} uint16"
+        )
+
+    depth_raw = np.frombuffer(raw_bytes, dtype="<u2").reshape(height, width)
+    # Perception's absolute depth thresholds are expressed in centimetres
+    # (for example, background=79.752 and occlusion gap=0.5).
+    depth_cm = depth_raw.astype(np.float32) * np.float32(depth_scale_m * 100.0)
+    np.save(depth_npy_path, depth_cm)
     return depth_npy_path
 
 def read_dataset() -> pd.DataFrame:
@@ -131,20 +160,20 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
         if not scene_dir.is_dir():
             continue
         input_dir = scene_dir / "input"
+        if not input_dir.is_dir():
+            input_dir = scene_dir  # legacy layout fallback
         rgb_path = input_dir / "rgb.png"
         depth_path = input_dir / "depth.npy"
         if not rgb_path.exists():
-            rgb_path = scene_dir / "rgb.png"  # legacy fallback
-        if not rgb_path.exists():
             continue
-        if not depth_path.exists():
-            depth_raw = input_dir / "depth.raw"
-            if not depth_raw.exists():
-                depth_raw = scene_dir / "depth.raw"  # legacy fallback
-            if depth_raw.exists():
-                depth_path = _convert_depth_raw_to_npy(depth_raw, input_dir)
-            else:
-                continue
+        depth_raw = input_dir / "depth.raw"
+        if depth_raw.exists():
+            # depth.raw is authoritative for camera scenes. Always regenerate
+            # depth.npy so files produced by the old unscaled conversion are
+            # not silently reused.
+            depth_path = _convert_depth_raw_to_npy(depth_raw, input_dir)
+        elif not depth_path.exists():
+            continue
         instruction, instruction_path = scene_input_instruction(input_dir)
         if instruction is None:
             instruction, instruction_path = scene_input_instruction(scene_dir)  # legacy fallback
@@ -152,6 +181,7 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
             "scene_id": optional_int(scene_id),
             "annotation": instruction or "",
             "instruction": instruction or "",
+            "depth_unit": "centimeter",
         }
         print(f"[perception] using data_realworld scene: {scene_dir.name}", flush=True)
         return {
@@ -161,6 +191,11 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
             "instruction_path": instruction_path,
             "image_path": rgb_path,
             "depth_path": depth_path,
+            "camera_meta_path": (
+                input_dir / "camera_meta.json"
+                if (input_dir / "camera_meta.json").is_file()
+                else None
+            ),
         }
 
     # --- legacy direct scene dirs (rgb.png/depth.npy at scene root, no input/) ---
@@ -172,17 +207,17 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
         depth_path = scene_dir / "depth.npy"
         if not rgb_path.exists():
             continue
-        if not depth_path.exists():
-            depth_raw = scene_dir / "depth.raw"
-            if depth_raw.exists():
-                depth_path = _convert_depth_raw_to_npy(depth_raw, scene_dir)
-            else:
-                continue
+        depth_raw = scene_dir / "depth.raw"
+        if depth_raw.exists():
+            depth_path = _convert_depth_raw_to_npy(depth_raw, scene_dir)
+        elif not depth_path.exists():
+            continue
         instruction, instruction_path = scene_input_instruction(scene_dir)
         summary = {
             "scene_id": optional_int(scene_id),
             "annotation": instruction or "",
             "instruction": instruction or "",
+            "depth_unit": "centimeter",
         }
         print(f"[perception] using data_realworld scene (legacy layout): {scene_dir.name}", flush=True)
         return {
@@ -192,6 +227,11 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
             "instruction_path": instruction_path,
             "image_path": rgb_path,
             "depth_path": depth_path,
+            "camera_meta_path": (
+                scene_dir / "camera_meta.json"
+                if (scene_dir / "camera_meta.json").is_file()
+                else None
+            ),
         }
 
 
@@ -738,6 +778,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     source_image: Image.Image | None = None
     instances_objects: np.ndarray | None = None
     is_data_realworld = False  # True if using data_realworld/<timestamp>/ dir
+    camera_intrinsics: dict[str, Any] | None = None
 
     if priority_inputs is not None:
         priority_summary = priority_inputs["summary"]
@@ -766,6 +807,12 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         annotation = str(priority_summary.get("instruction") or priority_summary.get("annotation") or "")
         source_image = Image.open(priority_inputs["image_path"]).convert("RGB")
         depth = np.asarray(np.load(priority_inputs["depth_path"]), dtype=np.float32)
+        camera_meta_path = priority_inputs.get("camera_meta_path")
+        if camera_meta_path is not None:
+            camera_metadata = load_json_file(Path(camera_meta_path))
+            raw_intrinsics = camera_metadata.get("intrinsics")
+            if isinstance(raw_intrinsics, dict):
+                camera_intrinsics = raw_intrinsics
         instruction_path = priority_inputs.get("instruction_path")
         input_note = f", instruction={instruction_path}" if instruction_path else ""
         print(
@@ -867,6 +914,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                     depth_map=depth,
                     image=Image.open(image_path).convert("RGB"),
                     mask_clean_kernel=args.mask_clean_kernel,
+                    camera_intrinsics=camera_intrinsics,
                 )
                 background_mask_path = save_background_exclusion_mask(bg_mask, out_dir / "mask")
             except Exception as exc:
@@ -925,6 +973,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             proposal_max_area_ratio=args.proposal_max_area_ratio,
             save_candidates=args.save_candidates,
             device=args.device,
+            camera_intrinsics=camera_intrinsics,
             sam2_points_per_side=args.sam2_points_per_side,
             sam2_crop_n_layers=args.sam2_crop_n_layers,
             sam2_pred_iou_thresh=args.sam2_pred_iou_thresh,
@@ -962,6 +1011,11 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "scene_id": scene_id,
             "query_obj_id": query_obj_id,
             "annotation": annotation,
+            "depth_unit": (
+                priority_summary.get("depth_unit")
+                if priority_inputs is not None
+                else "centimeter"
+            ),
             "point_source": "sam2-vlm-anchor",
             "output_dir": str(out_dir.resolve()),
             "image_path": str(image_path.resolve()),

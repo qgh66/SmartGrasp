@@ -1,7 +1,4 @@
-"""Static VLM configuration for reasoning priors.
-
-API key and base URL are read from the project-root api_config.json.
-"""
+"""Static VLM configuration loaded from project-root api_config.json."""
 
 from __future__ import annotations
 
@@ -14,6 +11,7 @@ with open(_ROOT / "api_config.json", encoding="utf-8") as _f:
 
 VLM_MODEL = "gpt-5.5"
 VLM_BASE_URL = _cfg["base_url"]
+VLM_API_KEY = str(_cfg.get("api_key") or "")
 VLM_API_KEY_ENV = "OPENAI_API_KEY"
 VLM_TEMPERATURE = 0.0
 VLM_TIMEOUT = 600.0

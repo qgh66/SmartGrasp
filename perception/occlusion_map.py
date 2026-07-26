@@ -500,6 +500,7 @@ def build_org_json(
     proposal_border_fraction_threshold: float = 0.18,
     save_candidates: bool = False,
     device: str | None = None,
+    camera_intrinsics: dict[str, Any] | None = None,
     sam2_points_per_side: int | None = 30,
     sam2_crop_n_layers: int | None = 0,
     sam2_pred_iou_thresh: float | None = 0.75,
@@ -520,6 +521,7 @@ def build_org_json(
             depth_map=depth_map,
             image=Image.open(image_path).convert("RGB"),
             mask_clean_kernel=mask_clean_kernel,
+            camera_intrinsics=camera_intrinsics,
         )
     except Exception as exc:
         print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)

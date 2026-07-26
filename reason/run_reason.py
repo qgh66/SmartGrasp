@@ -736,10 +736,10 @@ def main():
                             "step": step_idx,
                             "candidate_id": cand_mid,
                             "candidate_label": cand_label,
-                            "P_s": info["P_s"],
-                            "P_g": info["P_g"],
-                            "P":   info["P"],
-                            "IG":  info["IG"],
+                            "P_s": info.get("P_s"),
+                            "P_g": info.get("P_g"),
+                            "P":   info.get("P"),
+                            "IG":  info.get("IG"),
                             "IG_normalized": info.get("IG_normalized"),
                             "graspability": info.get("graspability"),
                             "graspability_part_id": info.get("graspability_part_id"),
@@ -799,10 +799,9 @@ def main():
             scene_id = perception.scene_id
             if scene_id is not None:
                 sid_str = str(scene_id)
-                try:
-                    int(sid_str)  # FreeGrasp integer scene_id
+                if sid_str.isdigit():  # FreeGrasp integer scene_id
                     scene_subdir = f"scene_{sid_str}"
-                except ValueError:
+                else:
                     scene_subdir = sid_str  # timestamp or other string
                 reason_dir = Path(args.scene_root) / scene_subdir / "reason"
                 reason_dir.mkdir(parents=True, exist_ok=True)

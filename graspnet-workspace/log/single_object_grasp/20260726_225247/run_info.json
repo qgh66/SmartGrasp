@@ -1,0 +1,55 @@
+{
+  "created_at": "2026-07-26 22:52:48",
+  "created_at_epoch": 1785077567.1702087,
+  "trial_name": "",
+  "trial_log_subdir": "single_object_grasp",
+  "trial_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object_grasp/20260726_225247",
+  "argv": [
+    "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/scripts/realworld_grasp.py",
+    "--output-dir",
+    "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018/input",
+    "--calibration-mode",
+    "hand_eye",
+    "--reuse-capture",
+    "--execute",
+    "--perception-mask",
+    "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018/perception/mask_sam2/part_003.png",
+    "--use-sam-mask",
+    "--top-k",
+    "50",
+    "--candidate-index",
+    "0"
+  ],
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018/input",
+  "executed": true,
+  "num_candidates": null,
+  "camera_serial": "72659",
+  "calibration_mode": "hand_eye",
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "copied_files": [
+    "rgb.png",
+    "depth.raw",
+    "camera_meta.json",
+    "grasp_candidates.json",
+    "grasp_candidates.png",
+    "scene_grasps.ply"
+  ],
+  "missing_files": [
+    "mask_overlay.png"
+  ],
+  "stale_files": [],
+  "git": {
+    "branch": "realworld",
+    "commit": "c5e816ad79193e16946e9c3bff7abd41817aa3c1",
+    "dirty": true,
+    "status_short": "M .gitignore\n M README.md\n M graspnet-workspace/capture_realsense.py\n M graspnet-workspace/config/realworld_config.yaml\n M graspnet-workspace/scripts/check_chessboard_height.py\n M graspnet-workspace/scripts/collect_handeye_chessboard.py\n M graspnet-workspace/scripts/realworld_grasp.py\n M intent/run_intent.py\n M perception/background.py\n M perception/occlusion_map.py\n M perception/run_perception.py\n M perception/sam2auto.py\n M perception/vlm.py\n M reason/intent_handle/intent_handler.py\n M reason/run_reason.py\n M reason/vlm/client.py\n M reason/vlm/config.py\n M run_pipeline.py\n?? data_realworld/\n?? graspnet-workspace/log/single_object_grasp/\n?? runs_detail/"
+  },
+  "summary": {
+    "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018/input",
+    "trial_log_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object_grasp/20260726_225247",
+    "cycle_index": 1,
+    "executed": true,
+    "execution_status": "failed",
+    "error": "ValueError('--candidate-index out of range: 0')"
+  }
+}

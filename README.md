@@ -1,10 +1,140 @@
 # SmartGrasp Grasp Execution Module
 
-这个分支保存了当前的 GraspNet 抓取模块：包括基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及基于 **JAKA Zu3 + Robotiq-85 + RealSense** 的真实抓取流程。仿真结果可通过 Dash GUI 查看，真实抓取结果可通过 PNG、HTML、PLY 和 JSON 工件检查。
+## 正式完整 Pipeline：拍照到真实抓取
 
-当前抓取执行采用 **JAKA Zu3 机械臂 + Robotiq-85 二指夹爪**，用 PyBullet IK 驱动机械臂、Robotiq-85 欠驱动夹爪做**真实摩擦夹持**（不再用固定约束“吸附”物体），整体流程对齐参考实现 `environment_sim.py` 的 `grasp()` 原语：张开 → 移到目标上方 → 直线下插 → 闭合 → 直线抬回 → 按夹爪关节角判定是否夹到实体。当前只抓**单个物体**，不含 VLM / LangSAM。
+正式入口是项目根目录的 `run_pipeline.py`。它按下面的顺序完整运行一次：
 
-当前重点代码在 `graspnet-workspace/` 下面。`perception/` 是 SmartGrasp 原有感知模块，本 README 主要说明 GraspNet 仿真、真实抓取和相关工具。
+```text
+尾号 72659 的 RealSense 拍摄 RGB-D
+→ Perception（背景 Mask、SAM2、VLM、遮挡图）
+→ Intent（从英文指令选择目标对象）
+→ Reason（选择当前要抓的对象和 SAM2 part）
+→ GraspNet（只使用 Reason 指定的二值 part mask）
+→ JAKA + Robotiq 实际抓取、放置并返回拍摄位
+```
+
+### 运行前准备
+
+1. 确认 JAKA 工作区安全、急停已经解除、控制器和夹爪可用。
+2. 确认尾号 `72659` 的 RealSense 已连接；当前完整序列号为
+   `243122072659`。
+3. 确认根目录存在 `api_config.json`：
+
+```json
+{
+  "base_url": "<OpenAI-compatible API URL>",
+  "api_key": "<API Key>"
+}
+```
+
+4. 确认以下文件存在：
+
+```text
+graspnet-workspace/checkpoints/checkpoint-rs.tar
+graspnet-workspace/calibration/hand_eye_tcp_camera.json
+```
+
+### 正式运行命令
+
+必须从项目根目录启动，并使用 `smartgrasp` 环境：
+
+```bash
+conda activate smartgrasp
+cd /home/admin128/qiuguanhe/SmartGrasp
+
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left"
+```
+
+这条命令会真实移动机械臂和夹爪，不是测试或 dry-run。默认使用：
+
+```text
+calibration-mode = hand_eye
+top-k = 50
+candidate-index = 0
+camera serial suffix = 72659
+```
+
+每次运行创建一个不带 `scene_` 前缀的时间戳目录：
+
+```text
+data_realworld/<YYYYMMDD_HHMMSS>/
+├── input/          # RGB、raw/npy 深度、相机参数、拍摄 TCP 位姿、GraspNet 结果
+├── perception/     # SAM2 mask、背景 mask、遮挡图、summary.json
+├── intent/         # id.txt
+└── reason/         # results.csv、summary.json、reason.txt
+```
+
+完整主日志写入：
+
+```text
+logs/realworld_<YYYYMMDD_HHMMSS>.log
+```
+
+Intent 只执行一次并把 `intent/id.txt` 交给 Reason。Reason 输出的
+`selected_object_graspability_part_id` 会映射到：
+
+```text
+perception/mask_sam2/part_NNN.png
+```
+
+正式 Grasp 只接受这张二值 mask；mask 缺失时会停止，不会退化成 RGB 裁剪图
+或整幅点云。如果一次 GraspNet 推理的候选全部被安全过滤，pipeline 最多只
+重试一次推理，不降低 TCP 最低高度阈值，也不会在没有有效候选时移动机械臂。
+
+### 分阶段停止
+
+下面的参数用于检查中间产物：
+
+```bash
+# 只拍照，拍摄阶段仍会把机械臂移动到拍摄位并打开夹爪
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --capture-only
+
+# 拍照并运行 Perception 后停止
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --perception-only
+
+# 运行到 Reason 后停止
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --reason-only
+
+# 完成 Perception、Intent、Reason，但跳过 GraspNet/JAKA 抓取
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --no-grasp
+```
+
+复用已经拍摄的场景、重新执行后续阶段：
+
+```bash
+python -u run_pipeline.py \
+  --scene-dir /home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018 \
+  --instruction "grasp the screwdriver on the left"
+```
+
+使用 `--scene-dir` 并执行真实抓取时，必须保证物体、相机和拍摄时的相对位置
+没有变化，并且 `input/capture_tcp_pose.json` 与该 RGB-D 帧匹配。
+
+---
+
+这个分支还保存了基于 **GraspNet + PyBullet** 的单物体抓取仿真，以及基于
+**JAKA Zu3 + Robotiq-85 + RealSense** 的独立真实抓取工具。仿真结果可通过
+Dash GUI 查看，真实抓取结果可通过 PNG、HTML、PLY 和 JSON 工件检查。
+
+下面介绍的 PyBullet 仿真采用 **JAKA Zu3 机械臂 + Robotiq-85 二指夹爪**，
+用 PyBullet IK 驱动机械臂、Robotiq-85 欠驱动夹爪做**真实摩擦夹持**（不再
+用固定约束“吸附”物体），整体流程对齐参考实现 `environment_sim.py` 的
+`grasp()` 原语：张开 → 移到目标上方 → 直线下插 → 闭合 → 直线抬回 →
+按夹爪关节角判定是否夹到实体。这个仿真小节只抓单个物体，不包含正式
+pipeline 中的 VLM Intent/Reason。
+
+正式完整 pipeline 的入口在根目录 `run_pipeline.py`；GraspNet、标定、仿真和
+真实执行的底层代码主要位于 `graspnet-workspace/`，感知代码位于
+`perception/`。
 
 ## 目录结构
 
@@ -464,7 +594,7 @@ cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 
 python scripts/collect_handeye_chessboard.py \
   --output-dir calibration/handeye_chessboard_raw \
-  --camera-serial 72508 \
+  --camera-serial 72659 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
 ```
@@ -660,7 +790,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 | 参数 | 当前默认值 | 作用 |
 |------|------------|------|
 | `--output-dir` | `../result` | 当前一轮的 RGB-D、点云和候选输出目录 |
-| `--camera-serial` | 后缀 `72508` | RealSense 序列号或唯一后缀 |
+| `--camera-serial` | 后缀 `72659` | RealSense 序列号或唯一后缀 |
 | `--reuse-capture` | 关闭 | 复用输出目录中的现有 RGB-D |
 | `--warmup-frames` | `30` | 新采集前的相机预热帧数 |
 | `--device` | `cuda:0` | GraspNet 推理设备 |

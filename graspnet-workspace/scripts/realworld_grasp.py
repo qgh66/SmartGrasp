@@ -104,7 +104,7 @@ DEFAULT_PLACE_TARGET_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.place_
 DEFAULT_PLACE_RELEASE_LOWER_MM = float(config_get(REALWORLD_CONFIG, "robot.place_release_lower_mm", 50.0))
 DEFAULT_JOINT_VELOCITY_RAD_S = float(config_get(REALWORLD_CONFIG, "robot.joint_velocity_rad_s", 0.5))
 DEFAULT_CAMERA_INDEX = int(config_get(REALWORLD_CONFIG, "camera.default_index", 1))
-DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "72508"))
+DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "72659"))
 DEFAULT_JAKA_PYTHON = os.environ.get(
     "JAKA_PYTHON",
     str(config_path(REALWORLD_CONFIG, "paths.jaka_python", WORKSPACE_ROOT, "/home/admin128/anaconda3/envs/smartgrasp310/bin/python")),
@@ -561,9 +561,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trial-name", default="", help="Optional suffix for the timestamped trial log directory.")
     parser.add_argument("--no-trial-log", action="store_true", help="Disable timestamped lightweight trial log saving.")
     parser.add_argument("--reuse-capture", action="store_true", help="Use existing output-dir/rgb.png + depth.raw.")
+    parser.add_argument(
+        "--capture-only",
+        action="store_true",
+        help="Capture RGB-D (and the hand-eye capture TCP pose) without running SAM or GraspNet.",
+    )
     parser.add_argument("--warmup-frames", type=int, default=30, help="RealSense warmup frames before capture.")
     parser.add_argument("--camera-index", type=int, default=DEFAULT_CAMERA_INDEX, help="Fallback RealSense device index if --camera-serial is empty.")
-    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense serial number or unique suffix. Default matches the camera ending with 72508.")
+    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense serial number or unique suffix. Default matches the camera ending with 72659.")
     parser.add_argument("--ckpt", default=str(DEFAULT_CHECKPOINT), help="GraspNet checkpoint path.")
     parser.add_argument("--device", default="cuda:0", help="Inference device, e.g. cuda:0 or cpu.")
     parser.add_argument("--num-points", type=int, default=20000, help="Point count sampled for GraspNet.")
@@ -892,14 +897,14 @@ def run_one_cycle(
             input_dir = scene_dir / "input"
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir = input_dir
-            if args.instruction:
-                instruction_path = input_dir / "instruction.txt"
-                instruction_path.write_text(args.instruction.strip(), encoding="utf-8")
-                print(f"[data_realworld] scene_id={timestamp} instruction={args.instruction[:60]}...", flush=True)
-            else:
-                print(f"[data_realworld] scene_id={timestamp} (no instruction provided)", flush=True)
+            print(f"[data_realworld] scene_id={timestamp}", flush=True)
         else:
             output_dir = Path(args.output_dir).expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if args.instruction:
+            instruction_path = output_dir / "instruction.txt"
+            instruction_path.write_text(args.instruction.strip(), encoding="utf-8")
+            print(f"[capture] instruction={args.instruction[:60]}... -> {instruction_path}", flush=True)
 
         if args.calibration_mode == "hand_eye":
             calibration = load_hand_eye_calibration(
@@ -921,6 +926,28 @@ def run_one_cycle(
             capture_tcp_pose = resolve_capture_tcp_pose(output_dir, args, capture_was_reused)
             calibration["capture_tcp_pose"] = capture_tcp_pose
             calibration["base_from_tcp_capture"] = jaka_pose_to_transform(capture_tcp_pose)
+        if args.capture_only:
+            depth_cm = (
+                np.asarray(frame["depth_raw"], dtype=np.float32)
+                * np.float32(frame["meta"]["depth_scale_m"] * 100.0)
+            )
+            depth_npy_path = output_dir / "depth.npy"
+            np.save(depth_npy_path, depth_cm)
+            summary = {
+                "output_dir": str(output_dir),
+                "rgb": str(output_dir / "rgb.png"),
+                "depth_raw": str(output_dir / "depth.raw"),
+                "depth_npy": str(depth_npy_path),
+                "camera_meta": str(output_dir / "camera_meta.json"),
+                "capture_tcp_pose": calibration.get("capture_tcp_pose"),
+                "camera_index": args.camera_index,
+                "camera_serial": args.camera_serial,
+                "calibration_mode": args.calibration_mode,
+                "capture_only": True,
+                "executed": False,
+            }
+            print(json.dumps(summary, indent=2))
+            return summary
         full_cloud, grasp_cloud, full_cloud_rgb, grasp_cloud_rgb, obstacle_cloud, point_cloud_info = build_grasp_point_cloud(
             frame,
             output_dir,

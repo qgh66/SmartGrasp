@@ -1,9 +1,13 @@
 # 排除数据和模型
-data/
+data*/
 models/*.pth
 models/*.onnx
 *.weights
 api_config.json
+.env
+input/
+test/
+runs*/
 
 # 排除 Python 缓存
 __pycache__/

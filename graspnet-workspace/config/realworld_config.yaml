@@ -40,7 +40,7 @@ gripper:
 
 camera:
   default_index: 1
-  default_serial_suffix: "72508"
+  default_serial_suffix: "72659"
 
 filters:
   target_mask_center_tolerance_px: 25.0

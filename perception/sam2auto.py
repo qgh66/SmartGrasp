@@ -21,7 +21,6 @@ from SmartGrasp.perception._shared import (
 from SmartGrasp.perception.background import (
     background_overlap_fraction,
     BACKGROUND_OVERLAP_REJECTION_THRESHOLD,
-    exclude_background_pixels,
 )
 from SmartGrasp.perception.vlm import review_and_assign_sam2
 
@@ -594,22 +593,11 @@ def _hard_filter_sam2_proposals(
             report.append(metadata)
             continue
 
-        # ── Background-pixel exclusion ───────────────────────────────────
-        # Strip background pixels from every candidate that survived hard
-        # filtering, so downstream VLM review / merging / morphology never
-        # see background material.
-        # (empty-after-exclusion is impossible: background_overlap ≤ 0.5
-        #  is already enforced by the hard-filter checks above.)
-        area_before_exclusion = area
-        if background_exclusion_mask is not None and int(np.count_nonzero(background_exclusion_mask)) > 0:
-            cleaned = exclude_background_pixels(mask, background_exclusion_mask)
-            removed = area_before_exclusion - int(np.count_nonzero(cleaned))
-            if removed > 0:
-                metadata["area_before_background_exclusion"] = area_before_exclusion
-                metadata["background_exclusion_pixels_removed"] = removed
-                mask = cleaned
+        # Keep each surviving SAM2 mask intact. The background mask is used
+        # above only for overlap measurement / hard rejection; it no longer
+        # crops background pixels out of an accepted SAM2 proposal.
 
-        # Background removal can leave isolated specks around the object boundary.
+        # Remove tiny isolated components produced by SAM2 itself.
         if cv2 is not None and np.any(mask):
             component_count, component_labels, component_stats, _ = cv2.connectedComponentsWithStats(
                 mask.astype(np.uint8),
@@ -625,7 +613,7 @@ def _hard_filter_sam2_proposals(
                 metadata["small_components_pixels_removed"] = removed_small
                 mask = cleaned
 
-        # Recompute geometry after background and small-component removal.
+        # Recompute geometry after small-component removal.
         area = int(np.count_nonzero(mask))
         if area == 0:
             metadata["rejection_reason"] = "empty_after_cleanup"
