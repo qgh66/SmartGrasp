@@ -259,6 +259,13 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
     if not script_path.exists():
         raise FileNotFoundError(f"Pipeline entrypoint not found: {script_path}")
 
+    environment = os.environ.copy()
+    # VirtualCamera exports metric depth. Keep the dataset-wide 0.5 default
+    # untouched, but use a centimeter-scale frontier gap for tabletop objects.
+    environment["DEPTH_GAP_THRESHOLD"] = os.environ.get(
+        "SIMULATION_DEPTH_GAP_THRESHOLD",
+        "0.01",
+    )
     subprocess.run(
         [
             "bash",
@@ -267,7 +274,7 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
             "--instruction=input",
         ],
         cwd=str(REPO_ROOT),
-        env=os.environ.copy(),
+        env=environment,
         check=True,
     )
 
@@ -290,6 +297,7 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
 
     reason_summary = _load_json(reason_summary_path)
     grasp_object = reason_summary.get("grasp_object") or {}
+    target_object = reason_summary.get("target_object") or {}
     object_id = grasp_object.get("id")
     if object_id is None:
         raise RuntimeError(
@@ -310,7 +318,10 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
     return {
         "scene_id": scene_id,
         "branch": reason_summary.get("branch"),
+        "status": reason_summary.get("status"),
         "instruction": reason_summary.get("instruction"),
+        "target_object_id": target_object.get("id"),
+        "target_object_label": target_object.get("label"),
         "object_id": object_id,
         "object_label": grasp_object.get("label"),
         "object_mask_path": str(object_mask_path),

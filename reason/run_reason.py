@@ -44,7 +44,7 @@ from reason.partially_visible import handle as handle_partially_visible
 from reason.invisible import handle as handle_fully_occluded
 from reason.closed_loop import run_closed_loop
 from reason.vlm import config as vlm_config
-from reason.intent_handle import resolve_intent
+from reason.intent_handle import HIDDEN_TARGET_OCCLUDER_MODE, resolve_intent
 from intent.run_intent import (
     RUN_INTENT_API_KEY_ENV,
     RUN_INTENT_BASE_URL,
@@ -150,6 +150,26 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
             "intent_vlm_decision": result.vlm_decision,
         }
     ]
+
+
+def _preferred_occluder_ids(target_entry: dict, perception) -> tuple[int, ...]:
+    """Return validated semantic occluders for an explicitly hidden target."""
+    decision = target_entry.get("intent_vlm_decision")
+    if not isinstance(decision, dict):
+        return ()
+    selection_mode = str(decision.get("selection_mode") or "").strip().lower()
+    if selection_mode != HIDDEN_TARGET_OCCLUDER_MODE:
+        return ()
+
+    valid_ids = []
+    for object_id in target_entry.get("intent_candidate_ids") or ():
+        try:
+            parsed_id = int(object_id)
+        except (TypeError, ValueError):
+            continue
+        if parsed_id in perception.molmo_to_node and parsed_id not in valid_ids:
+            valid_ids.append(parsed_id)
+    return tuple(valid_ids)
 
 
 def _jsonable_part_scores(raw_parts) -> dict[str, float]:
@@ -654,7 +674,14 @@ def main():
         actions_seq = None
         for target_entry in targets:
             mid = target_entry["target_id"]
-            p = replace(perception, target_molmo_id=mid)
+            p = replace(
+                perception,
+                target_molmo_id=mid,
+                preferred_occluder_ids=_preferred_occluder_ids(
+                    target_entry,
+                    perception,
+                ),
+            )
 
             # 1) Branch classification.
             try:

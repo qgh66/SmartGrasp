@@ -150,6 +150,19 @@ fi
 
 REQUESTED_OUTPUT="$(arg_value --output "$GRASP_OUTPUT")"
 REQUESTED_TOP_K="$(arg_value --top_k "$GRASP_TOP_K")"
+REQUESTED_OCCLUSION_ACTION="$(arg_value --occlusion-action auto)"
+REQUESTED_TASK_CLOSED_LOOP=0
+REQUESTED_STOP_ON_SUCCESS="$GRASP_STOP_ON_SUCCESS"
+REQUESTED_ASSISTED_GRASP="$GRASP_ASSISTED_GRASP"
+if has_arg "--task-closed-loop"; then
+  REQUESTED_TASK_CLOSED_LOOP=1
+fi
+if has_arg "--stop-on-success"; then
+  REQUESTED_STOP_ON_SUCCESS=1
+fi
+if has_arg "--assisted-grasp"; then
+  REQUESTED_ASSISTED_GRASP=1
+fi
 if [[ "$REQUESTED_OUTPUT" = /* ]]; then
   mkdir -p "$(dirname "$REQUESTED_OUTPUT")"
   DISPLAY_OUTPUT="$REQUESTED_OUTPUT"
@@ -269,10 +282,12 @@ echo "  target_object=${GRASP_TARGET_OBJECT:-<from args/default>}"
 echo "  checkpoint=$GRASP_CHECKPOINT_PATH"
 echo "  device=$GRASP_DEVICE"
 echo "  top_k=$REQUESTED_TOP_K"
+echo "  task_closed_loop=$REQUESTED_TASK_CLOSED_LOOP"
+echo "  occlusion_action=$REQUESTED_OCCLUSION_ACTION"
 echo "  test_all_candidates=$GRASP_TEST_ALL_CANDIDATES"
 echo "  test_all_raw_candidates=$GRASP_TEST_ALL_RAW_CANDIDATES"
-echo "  stop_on_success=$GRASP_STOP_ON_SUCCESS"
-echo "  assisted_grasp=$GRASP_ASSISTED_GRASP"
+echo "  stop_on_success=$REQUESTED_STOP_ON_SUCCESS"
+echo "  assisted_grasp=$REQUESTED_ASSISTED_GRASP"
 echo "  seed=$GRASP_SEED"
 echo "  gui_speed=$GRASP_GUI_SPEED"
 echo "  max_candidates_per_object=$GRASP_MAX_CANDIDATES_PER_OBJECT"

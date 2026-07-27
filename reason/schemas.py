@@ -44,6 +44,9 @@ class PerceptionOutput:
     object_id_to_sam2_part_files: Optional[dict[int, tuple[str, ...]]] = None
     prior_prompt_mode: str = "original"
     ranking_score: str = "legacy"
+    # Intent may name a visible cover while the requested target is absent
+    # from perception. This hint is populated only for that explicit mode.
+    preferred_occluder_ids: Optional[tuple[int, ...]] = None
     scene_id: Optional[int] = None
     annotation: Optional[str] = None
     point_source: Optional[str] = None

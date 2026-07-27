@@ -46,6 +46,13 @@ class SimulationScene:
         self.objects_by_id: dict[int, SceneObject] = {}
         self.objects_by_name: dict[str, int] = {}
         self._temp_urdfs: list[str] = []
+        self._staged_object_poses: dict[
+            int,
+            tuple[
+                tuple[float, float, float],
+                tuple[float, float, float, float],
+            ],
+        ] = {}
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -92,6 +99,7 @@ class SimulationScene:
         self.object_ids = []
         self.objects_by_id = {}
         self.objects_by_name = {}
+        self._staged_object_poses = {}
 
     # ------------------------------------------------------------------
     # 场景搭建
@@ -232,6 +240,72 @@ class SimulationScene:
                 )
             )
         return body_ids
+
+    def stage_objects_at_initial_poses(self) -> None:
+        """Temporarily lock configured objects in a reproducible pile.
+
+        Irregular scanned meshes can bounce or roll apart when every object is
+        released simultaneously. Staging keeps each body static for the initial
+        camera/Perception pass. A body regains its configured mass immediately
+        before its grasp evaluation, so the actual grasp, lift, transport, and
+        drop remain dynamic PyBullet interactions.
+        """
+        for body_id in self.object_ids:
+            position, orientation = self.get_object_pose(body_id)
+            staged_pose = (
+                tuple(float(value) for value in position),
+                tuple(float(value) for value in orientation),
+            )
+            self._staged_object_poses[body_id] = staged_pose
+            p.resetBasePositionAndOrientation(
+                body_id,
+                staged_pose[0],
+                staged_pose[1],
+            )
+            p.resetBaseVelocity(
+                body_id,
+                linearVelocity=(0.0, 0.0, 0.0),
+                angularVelocity=(0.0, 0.0, 0.0),
+            )
+            p.changeDynamics(body_id, -1, mass=0.0)
+
+    def activate_staged_object(self, body_id: int) -> bool:
+        """Restore one staged body to its configured dynamic mass."""
+        if body_id not in self._staged_object_poses:
+            return False
+        scene_object = self.get_object_info(body_id)
+        p.resetBaseVelocity(
+            body_id,
+            linearVelocity=(0.0, 0.0, 0.0),
+            angularVelocity=(0.0, 0.0, 0.0),
+        )
+        p.changeDynamics(body_id, -1, mass=scene_object.mass)
+        return True
+
+    def restage_object(self, body_id: int) -> bool:
+        """Restore a failed target to its original staged pose."""
+        staged_pose = self._staged_object_poses.get(body_id)
+        if staged_pose is None:
+            return False
+        p.changeDynamics(body_id, -1, mass=0.0)
+        p.resetBasePositionAndOrientation(
+            body_id,
+            staged_pose[0],
+            staged_pose[1],
+        )
+        p.resetBaseVelocity(
+            body_id,
+            linearVelocity=(0.0, 0.0, 0.0),
+            angularVelocity=(0.0, 0.0, 0.0),
+        )
+        return True
+
+    def finish_staged_object(self, body_id: int) -> None:
+        """Remove a successfully grasped body from staging bookkeeping."""
+        self._staged_object_poses.pop(body_id, None)
+
+    def is_object_staged(self, body_id: int) -> bool:
+        return body_id in self._staged_object_poses
 
     # ------------------------------------------------------------------
     # 工具方法

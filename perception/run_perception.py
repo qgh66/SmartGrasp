@@ -311,6 +311,7 @@ def build_graph_from_gt_masks(
     kernel_size: int,
     min_contact_pixels: int,
     min_contact_ratio: float,
+    depth_gap_threshold: float = 0.5,
     background_mask: np.ndarray | None = None,
     max_contact_background_ratio: float = 0.4,
 ) -> dict[str, Any]:
@@ -323,6 +324,7 @@ def build_graph_from_gt_masks(
         kernel_size=kernel_size,
         min_contact_pixels=min_contact_pixels,
         min_contact_ratio=min_contact_ratio,
+        depth_gap_threshold=depth_gap_threshold,
         background_mask=background_mask,
         max_contact_background_ratio=max_contact_background_ratio,
     )
@@ -962,6 +964,7 @@ def build_gt_reference_outputs(
         kernel_size=args.kernel_size,
         min_contact_pixels=args.min_contact_pixels,
         min_contact_ratio=args.min_contact_ratio,
+        depth_gap_threshold=args.depth_gap_threshold,
         background_mask=gt_background_mask,
         max_contact_background_ratio=args.max_contact_background_ratio,
     )
@@ -1157,6 +1160,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             kernel_size=args.kernel_size,
             min_contact_pixels=args.min_contact_pixels,
             min_contact_ratio=args.min_contact_ratio,
+            depth_gap_threshold=args.depth_gap_threshold,
             mask_clean_kernel=args.mask_clean_kernel,
             proposal_min_area_ratio=args.proposal_min_area_ratio,
             proposal_max_area_ratio=args.proposal_max_area_ratio,
@@ -1248,6 +1252,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)
+    parser.add_argument(
+        "--depth-gap-threshold",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum foreground depth gap for an occlusion edge, in the "
+            "same unit as depth.npy. Default 0.5 preserves dataset behavior."
+        ),
+    )
     parser.add_argument(
         "--max-contact-background-ratio",
         type=float,

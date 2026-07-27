@@ -338,12 +338,37 @@ def parse_args():
                    help='导出同帧输入后，把本次拍照 ID 传给 perception/run_perception.sh')
     p.add_argument('--run-pipeline-after-capture', action='store_true',
                    help='导出同帧输入后运行 Perception+Intent+Reason，并将 Reason Object ID 映射为当前 PyBullet 目标')
+    p.add_argument('--task-closed-loop', action='store_true',
+                   help='语义目标物理闭环：遮挡动作后重新拍摄和推理，只有最终目标抓取成功才结束')
+    p.add_argument(
+        '--occlusion-action',
+        choices=['auto', 'push', 'grasp-away'],
+        default='auto',
+        help='闭环中的遮挡物处理：自动选择、推动，或抓走后松爪（默认: auto）',
+    )
+    p.add_argument('--max-task-rounds', type=int, default=6,
+                   help='语义目标闭环最大感知-动作轮数（默认: 6）')
+    p.add_argument('--push-distance', type=float, default=0.05,
+                   help='推动遮挡物的水平距离，单位米（默认: 0.05）')
+    p.add_argument('--push-direction', type=float, nargs=3, default=None,
+                   metavar=('X', 'Y', 'Z'),
+                   help='推动方向；默认根据物体相对工作区中心自动向外选择')
+    p.add_argument('--reobserve-settle-steps', type=int, default=120,
+                   help='中间动作后、重新拍摄前等待的仿真步数（默认: 120）')
     p.add_argument('--use-reason-part-mask', action='store_true',
                    help='完整 Pipeline 模式下使用 Reason 选择的 part mask 聚焦 GraspNet 裁剪和候选过滤；默认仍使用整物体点云')
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
                    help='启用顺序抓取与搬运流程；配合 --target-objects 指定目标及顺序')
+    p.add_argument('--continuous-grasp', action='store_true',
+                   help='连续清场模式：每次成功投放并松爪后重新拍摄，重试先前被遮挡的剩余物体')
+    p.add_argument('--drop-after-grasp', action='store_true',
+                   help='批量模式下搬运到配置的投放位姿后松开夹爪，让物体自然落下；连续清场模式默认启用')
+    p.add_argument('--drop-settle-steps', type=int, default=None,
+                   help='松爪后等待物体下落的仿真步数；默认读取场景 continuous_grasp.drop_settle_steps')
+    p.add_argument('--max-stalled-passes', type=int, default=None,
+                   help='连续清场连续多少轮无成功后停止；默认读取场景 continuous_grasp.max_stalled_passes')
     p.add_argument('--ckpt', default=None,
                    help='Checkpoint 路径 (默认自动查找)')
     p.add_argument('--top_k', type=int, default=10, help='评估前 K 个抓取')
@@ -391,6 +416,22 @@ def main():
         raise ValueError(
             "--run-pipeline-after-capture requires a non-empty --instruction"
         )
+    if args.task_closed_loop and not args.run_pipeline_after_capture:
+        raise ValueError(
+            "--task-closed-loop requires --run-pipeline-after-capture"
+        )
+    if args.task_closed_loop and not args.scene_config:
+        raise ValueError("--task-closed-loop requires --scene-config")
+    if args.max_task_rounds <= 0:
+        raise ValueError("--max-task-rounds must be greater than zero")
+    if args.push_distance <= 0:
+        raise ValueError("--push-distance must be greater than zero")
+    if args.reobserve_settle_steps < 0:
+        raise ValueError("--reobserve-settle-steps must be non-negative")
+    if args.drop_settle_steps is not None and args.drop_settle_steps < 0:
+        raise ValueError("--drop-settle-steps must be non-negative")
+    if args.push_direction is not None and np.linalg.norm(args.push_direction) < 1e-8:
+        raise ValueError("--push-direction must be a non-zero vector")
     if args.run_perception_after_capture and args.run_pipeline_after_capture:
         raise ValueError(
             "--run-perception-after-capture and "
@@ -411,14 +452,33 @@ def main():
             "--run-pipeline-after-capture is currently a single-target flow "
             "and cannot be combined with --all-objects"
         )
+    if args.run_pipeline_after_capture and args.continuous_grasp:
+        raise ValueError(
+            "--run-pipeline-after-capture is currently a single-target flow "
+            "and cannot be combined with --continuous-grasp"
+        )
+    if args.all_objects and args.continuous_grasp:
+        raise ValueError(
+            "--all-objects and --continuous-grasp are independent batch modes"
+        )
+    if args.drop_after_grasp and not (
+        args.all_objects or args.continuous_grasp
+    ):
+        raise ValueError(
+            "--drop-after-grasp requires --all-objects or "
+            "--continuous-grasp"
+        )
     if args.use_reason_part_mask and not args.run_pipeline_after_capture:
         raise ValueError(
             "--use-reason-part-mask requires --run-pipeline-after-capture"
         )
 
-    if args.all_objects:
+    if args.all_objects or args.continuous_grasp:
         from demo_all_objects import run_all_objects
         return run_all_objects(args)
+    if args.task_closed_loop:
+        from demo_task_closed_loop import run_task_closed_loop
+        return run_task_closed_loop(args)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -463,10 +523,22 @@ def main():
     scene.load_plane()
 
     scene_config = None
+    staging_enabled = False
     target_selection = None
     if args.scene_config:
         scene_config = load_scene_config(args.scene_config)
         scene.load_objects(scene_config["_resolved_objects"])
+        staging_enabled = bool(
+            scene_config.get("object_staging", {}).get(
+                "lock_initial_poses_until_grasp",
+                False,
+            )
+        )
+        if staging_enabled:
+            scene.stage_objects_at_initial_poses()
+            print(
+                "  🔒 初始堆叠已暂时锁定；目标进入抓取评估前恢复动态质量"
+            )
         if args.target_mask or args.run_pipeline_after_capture:
             obj_id = None
             target_object = None
@@ -777,6 +849,12 @@ def main():
         video_recorder.start()
         atexit.register(video_recorder.close)
         print(f'  🎥 PyBullet GUI 录制: {video_path}')
+    target_activated_from_staging = scene.activate_staged_object(obj_id)
+    if target_activated_from_staging:
+        print(
+            f'  🔓 目标 {target_object.name} 已恢复动态质量 '
+            f'({target_object.mass:.3f} kg)'
+        )
     evaluator = GraspEvaluator(
         object_id=obj_id,
         gripper=gripper,
@@ -813,11 +891,29 @@ def main():
     print(f'\n📊 结果: {n_ok}/{len(results)} 成功')
 
     # 构建结果
+    final_target_selected = bool(
+        reason_target is None
+        or reason_target.get("branch") == "fully_visible"
+        or (
+            reason_target.get("target_object_id") is not None
+            and int(reason_target["target_object_id"])
+            == int(reason_target["object_id"])
+        )
+    )
+    task_success = bool(n_ok > 0 and final_target_selected)
+    if task_success:
+        task_status = "final_target_grasped"
+    elif n_ok > 0:
+        task_status = "intermediate_occluder_action_succeeded"
+    else:
+        task_status = "physical_action_failed"
     out_dir = os.path.dirname(args.output) or '.'
     os.makedirs(out_dir, exist_ok=True)
     out = {
         'total': len(results),
         'success': n_ok,
+        'task_success': task_success,
+        'task_status': task_status,
         'obj_path': target_object.path,
         'scene_config': scene_config.get("_path") if scene_config else None,
         'target_object_name': target_object.name,
@@ -856,6 +952,8 @@ def main():
         'use_reason_part_mask': bool(args.use_reason_part_mask),
         'stop_on_success': bool(args.stop_on_success),
         'assisted_grasp': bool(args.assisted_grasp),
+        'object_staging_enabled': staging_enabled,
+        'target_activated_from_staging': target_activated_from_staging,
         'object_position': list(obj_pos),
         'object_orientation': list(obj_orn),
         'gripper': gripper.metadata(),

@@ -202,6 +202,7 @@ run_once() {
             --kernel-size "${KERNEL_SIZE:-11}" \
             --min-contact-pixels "${MIN_CONTACT_PIXELS:-50}" \
             --min-contact-ratio "${MIN_CONTACT_RATIO:-0.002}" \
+            --depth-gap-threshold "${DEPTH_GAP_THRESHOLD:-0.5}" \
             --mask-clean-kernel "${MASK_CLEAN_KERNEL:-3}" \
             --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
             --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \

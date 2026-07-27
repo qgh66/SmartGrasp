@@ -18,6 +18,13 @@ def handle(perception: PerceptionOutput) -> GraspDecision:
     if target_mid in perception.molmo_to_node:
         t_node = perception.molmo_to_node[target_mid]
         candidate_nodes = [n for n in candidate_nodes if n != t_node]
+    preferred_occluders = set(perception.preferred_occluder_ids or ())
+    if preferred_occluders:
+        candidate_nodes = [
+            node
+            for node in candidate_nodes
+            if perception.node_info[node]["molmo_id"] in preferred_occluders
+        ]
 
     if not candidate_nodes:
         return GraspDecision(

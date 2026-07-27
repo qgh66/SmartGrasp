@@ -10,7 +10,8 @@
 机械臂 + Robotiq-85 夹爪（见 robot_gripper.py）：
   张开 → 移到目标上方 over 点 → 沿 approach 方向直线下插 → 欠驱动闭合（真实摩擦
   夹持，可选约束仅用于抑制数值抖动）→ 直线抬回 → 搬运到配置的放置关节位姿
-  → 保持夹持。配置目标关节位姿时，以物体是否随夹爪到达该位置判定成功。
+  → 可选松爪投放。配置目标关节位姿时，以物体是否随夹爪到达该位置判定成功；
+  松爪后的下落只记录为诊断信息，不改变已经完成的搬运判定。
 """
 
 import sys
@@ -80,6 +81,8 @@ class GraspEvaluator:
                  assisted_grasp: bool = False,
                  validate_target_center: bool = True,
                  place_target_joint_pose_deg=None,
+                 release_after_place: bool = False,
+                 release_settle_steps: int = 120,
                  gui_speed: float = 1.0):
         self.object_id = object_id
         self.gripper = gripper
@@ -93,6 +96,14 @@ class GraspEvaluator:
         )
         if self.place_target_joint_pose_deg is not None and len(self.place_target_joint_pose_deg) != 6:
             raise ValueError("place_target_joint_pose_deg must contain exactly 6 values")
+        self.release_after_place = bool(release_after_place)
+        if self.release_after_place and self.place_target_joint_pose_deg is None:
+            raise ValueError(
+                "release_after_place requires place_target_joint_pose_deg"
+            )
+        if int(release_settle_steps) < 0:
+            raise ValueError("release_settle_steps must be non-negative")
+        self.release_settle_steps = int(release_settle_steps)
         if gui_speed <= 0:
             raise ValueError("gui_speed must be greater than zero")
         self.gui_speed = float(gui_speed)
@@ -376,8 +387,35 @@ class GraspEvaluator:
                 'object_transport_distance': object_transport_distance,
                 'transport_follow_ratio': transport_follow_ratio,
                 'object_followed_to_place': object_followed_to_place,
-                'grasp_held_at_target': True,
+                'grasp_held_at_target': not self.release_after_place,
+                'released_after_place': self.release_after_place,
             }
+            if self.release_after_place:
+                release_start_position = transport_target_obj_pos.copy()
+                self.gripper.release_grasp()
+                self.gripper.set_opening(self.gripper._max_opening)
+                self._gui_step(self.release_settle_steps, sleep=0.25)
+                release_end_position = np.array(
+                    p.getBasePositionAndOrientation(self.object_id)[0]
+                )
+                placement.update({
+                    'release_settle_steps': self.release_settle_steps,
+                    'post_release_object_position': (
+                        release_end_position.tolist()
+                    ),
+                    'release_fall_distance': max(
+                        0.0,
+                        float(
+                            release_start_position[2]
+                            - release_end_position[2]
+                        ),
+                    ),
+                })
+                frame_log.append({
+                    'phase': 'release',
+                    'step': 'settled',
+                    **_snapshot(self.object_id, self.gripper),
+                })
         else:
             success = bool(bilateral_contact and lifted)
             if not bilateral_contact:

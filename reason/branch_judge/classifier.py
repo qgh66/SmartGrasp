@@ -32,6 +32,18 @@ def classify_branch(perception: PerceptionOutput) -> tuple[Branch, str]:
         )
 
     # Case 2: target is missing from the graph.
+    preferred_occluders = set(perception.preferred_occluder_ids or ())
+    visible_preferred_occluders = preferred_occluders.intersection(
+        perception.molmo_to_node
+    )
+    if visible_preferred_occluders:
+        return (
+            Branch.FULLY_OCCLUDED,
+            f"target molmo_id={target_mid} not in graph, but Intent identified "
+            "visible occluder candidates="
+            f"{sorted(visible_preferred_occluders)} -> likely fully occluded",
+        )
+
     if graph.number_of_edges() == 0:
         return (
             Branch.FAULT,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Sequentially grasp every configured object in one PyBullet scene."""
+"""Sequential and continuous multi-object grasp workflows."""
 
 import json
 import os
@@ -155,12 +155,232 @@ def _infer_target_grasps(network, device, camera, point_cloud, target_points, co
     }
 
 
+def _ordered_target_ids(scene, args, config):
+    """Resolve an explicit order without changing the scene registry order."""
+    target_names = args.target_objects
+    if target_names is None and args.target_object:
+        target_names = [args.target_object]
+    if target_names is None and args.continuous_grasp:
+        target_names = (
+            config.get("continuous_grasp", {}).get("target_order")
+        )
+
+    if target_names:
+        unique_names = list(dict.fromkeys(target_names))
+        available_names = {
+            item.name for item in scene.get_object_registry().values()
+        }
+        unknown_names = [
+            name for name in unique_names
+            if name not in available_names
+        ]
+        if unknown_names:
+            raise ValueError(
+                "Unknown target object name(s): "
+                + ", ".join(unknown_names)
+            )
+        return [
+            scene.get_body_id_by_name(name) for name in unique_names
+        ], unique_names
+
+    target_ids = list(scene.object_ids)
+    return target_ids, [
+        scene.get_object_info(body_id).name for body_id in target_ids
+    ]
+
+
+def _attempt_target(
+    *,
+    scene,
+    gripper,
+    camera,
+    network,
+    device,
+    config,
+    args,
+    target_body_id,
+    capture_pose,
+    place_pose,
+    release_after_place,
+    release_settle_steps,
+):
+    """Capture the current scene and execute one target's best candidates."""
+    target = scene.get_object_info(target_body_id)
+    gripper.release_grasp()
+    gripper.set_opening(gripper._max_opening)
+    gripper.move_to_joint_pose_deg(capture_pose)
+
+    rgb, depth, segmentation, point_cloud, object_clouds, target_points = (
+        _capture_target(scene, camera, target_body_id, config)
+    )
+    visualization = {
+        "rgb": rgb,
+        "depth": depth,
+        "point_cloud": point_cloud,
+        "seg": segmentation,
+        "object_point_counts": {
+            body_id: int(len(points))
+            for body_id, points in object_clouds.items()
+        },
+        "target_body_id": int(target_body_id),
+        "target_object_name": target.name,
+    }
+    target_point_count = (
+        int(len(target_points)) if target_points is not None else 0
+    )
+    if target_point_count == 0:
+        print("  跳过本轮: 相机看不到该物体")
+        return {
+            "target_body_id": int(target_body_id),
+            "target_object_name": target.name,
+            "obj_path": target.path,
+            "success": False,
+            "failure_reason": "target_not_visible",
+            "evaluated_candidates": 0,
+            "target_point_count": 0,
+            "grasps": [],
+        }, visualization
+
+    grasps, filter_stats = _infer_target_grasps(
+        network, device, camera, point_cloud, target_points, config
+    )
+    if len(grasps) == 0:
+        print("  跳过本轮: 过滤后没有候选")
+        return {
+            "target_body_id": int(target_body_id),
+            "target_object_name": target.name,
+            "obj_path": target.path,
+            "success": False,
+            "failure_reason": "no_filtered_candidates",
+            "evaluated_candidates": 0,
+            "target_point_count": target_point_count,
+            "grasps": [],
+            **filter_stats,
+        }, visualization
+
+    requested_count = len(grasps) if args.stop_on_success else args.top_k
+    evaluation_count = min(
+        requested_count,
+        args.max_candidates_per_object,
+        len(grasps),
+    )
+    activated_from_staging = scene.activate_staged_object(target_body_id)
+    if activated_from_staging:
+        print(
+            f"  目标已恢复动态质量: {target.name} "
+            f"({target.mass:.3f} kg)"
+        )
+    evaluator = GraspEvaluator(
+        object_id=target_body_id,
+        gripper=gripper,
+        point_cloud=target_points,
+        gui=args.gui,
+        assisted_grasp=args.assisted_grasp,
+        validate_target_center=False,
+        place_target_joint_pose_deg=place_pose,
+        release_after_place=release_after_place,
+        release_settle_steps=release_settle_steps,
+        gui_speed=args.gui_speed,
+    )
+    results = evaluator.evaluate(
+        grasps,
+        top_k=evaluation_count,
+        stop_on_success=args.stop_on_success,
+        preserve_success_state=True,
+    )
+    for result in results:
+        placement = result.get("placement") or {}
+        status = "SUCCESS" if result["success"] else "FAIL"
+        failure_reason = result.get("failure_reason") or "none"
+        print(
+            f"  {status} candidate={result['grasp_index']}, "
+            f"score={result['score']:.3f}, "
+            f"transported={placement.get('object_followed_to_place', False)}, "
+            f"released={placement.get('released_after_place', False)}, "
+            f"reason={failure_reason}"
+        )
+    successful = next(
+        (result for result in results if result["success"]),
+        None,
+    )
+    if activated_from_staging:
+        if successful:
+            scene.finish_staged_object(target_body_id)
+        else:
+            scene.restage_object(target_body_id)
+    print(
+        f"  结果: {'成功' if successful else '失败'}, "
+        f"已测试 {len(results)}/{len(grasps)} 个候选"
+    )
+    return {
+        "target_body_id": int(target_body_id),
+        "target_object_name": target.name,
+        "obj_path": target.path,
+        "success": successful is not None,
+        "successful_grasp_index": (
+            int(successful["grasp_index"]) if successful else None
+        ),
+        "failure_reason": (
+            None
+            if successful
+            else (
+                results[-1].get("failure_reason")
+                if results
+                else "no_evaluated_candidates"
+            )
+        ),
+        "evaluated_candidates": len(results),
+        "filtered_candidates": len(grasps),
+        "target_point_count": target_point_count,
+        "activated_from_staging": activated_from_staging,
+        "grasps": results,
+        **filter_stats,
+    }, visualization
+
+
+def _summarize_continuous_objects(scene, target_ids, attempts):
+    """Build one compact final record per requested object."""
+    summaries = []
+    for target_body_id in target_ids:
+        target = scene.get_object_info(target_body_id)
+        object_attempts = [
+            attempt
+            for attempt in attempts
+            if attempt["target_body_id"] == int(target_body_id)
+        ]
+        successful_attempt = next(
+            (attempt for attempt in object_attempts if attempt["success"]),
+            None,
+        )
+        last_attempt = object_attempts[-1] if object_attempts else {}
+        summaries.append({
+            "target_body_id": int(target_body_id),
+            "target_object_name": target.name,
+            "success": successful_attempt is not None,
+            "attempt_count": len(object_attempts),
+            "successful_attempt_index": (
+                successful_attempt.get("attempt_index")
+                if successful_attempt
+                else None
+            ),
+            "failure_reason": (
+                None
+                if successful_attempt
+                else last_attempt.get("failure_reason", "not_attempted")
+            ),
+        })
+    return summaries
+
+
 def run_all_objects(args):
     if not args.scene_config:
-        raise ValueError("--all-objects requires --scene-config")
+        raise ValueError(
+            "--all-objects/--continuous-grasp requires --scene-config"
+        )
     if args.max_candidates_per_object <= 0:
         raise ValueError("--max-candidates-per-object must be greater than zero")
 
+    continuous_mode = bool(args.continuous_grasp)
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -171,15 +391,47 @@ def run_all_objects(args):
     network = _load_network(args, device)
 
     config = load_scene_config(args.scene_config)
+    continuous_config = config.get("continuous_grasp", {})
+    release_after_place = bool(args.drop_after_grasp or continuous_mode)
+    release_settle_steps = (
+        args.drop_settle_steps
+        if args.drop_settle_steps is not None
+        else int(continuous_config.get("drop_settle_steps", 180))
+    )
+    max_stalled_passes = (
+        args.max_stalled_passes
+        if args.max_stalled_passes is not None
+        else int(continuous_config.get("max_stalled_passes", 2))
+    )
+    if release_settle_steps < 0:
+        raise ValueError("--drop-settle-steps must be non-negative")
+    if max_stalled_passes <= 0:
+        raise ValueError("--max-stalled-passes must be greater than zero")
+
     scene = SimulationScene(gui=args.gui)
     scene.connect()
     scene.load_plane()
     scene.load_objects(config["_resolved_objects"])
+    staging_enabled = bool(
+        config.get("object_staging", {}).get(
+            "lock_initial_poses_until_grasp",
+            False,
+        )
+    )
+    if staging_enabled:
+        scene.stage_objects_at_initial_poses()
+        print(
+            "  初始堆叠已暂时锁定；每个目标进入抓取评估前恢复动态质量"
+        )
     for _ in range(int(config.get("settle_steps", 300))):
         scene.step()
 
     capture_pose = config.get("capture_joint_pose_deg")
     place_pose = config.get("place_target_joint_pose_deg")
+    if release_after_place and place_pose is None:
+        raise ValueError(
+            "Drop mode requires scene config place_target_joint_pose_deg"
+        )
     gripper = create_gripper(
         args.gripper_model,
         planner=None,
@@ -213,123 +465,107 @@ def run_all_objects(args):
         fov=float(camera_config.get("fov", 60.0)),
     )
 
-    object_results = []
-    last_visualization = None
-    target_names = args.target_objects
-    if target_names is None and args.target_object:
-        target_names = [args.target_object]
-    if target_names:
-        target_names = list(dict.fromkeys(target_names))
-        target_ids = [scene.get_body_id_by_name(name) for name in target_names]
-        print(f"  按指定顺序处理: {' -> '.join(target_names)}")
-    else:
-        target_ids = list(scene.object_ids)
-    for object_number, target_body_id in enumerate(target_ids, start=1):
-        target = scene.get_object_info(target_body_id)
-        print(f"\n[{object_number}/{len(target_ids)}] 目标物体: {target.name}")
-        gripper.release_grasp()
-        gripper.set_opening(gripper._max_opening)
-        gripper.move_to_joint_pose_deg(capture_pose)
-
-        rgb, depth, segmentation, point_cloud, object_clouds, target_points = (
-            _capture_target(scene, camera, target_body_id, config)
-        )
-        target_point_count = int(len(target_points)) if target_points is not None else 0
-        if target_point_count == 0:
-            print("  跳过: 相机看不到该物体")
-            object_results.append({
-                "target_body_id": int(target_body_id),
-                "target_object_name": target.name,
-                "success": False,
-                "failure_reason": "target_not_visible",
-                "evaluated_candidates": 0,
-                "grasps": [],
-            })
-            continue
-
-        grasps, filter_stats = _infer_target_grasps(
-            network, device, camera, point_cloud, target_points, config
-        )
-        if len(grasps) == 0:
-            print("  跳过: 过滤后没有候选")
-            object_results.append({
-                "target_body_id": int(target_body_id),
-                "target_object_name": target.name,
-                "success": False,
-                "failure_reason": "no_filtered_candidates",
-                "evaluated_candidates": 0,
-                "grasps": [],
-                **filter_stats,
-            })
-            continue
-
-        requested_count = len(grasps) if args.stop_on_success else args.top_k
-        evaluation_count = min(
-            requested_count,
-            args.max_candidates_per_object,
-            len(grasps),
-        )
-        evaluator = GraspEvaluator(
-            object_id=target_body_id,
-            gripper=gripper,
-            point_cloud=target_points,
-            gui=args.gui,
-            assisted_grasp=args.assisted_grasp,
-            validate_target_center=False,
-            place_target_joint_pose_deg=place_pose,
-            gui_speed=args.gui_speed,
-        )
-        results = evaluator.evaluate(
-            grasps,
-            top_k=evaluation_count,
-            stop_on_success=args.stop_on_success,
-            preserve_success_state=True,
-        )
-        for result in results:
-            placement = result.get("placement") or {}
-            status = "SUCCESS" if result["success"] else "FAIL"
-            failure_reason = result.get("failure_reason") or "none"
-            print(
-                f"  {status} candidate={result['grasp_index']}, "
-                f"score={result['score']:.3f}, "
-                f"transported={placement.get('object_followed_to_place', False)}, "
-                f"held={placement.get('grasp_held_at_target', False)}, "
-                f"reason={failure_reason}"
-            )
-        successful = next((result for result in results if result["success"]), None)
+    target_ids, target_names = _ordered_target_ids(
+        scene, args, config
+    )
+    print(f"  处理顺序: {' -> '.join(target_names)}")
+    if release_after_place:
         print(
-            f"  结果: {'成功' if successful else '失败'}, "
-            f"已测试 {len(results)}/{len(grasps)} 个候选"
+            "  投放策略: 到达 place_target_joint_pose_deg 后松爪，"
+            f"等待 {release_settle_steps} 个仿真步"
         )
-        object_results.append({
-            "target_body_id": int(target_body_id),
-            "target_object_name": target.name,
-            "obj_path": target.path,
-            "success": successful is not None,
-            "successful_grasp_index": (
-                int(successful["grasp_index"]) if successful else None
-            ),
-            "evaluated_candidates": len(results),
-            "filtered_candidates": len(grasps),
-            "target_point_count": target_point_count,
-            "grasps": results,
-            **filter_stats,
-        })
-        last_visualization = {
-            "rgb": rgb,
-            "depth": depth,
-            "point_cloud": point_cloud,
-            "seg": segmentation,
-            "object_point_counts": {
-                body_id: int(len(points)) for body_id, points in object_clouds.items()
-            },
-            "target_body_id": int(target_body_id),
-            "target_object_name": target.name,
-        }
+
+    last_visualization = None
+    attempts = []
+    if continuous_mode:
+        remaining_ids = list(target_ids)
+        stalled_passes = 0
+        pass_index = 0
+        while remaining_ids and stalled_passes < max_stalled_passes:
+            pass_index += 1
+            pass_succeeded = False
+            print(
+                f"\n[Continuous pass {pass_index}] "
+                f"剩余 {len(remaining_ids)}/{len(target_ids)} 个物体"
+            )
+            for target_body_id in list(remaining_ids):
+                target = scene.get_object_info(target_body_id)
+                print(
+                    f"\n  尝试目标: {target.name} "
+                    f"(pass={pass_index}, attempt={len(attempts) + 1})"
+                )
+                attempt, visualization = _attempt_target(
+                    scene=scene,
+                    gripper=gripper,
+                    camera=camera,
+                    network=network,
+                    device=device,
+                    config=config,
+                    args=args,
+                    target_body_id=target_body_id,
+                    capture_pose=capture_pose,
+                    place_pose=place_pose,
+                    release_after_place=True,
+                    release_settle_steps=release_settle_steps,
+                )
+                attempt["pass_index"] = pass_index
+                attempt["attempt_index"] = len(attempts) + 1
+                attempts.append(attempt)
+                last_visualization = visualization
+                if attempt["success"]:
+                    remaining_ids.remove(target_body_id)
+                    pass_succeeded = True
+                    # The pile changed after every successful drop. Start a new
+                    # pass so all following candidates use a fresh camera frame.
+                    break
+
+            if pass_succeeded:
+                stalled_passes = 0
+            else:
+                stalled_passes += 1
+                print(
+                    "  本轮无物体抓取成功；"
+                    f"连续停滞 {stalled_passes}/{max_stalled_passes} 轮"
+                )
+        object_results = _summarize_continuous_objects(
+            scene, target_ids, attempts
+        )
+    else:
+        object_results = []
+        for object_number, target_body_id in enumerate(
+            target_ids,
+            start=1,
+        ):
+            target = scene.get_object_info(target_body_id)
+            print(
+                f"\n[{object_number}/{len(target_ids)}] "
+                f"目标物体: {target.name}"
+            )
+            attempt, visualization = _attempt_target(
+                scene=scene,
+                gripper=gripper,
+                camera=camera,
+                network=network,
+                device=device,
+                config=config,
+                args=args,
+                target_body_id=target_body_id,
+                capture_pose=capture_pose,
+                place_pose=place_pose,
+                release_after_place=release_after_place,
+                release_settle_steps=release_settle_steps,
+            )
+            attempt["attempt_index"] = object_number
+            object_results.append(attempt)
+            last_visualization = visualization
 
     successful_objects = sum(item["success"] for item in object_results)
     output = _json_safe({
-        "mode": "all_objects_sequential_pick_and_place",
+        "mode": (
+            "continuous_grasp_and_drop"
+            if continuous_mode
+            else "all_objects_sequential_pick_and_place"
+        ),
         "scene_config": config["_path"],
         "seed": int(args.seed),
         "capture_joint_pose_deg": capture_pose,
@@ -337,12 +573,19 @@ def run_all_objects(args):
         "initial_pose_hold_seconds": float(args.initial_pose_hold_seconds),
         "max_candidates_per_object": int(args.max_candidates_per_object),
         "place_target_joint_pose_deg": place_pose,
+        "drop_after_grasp": release_after_place,
+        "object_staging_enabled": staging_enabled,
+        "drop_settle_steps": release_settle_steps,
+        "max_stalled_passes": (
+            max_stalled_passes if continuous_mode else None
+        ),
         "gui_speed": float(args.gui_speed),
         "assisted_grasp": bool(args.assisted_grasp),
         "gripper_model": args.gripper_model,
         "object_total": len(object_results),
         "object_success": successful_objects,
         "objects": object_results,
+        "attempts": attempts if continuous_mode else [],
         "final_scene_objects": scene.get_object_poses(),
         "gripper": gripper.metadata(),
     })
@@ -359,7 +602,10 @@ def run_all_objects(args):
         with open(visualization_path, "wb") as visualization_file:
             pickle.dump(last_visualization, visualization_file)
 
-    print(f"\n全部物体结果: {successful_objects}/{len(object_results)} 成功")
+    print(
+        f"\n全部物体结果: "
+        f"{successful_objects}/{len(object_results)} 成功"
+    )
     print(f"结果已保存: {args.output}")
     if video_recorder is not None:
         video_recorder.close()

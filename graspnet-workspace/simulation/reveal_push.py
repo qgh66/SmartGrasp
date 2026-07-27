@@ -6,6 +6,7 @@ import json
 import os
 import pickle
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from simulation.object_mapping import match_scene_object_by_mask
 TABLE_CLEARANCE = 0.005
 DEFAULT_PUSH_PENETRATION = 0.04
 DEFAULT_CONTACT_MARGIN = 0.02
+PYBULLET_SIMULATION_HZ = 240.0
 
 
 def json_safe(value):
@@ -156,14 +158,28 @@ def snapshot(body_id: int, gripper: JakaZu3Robotiq85Gripper | None = None) -> di
 class RevealPushExecutor:
     """Execute a side push using the current JAKA+Robotiq gripper interface."""
 
-    def __init__(self, object_id: int, gripper: JakaZu3Robotiq85Gripper, gui: bool = False):
+    def __init__(
+        self,
+        object_id: int,
+        gripper: JakaZu3Robotiq85Gripper,
+        gui: bool = False,
+        gui_speed: float = 1.0,
+    ):
+        if gui_speed <= 0:
+            raise ValueError("gui_speed must be greater than zero")
         self.object_id = int(object_id)
         self.gripper = gripper
         self.gui = gui
+        self.gui_speed = float(gui_speed)
 
     def step(self, steps: int = 1):
+        """Advance physics at a visible real-time pace when GUI is enabled."""
         for _ in range(int(steps)):
             p.stepSimulation()
+            if self.gui:
+                time.sleep(
+                    1.0 / (PYBULLET_SIMULATION_HZ * self.gui_speed)
+                )
 
     def execute_push(
         self,

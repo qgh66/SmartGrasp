@@ -22,6 +22,7 @@ DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://yunwu.ai/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT = 600.0
+HIDDEN_TARGET_OCCLUDER_MODE = "visible_occluder_for_hidden_target"
 
 _SIDE_WORDS = {
     "left",
@@ -273,6 +274,24 @@ def _result_from_vlm_decision(
 ) -> IntentResult:
     object_by_id = {obj.object_id: obj for obj in objects}
     if not _as_bool(decision.get("target_present", False)):
+        selection_mode = str(decision.get("selection_mode") or "").strip().lower()
+        if selection_mode == HIDDEN_TARGET_OCCLUDER_MODE:
+            candidate_ids = _int_list(decision.get("candidate_object_ids"))
+            candidates = tuple(
+                object_by_id[obj_id]
+                for obj_id in candidate_ids
+                if obj_id in object_by_id
+            )
+            if candidates:
+                return IntentResult(
+                    target_object=None,
+                    candidates=candidates,
+                    reason=str(
+                        decision.get("reason")
+                        or "The target is hidden; selected visible occluder candidates."
+                    ),
+                    vlm_decision=decision,
+                )
         return IntentResult(
             target_object=None,
             candidates=(),
@@ -333,10 +352,16 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "image shows spatial context; the final-object sheet shows each assembled "
         "object isolated on white and labeled with its final object id. Use the "
         "sheet to inspect object appearance and map it to summary.json ids.\n"
+        "If the requested target itself is completely invisible, but the instruction "
+        "explicitly identifies a visible object that covers or contains it, treat that "
+        "visible object as an occluder candidate. In that case set target_present=false, "
+        f"selection_mode={HIDDEN_TARGET_OCCLUDER_MODE!r}, target_object_id=null, "
+        "and put only the visible covering object's id(s) in candidate_object_ids.\n"
         "IMPORTANT: If the user's description is ambiguous or incomplete, combine "
         "the scene object information and object list, and reason from object shape, "
-        "color, function, and spatial position. You must still select the single "
-        "most likely object as target_object_id.\n"
+        "color, function, and spatial position. Except for the completely hidden "
+        "target rule above, you must still select the single most likely object as "
+        "target_object_id.\n"
         "Step 3. Spatial reasoning: if the instruction uses words such as top, "
         "bottom, upper, lower, front, or back, interpret them from 2D image position. "
         "If the instruction says that the target is underneath, below, or covered by "
@@ -351,7 +376,12 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "- Do not select object parts.\n"
         "- Do not generate grasp poses.\n"
         "- Do not decide visibility branches such as fully_visible or partially_visible.\n"
-        "- If no listed object can satisfy the instruction, set target_present=false.\n"
+        "- selection_mode must be target when selecting a visible target, "
+        f"{HIDDEN_TARGET_OCCLUDER_MODE} when returning visible occluders for a "
+        "completely hidden target, or none when neither can be identified.\n"
+        "- If no listed target or instruction-grounded visible occluder can satisfy "
+        "the instruction, set target_present=false, selection_mode=none, and return "
+        "an empty candidate_object_ids list.\n"
         "- If multiple objects are plausible, include them in candidate_object_ids "
         "but still choose the best target_object_id.\n"
         "- Return a concise reason explaining the task interpretation and object choice.\n\n"
@@ -359,6 +389,7 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "Required JSON shape:\n"
         "{\n"
         '  "target_present": true or false,\n'
+        '  "selection_mode": "target | visible_occluder_for_hidden_target | none",\n'
         '  "inferred_task": "short phrase or null",\n'
         '  "target_object_id": integer or null,\n'
         '  "target_category": string or null,\n'
