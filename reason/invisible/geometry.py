@@ -86,7 +86,7 @@ def precompute_geometry_cache(perception) -> dict:
         visible_area = float(mask.sum())
         if mask.any():
             d_top = float(depth[mask].mean())
-            height = max(1.0, ground_level - d_top)
+            height = max(0.001, ground_level - d_top)
         else:
             d_top = 0.0
             height = 1.0
