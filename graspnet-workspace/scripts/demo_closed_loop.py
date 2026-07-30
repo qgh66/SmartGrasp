@@ -864,6 +864,7 @@ def main():
         # The closing-region filter already validates target occupancy and is
         # less biased than center-to-surface distance for slender objects.
         validate_target_center=not bool(scene_config),
+        scene_object_ids=scene.object_ids,
         place_target_joint_pose_deg=place_target_joint_pose_deg,
         gui_speed=args.gui_speed,
     )

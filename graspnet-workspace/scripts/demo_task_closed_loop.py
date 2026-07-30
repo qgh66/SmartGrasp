@@ -590,6 +590,7 @@ def _execute_grasp(
             gui=args.gui,
             assisted_grasp=args.assisted_grasp,
             validate_target_center=False,
+            scene_object_ids=scene.object_ids,
             place_target_joint_pose_deg=config.get(
                 "place_target_joint_pose_deg"
             ),

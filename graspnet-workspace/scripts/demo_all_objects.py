@@ -277,6 +277,7 @@ def _attempt_target(
         gui=args.gui,
         assisted_grasp=args.assisted_grasp,
         validate_target_center=False,
+        scene_object_ids=scene.object_ids,
         place_target_joint_pose_deg=place_pose,
         release_after_place=release_after_place,
         release_settle_steps=release_settle_steps,

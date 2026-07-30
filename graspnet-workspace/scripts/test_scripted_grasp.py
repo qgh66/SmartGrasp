@@ -220,6 +220,7 @@ def main():
         gripper=gripper,
         point_cloud=target_points,
         gui=args.gui,
+        scene_object_ids=scene.object_ids,
     )
     results = evaluator.evaluate(grasp_group, top_k=args.top_k)
     success_count = sum(1 for item in results if item["success"])

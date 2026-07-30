@@ -322,6 +322,11 @@ class JakaZu3Robotiq85Gripper:
     def collision_body_ids(self):
         return list(dict.fromkeys([self.robot_id, self.robotiq_id]))
 
+    def set_collision_with_objects(self, object_ids, enabled):
+        """Toggle collisions between all robot links and scene objects."""
+        for object_id in dict.fromkeys(int(value) for value in object_ids):
+            self.set_collision_with_object(object_id, enabled=enabled)
+
     def set_collision_with_object(self, object_id, enabled):
         """Enable or disable collisions between every robot link and an object."""
         enabled_flag = 1 if enabled else 0

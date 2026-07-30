@@ -80,6 +80,7 @@ class GraspEvaluator:
                  point_cloud: np.ndarray = None, gui: bool = False,
                  assisted_grasp: bool = False,
                  validate_target_center: bool = True,
+                 scene_object_ids=None,
                  place_target_joint_pose_deg=None,
                  release_after_place: bool = False,
                  release_settle_steps: int = 120,
@@ -89,6 +90,11 @@ class GraspEvaluator:
         self.gui = gui
         self.assisted_grasp = assisted_grasp
         self.validate_target_center = validate_target_center
+        self.scene_object_ids = list(dict.fromkeys(
+            int(value) for value in (scene_object_ids or [object_id])
+        ))
+        if int(object_id) not in self.scene_object_ids:
+            self.scene_object_ids.append(int(object_id))
         self.place_target_joint_pose_deg = (
             [float(value) for value in place_target_joint_pose_deg]
             if place_target_joint_pose_deg is not None
@@ -191,11 +197,12 @@ class GraspEvaluator:
         initial_obj_pos, initial_obj_orn = p.getBasePositionAndOrientation(self.object_id)
         initial_linear_velocity, initial_angular_velocity = p.getBaseVelocity(self.object_id)
 
-        # Step 1: 张开夹爪并移动到目标上方 over 点（参考 grasp(): open + move over）
-        # Joint-space interpolation has no collision-aware planner and may sweep
-        # through the target. Ignore target contact only during free-space transit,
-        # then restore the exact initial object state before physical approach.
-        self.gripper.set_collision_with_object(self.object_id, enabled=False)
+        # Step 1: 自由空间过渡不使用碰撞规划，因此在移动到最终抓取位姿期间，
+        # 临时关闭整个机械臂（包括夹爪）与所有场景物品之间的碰撞。
+        self.gripper.set_collision_with_objects(
+            self.scene_object_ids,
+            enabled=False,
+        )
         self.gripper.set_opening(0.085)
         self.gripper.set_pose(over_pos, rot_m)
         self._gui_step(10, sleep=0.02)
@@ -205,9 +212,8 @@ class GraspEvaluator:
             linearVelocity=initial_linear_velocity,
             angularVelocity=initial_angular_velocity,
         )
-        # Keep target collision disabled during the unplanned IK descent. The
-        # model-free filter has already checked the gripper approach corridor;
-        # this phase only positions the open gripper for physical closure.
+        # Keep all robot-object collisions disabled during the unplanned IK
+        # descent. They are restored when physical finger closure begins.
         obj_z_before = float(initial_obj_pos[2])
         frame_log.append({'phase': 'approach', 'step': 'over', **_snapshot(self.object_id, self.gripper)})
 
@@ -248,15 +254,20 @@ class GraspEvaluator:
                 'object_waist_z': float(self.object_waist_z),
             }
 
-        # Restore the untouched target at the final open-gripper pose, then
-        # reject only severe final-pose interpenetration before enabling contact.
+        # Restore the untouched target at the final open-gripper pose, re-enable
+        # physical contact, then reject severe final-pose interpenetration.
         p.resetBasePositionAndOrientation(self.object_id, initial_obj_pos, initial_obj_orn)
         p.resetBaseVelocity(
             self.object_id,
             linearVelocity=initial_linear_velocity,
             angularVelocity=initial_angular_velocity,
         )
-        self.gripper.set_collision_with_object(self.object_id, enabled=True)
+        # 自由空间过渡结束。夹爪开始闭合时恢复整机与所有物品的碰撞，
+        # 让手指与目标物之间重新产生真实接触和摩擦。
+        self.gripper.set_collision_with_objects(
+            self.scene_object_ids,
+            enabled=True,
+        )
         p.performCollisionDetection()
         penetration_depth = self.gripper.max_penetration_depth(self.object_id)
         if penetration_depth > 0.005:
@@ -444,6 +455,9 @@ class GraspEvaluator:
                 'attachment_max_tcp_distance': ASSISTED_GRASP_MAX_TCP_DISTANCE,
                 'finger_contact_links': finger_contact_links,
                 'finger_link_positions': finger_link_positions,
+                'robot_object_collisions_disabled_during_approach': True,
+                'collision_transition_object_ids': self.scene_object_ids,
+                'robot_object_collisions_restored_for_close': True,
                 'assisted_constraint': assisted_constraint,
                 'placement': placement,
                 'failure_reason': failure_reason,
