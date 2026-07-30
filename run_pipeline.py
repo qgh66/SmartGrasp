@@ -29,6 +29,25 @@ SMARTGRASP_ROOT = Path(__file__).resolve().parent
 DATA_REALWORLD_ROOT = SMARTGRASP_ROOT / "data_realworld"
 LOGS_DIR = SMARTGRASP_ROOT / "logs"
 
+# Edit SAM2 settings here. These values are used by both the full Perception
+# pipeline and ``--debug sam2``. A ``None`` depth value inherits the matching
+# RGB SAM2 value inside perception/run_perception.py.
+SAM2_PARAMETERS: dict[str, int | float | None] = {
+    "--mask-clean-kernel": 3,
+    "--proposal-min-area-ratio": 0.006,
+    "--proposal-max-area-ratio": 0.11,
+    "--proposal-border-fraction-threshold": 0.18,
+    "--sam2-points-per-side": 24,
+    "--sam2-crop-n-layers": 0,
+    "--sam2-pred-iou-thresh": 0.68,
+    "--sam2-stability-score-thresh": 0.83,
+    "--depth-sam2-points-per-side": 24,
+    "--depth-sam2-crop-n-layers": 1,
+    "--depth-sam2-pred-iou-thresh": 0.58,
+    "--depth-sam2-stability-score-thresh": 0.73,
+}
+SAVE_SAM2_CANDIDATES = True
+
 # Global log file handle – opened once at pipeline start and closed at exit.
 _log_file: TextIO | None = None
 _log_path: Path | None = None
@@ -111,6 +130,13 @@ def run_perception(scene_dir: Path, args: argparse.Namespace) -> bool:
     ]
     if args.device:
         cmd.extend(["--device", args.device])
+    if args.debug:
+        cmd.extend(["--debug", args.debug])
+    for option, value in SAM2_PARAMETERS.items():
+        if value is not None:
+            cmd.extend([option, str(value)])
+    if SAVE_SAM2_CANDIDATES:
+        cmd.append("--save-candidates")
     result = _run(cmd, f"Perception on {scene_id}")
     return result.returncode == 0
 
@@ -276,6 +302,15 @@ def main():
     parser.add_argument("--perception-only", action="store_true", help="Stop after perception")
     parser.add_argument("--reason-only", action="store_true", help="Stop after reason")
     parser.add_argument("--no-grasp", action="store_true", help="Skip grasp execution")
+    parser.add_argument(
+        "--debug",
+        choices=["sam2"],
+        default=None,
+        help=(
+            "sam2: keep the normal RGB-D capture, run Perception through SAM2 "
+            "candidate generation, and stop before VLM review/assembly"
+        ),
+    )
     parser.add_argument("--scene-dir", default=None, help="Use existing scene dir instead of new capture")
     args = parser.parse_args()
 
@@ -283,6 +318,7 @@ def main():
     log_path = _init_logging()
     _log(f"Instruction: {args.instruction}")
     _log(f"Calibration: {args.calibration_mode}")
+    _log(f"Debug: {args.debug or 'disabled'}")
     _log(f"Log file: {log_path}")
 
     try:
@@ -336,6 +372,17 @@ def _main_impl(args: argparse.Namespace) -> None:
     if not run_perception(scene_dir, args):
         _log("ERROR: perception failed")
         sys.exit(1)
+
+    if args.debug == "sam2":
+        debug_output = scene_dir / "perception" / "debug_sam2.json"
+        if not debug_output.is_file():
+            _log(f"ERROR: SAM2 debug output not found: {debug_output}")
+            sys.exit(1)
+        _log(
+            "[pipeline] SAM2 debug done before VLM review/assembly. "
+            f"outputs in {scene_dir / 'perception'}"
+        )
+        return
 
     if args.perception_only:
         _log(f"[pipeline] perception done. outputs in {scene_dir / 'perception'}")

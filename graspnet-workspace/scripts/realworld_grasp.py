@@ -104,7 +104,7 @@ DEFAULT_PLACE_TARGET_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.place_
 DEFAULT_PLACE_RELEASE_LOWER_MM = float(config_get(REALWORLD_CONFIG, "robot.place_release_lower_mm", 50.0))
 DEFAULT_JOINT_VELOCITY_RAD_S = float(config_get(REALWORLD_CONFIG, "robot.joint_velocity_rad_s", 0.5))
 DEFAULT_CAMERA_INDEX = int(config_get(REALWORLD_CONFIG, "camera.default_index", 1))
-DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "72659"))
+DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "76630"))
 DEFAULT_JAKA_PYTHON = os.environ.get(
     "JAKA_PYTHON",
     str(config_path(REALWORLD_CONFIG, "paths.jaka_python", WORKSPACE_ROOT, "/home/admin128/anaconda3/envs/smartgrasp310/bin/python")),
@@ -568,7 +568,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--warmup-frames", type=int, default=30, help="RealSense warmup frames before capture.")
     parser.add_argument("--camera-index", type=int, default=DEFAULT_CAMERA_INDEX, help="Fallback RealSense device index if --camera-serial is empty.")
-    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense serial number or unique suffix. Default matches the camera ending with 72659.")
+    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense serial number or unique suffix. Default matches the camera ending with 76630.")
     parser.add_argument("--ckpt", default=str(DEFAULT_CHECKPOINT), help="GraspNet checkpoint path.")
     parser.add_argument("--device", default="cuda:0", help="Inference device, e.g. cuda:0 or cpu.")
     parser.add_argument("--num-points", type=int, default=20000, help="Point count sampled for GraspNet.")

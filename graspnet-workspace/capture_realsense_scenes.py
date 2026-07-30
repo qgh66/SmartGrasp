@@ -16,7 +16,7 @@ import pyrealsense2 as rs
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 720
 DEFAULT_CAMERA_INDEX = 1
-DEFAULT_CAMERA_SERIAL_SUFFIX = "72659"
+DEFAULT_CAMERA_SERIAL_SUFFIX = "76630"
 DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parents[1] / "realworld_data"
 WINDOW_NAME = "RealSense Scene Capture"
 

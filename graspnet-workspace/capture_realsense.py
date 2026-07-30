@@ -9,7 +9,7 @@ import json
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 720
 DEFAULT_CAMERA_INDEX = 1
-DEFAULT_CAMERA_SERIAL_SUFFIX = "72659"
+DEFAULT_CAMERA_SERIAL_SUFFIX = "76630"
 
 
 def list_realsense_devices():
@@ -62,7 +62,7 @@ def select_realsense_device(devices, camera_serial=None, camera_index=DEFAULT_CA
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Capture aligned RealSense RGB-D frames.")
     parser.add_argument("--camera-index", type=int, default=DEFAULT_CAMERA_INDEX, help="没有指定序列号时的备用 RealSense 设备 index。")
-    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense 完整序列号或唯一后缀；默认匹配 72659 结尾的相机。")
+    parser.add_argument("--camera-serial", default=DEFAULT_CAMERA_SERIAL_SUFFIX, help="RealSense 完整序列号或唯一后缀；默认匹配 76630 结尾的相机。")
     parser.add_argument("--save-path", default="./data", help="保存 color/depth 的目录。")
     parser.add_argument("--list-devices", action="store_true", help="只列出 RealSense 设备，不启动相机。")
     return parser

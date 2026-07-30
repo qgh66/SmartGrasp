@@ -5,7 +5,7 @@
 正式入口是项目根目录的 `run_pipeline.py`。它按下面的顺序完整运行一次：
 
 ```text
-尾号 72659 的 RealSense 拍摄 RGB-D
+尾号 76630 的 RealSense 拍摄 RGB-D
 → Perception（背景 Mask、SAM2、VLM、遮挡图）
 → Intent（从英文指令选择目标对象）
 → Reason（选择当前要抓的对象和 SAM2 part）
@@ -16,8 +16,8 @@
 ### 运行前准备
 
 1. 确认 JAKA 工作区安全、急停已经解除、控制器和夹爪可用。
-2. 确认尾号 `72659` 的 RealSense 已连接；当前完整序列号为
-   `243122072659`。
+2. 确认尾号 `76630` 的 RealSense 已连接。程序会用该唯一后缀
+   匹配完整序列号。
 3. 确认根目录存在 `api_config.json`：
 
 ```json
@@ -52,7 +52,7 @@ python -u run_pipeline.py \
 calibration-mode = hand_eye
 top-k = 50
 candidate-index = 0
-camera serial suffix = 72659
+camera serial suffix = 76630
 ```
 
 每次运行创建一个不带 `scene_` 前缀的时间戳目录：
@@ -92,6 +92,11 @@ python -u run_pipeline.py \
   --instruction "grasp the screwdriver on the left" \
   --capture-only
 
+# 正常拍摄 RGB-D，运行背景排除和 SAM2 候选生成，在 VLM 审核/拼接前停止
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --debug sam2
+
 # 拍照并运行 Perception 后停止
 python -u run_pipeline.py \
   --instruction "grasp the screwdriver on the left" \
@@ -107,6 +112,15 @@ python -u run_pipeline.py \
   --instruction "grasp the screwdriver on the left" \
   --no-grasp
 ```
+
+`--debug sam2` 会保留本次拍摄的 `input/rgb.png`、深度和相机参数，
+并在 `perception/` 中生成 `label_1_sam2auto.png`、
+`sam2_rgb_parts_sheet.png`、`sam2_auto_candidates/` 和 `debug_sam2.json`。
+该模式不调用 Perception VLM，也不运行 Intent、Reason、GraspNet 或机械臂抓取。
+
+SAM2 参数不需要写在命令行中。直接修改 `run_pipeline.py` 顶部的
+`SAM2_PARAMETERS` 字典即可，正常 Perception 和 `--debug sam2` 会共用这一套值。
+深度 SAM2 参数为 `None` 时会跟随对应的 RGB SAM2 值。
 
 复用已经拍摄的场景、重新执行后续阶段：
 
@@ -526,7 +540,7 @@ python gui/app.py \
 ```bash
 conda activate smartgrasp
 cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
-python capture_realsense_scenes.py --camera-serial 72659
+python capture_realsense_scenes.py --camera-serial 76630
 ```
 
 脚本会在 `realworld_data/` 下创建下一个未使用的场景目录，编号从 `scene_1` 开始。预览窗口左侧为 RGB，右侧为对齐到彩色图的伪彩深度：
@@ -594,7 +608,7 @@ cd /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace
 
 python scripts/collect_handeye_chessboard.py \
   --output-dir calibration/handeye_chessboard_raw \
-  --camera-serial 72659 \
+  --camera-serial 76630 \
   --jaka-python /home/admin128/anaconda3/envs/smartgrasp310/bin/python \
   --jkrc-dir /home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/jkrc
 ```
@@ -680,7 +694,7 @@ NUM_CYCLES=3 bash scripts/run_realworld_continuous_grasp.sh
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
+  --camera-serial 76630 \
   --top-k 100 \
   --grasp-input-mode bbox \
   --trial-log-subdir single_object \
@@ -730,7 +744,7 @@ bash scripts/run_realworld_single_grasp.sh
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
+  --camera-serial 76630 \
   --grasp-input-mode bbox \
   --top-k 100 \
   --trial-log-subdir single_object \
@@ -759,7 +773,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --calibration-mode hand_eye \
   --hand-eye-calibration calibration/hand_eye_tcp_camera.json \
-  --camera-serial 243122072659 \
+  --camera-serial 76630 \
   --top-k 100 \
   --trial-log-subdir single_object \
   --trial-name grasp_execute_bbox \
@@ -790,7 +804,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 | 参数 | 当前默认值 | 作用 |
 |------|------------|------|
 | `--output-dir` | `../result` | 当前一轮的 RGB-D、点云和候选输出目录 |
-| `--camera-serial` | 后缀 `72659` | RealSense 序列号或唯一后缀 |
+| `--camera-serial` | 后缀 `76630` | RealSense 序列号或唯一后缀 |
 | `--reuse-capture` | 关闭 | 复用输出目录中的现有 RGB-D |
 | `--warmup-frames` | `30` | 新采集前的相机预热帧数 |
 | `--device` | `cuda:0` | GraspNet 推理设备 |
