@@ -108,7 +108,15 @@ def summary_instruction(summary: dict[str, Any]) -> str:
     return str(summary.get("instruction") or summary.get("annotation") or "")
 
 
-def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
+def _data_realworld_scene_key(scene_dir: Path) -> str:
+    """Return a stable relative key such as ``timestamp/2`` for a scene."""
+    try:
+        return scene_dir.relative_to(DATA_REALWORLD_ROOT).as_posix()
+    except ValueError:
+        return scene_dir.name
+
+
+def load_priority_scene_inputs(scene_id: int | str | None) -> dict[str, Any] | None:
     if scene_id is None:
         return None
 
@@ -177,13 +185,14 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
         instruction, instruction_path = scene_input_instruction(input_dir)
         if instruction is None:
             instruction, instruction_path = scene_input_instruction(scene_dir)  # legacy fallback
+        scene_key = _data_realworld_scene_key(scene_dir)
         summary = {
-            "scene_id": optional_int(scene_id),
+            "scene_id": scene_key,
             "annotation": instruction or "",
             "instruction": instruction or "",
             "depth_unit": "centimeter",
         }
-        print(f"[perception] using data_realworld scene: {scene_dir.name}", flush=True)
+        print(f"[perception] using data_realworld scene: {scene_key}", flush=True)
         return {
             "summary": summary,
             "input_dir": input_dir,
@@ -213,13 +222,14 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
         elif not depth_path.exists():
             continue
         instruction, instruction_path = scene_input_instruction(scene_dir)
+        scene_key = _data_realworld_scene_key(scene_dir)
         summary = {
-            "scene_id": optional_int(scene_id),
+            "scene_id": scene_key,
             "annotation": instruction or "",
             "instruction": instruction or "",
             "depth_unit": "centimeter",
         }
-        print(f"[perception] using data_realworld scene (legacy layout): {scene_dir.name}", flush=True)
+        print(f"[perception] using data_realworld scene (legacy layout): {scene_key}", flush=True)
         return {
             "summary": summary,
             "input_dir": scene_dir,
@@ -790,11 +800,11 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             if input_dir.name == "input":
                 # input/ subdirectory layout: scene_dir is the parent
                 scene_dir = input_dir.parent
-                scene_id = scene_dir.name  # timestamp
+                scene_id = _data_realworld_scene_key(scene_dir)
             else:
                 # legacy layout: input_dir IS the scene dir
                 scene_dir = input_dir
-                scene_id = input_dir.name  # timestamp
+                scene_id = _data_realworld_scene_key(scene_dir)
         else:
             scene_id = optional_int(priority_summary.get("scene_id"), args.scene_id)
             if scene_id is None:

@@ -1,0 +1,57 @@
+{
+  "created_at": "2026-08-10 19:37:43",
+  "created_at_epoch": 1786361854.8842099,
+  "trial_name": "",
+  "trial_log_subdir": "single_object_grasp",
+  "trial_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object_grasp/20260810_193734",
+  "argv": [
+    "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/scripts/realworld_grasp.py",
+    "--output-dir",
+    "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_193628/input",
+    "--camera-serial",
+    "72659",
+    "--calibration-mode",
+    "hand_eye",
+    "--reuse-capture",
+    "--execute",
+    "--perception-mask",
+    "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_193628/perception/mask_sam2/part_001.png",
+    "--use-sam-mask",
+    "--top-k",
+    "50",
+    "--candidate-index",
+    "0"
+  ],
+  "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_193628/input",
+  "executed": true,
+  "num_candidates": null,
+  "camera_serial": "72659",
+  "calibration_mode": "hand_eye",
+  "hand_eye_calibration": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+  "copied_files": [
+    "rgb.png",
+    "depth.raw",
+    "camera_meta.json",
+    "grasp_candidates.json",
+    "grasp_candidates.png",
+    "scene_grasps.ply"
+  ],
+  "missing_files": [
+    "mask_overlay.png"
+  ],
+  "stale_files": [],
+  "git": {
+    "branch": "realworld",
+    "commit": "c68c1b719d7e932ed5882d8ed575b39e65ba5eca",
+    "dirty": true,
+    "status_short": "M README.md\n M graspnet-workspace/capture_realsense.py\n M run_pipeline.py\n?? graspnet-workspace/log/single_object_grasp/20260810_193734/"
+  },
+  "summary": {
+    "output_dir": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_193628/input",
+    "trial_log_dir": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/log/single_object_grasp/20260810_193734",
+    "cycle_index": 1,
+    "executed": true,
+    "execution_status": "failed",
+    "error": "RuntimeError('Persistent JAKA sequence failed: {\\'ok\\': False, \\'error\\': \"RuntimeError(\\'linear_move_extend failed: ret=-12, raw=(-12,)\\')\", \\'command\\': \\'execute_sequence\\'}')"
+  }
+}

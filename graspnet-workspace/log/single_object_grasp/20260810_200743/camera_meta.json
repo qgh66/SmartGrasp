@@ -1,0 +1,50 @@
+{
+  "timestamp": 1786363570.9922543,
+  "width": 1280,
+  "height": 720,
+  "depth_format": "uint16_z16_little_endian",
+  "depth_scale_m": 0.0010000000474974513,
+  "rgb_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/rgb.png",
+  "depth_raw_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/depth.raw",
+  "depth_averaging": {
+    "method": "mean_of_nonzero_aligned_depth_samples",
+    "requested_duration_seconds": 1.0,
+    "actual_duration_seconds": 1.0102133000036702,
+    "frame_count": 30,
+    "pixels_without_valid_depth": 26368
+  },
+  "selected_device": {
+    "index": "1",
+    "serial": "243122072659",
+    "name": "Intel RealSense D435I",
+    "product_line": "D400"
+  },
+  "available_devices": [
+    {
+      "index": "0",
+      "serial": "238222075705",
+      "name": "Intel RealSense D435I",
+      "product_line": "D400"
+    },
+    {
+      "index": "1",
+      "serial": "243122072659",
+      "name": "Intel RealSense D435I",
+      "product_line": "D400"
+    }
+  ],
+  "intrinsics": {
+    "fx": 906.2102661132812,
+    "fy": 906.5941162109375,
+    "cx": 633.1510009765625,
+    "cy": 380.08868408203125,
+    "model": "distortion.inverse_brown_conrady",
+    "coeffs": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+}

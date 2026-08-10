@@ -1,0 +1,3775 @@
+{
+  "frame": "camera",
+  "top_k": 38,
+  "candidate_source": "graspnet",
+  "pca_fallback": null,
+  "num_candidates_after_filter": 17,
+  "grasp_candidates_ply": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/grasp_candidates.ply",
+  "target_mask_center_filter": {
+    "enabled": true,
+    "method": "project_grasp_center_to_target_mask",
+    "num_input_candidates": 38,
+    "num_removed": 2,
+    "removed": [
+      {
+        "raw_grasp_index": 14,
+        "score": 0.12018758803606033,
+        "pixel_uv": [
+          722,
+          401
+        ],
+        "reason": "outside_target_mask",
+        "distance_to_mask_px": 126.41105651855469,
+        "translation_camera_m": [
+          0.03951196372509003,
+          0.009295517578721046,
+          0.40300002694129944
+        ]
+      },
+      {
+        "raw_grasp_index": 22,
+        "score": 0.09449820965528488,
+        "pixel_uv": [
+          716,
+          443
+        ],
+        "reason": "outside_target_mask",
+        "distance_to_mask_px": 103.2804183959961,
+        "translation_camera_m": [
+          0.04059207811951637,
+          0.030810508877038956,
+          0.4440000355243683
+        ]
+      }
+    ],
+    "tolerance_px": 25.0
+  },
+  "model_free_collision_filter": {
+    "enabled": true,
+    "method": "model_free_collision_detector",
+    "scene": "obstacle_point_cloud",
+    "voxel_size": 0.005,
+    "approach_dist": 0.05,
+    "collision_thresh": 0.05,
+    "filter_empty_grasps": false,
+    "empty_thresh": 0.01,
+    "num_obstacle_points": 855585,
+    "num_input_candidates": 36,
+    "num_removed": 0,
+    "removed": []
+  },
+  "target_tcp_z_filter": {
+    "enabled": true,
+    "method": "min_target_tcp_z",
+    "min_z_mm": 165.0,
+    "num_input_candidates": 36,
+    "num_removed": 19,
+    "removed": [
+      {
+        "raw_grasp_index": 0,
+        "score": 0.2608332931995392,
+        "target_tcp_z_mm": 45.20982603733289,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 3,
+        "score": 0.18086597323417664,
+        "target_tcp_z_mm": 122.53578077929373,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 5,
+        "score": 0.15506431460380554,
+        "target_tcp_z_mm": 124.34115176568812,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 6,
+        "score": 0.1475515067577362,
+        "target_tcp_z_mm": 130.66897327432304,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 7,
+        "score": 0.14268940687179565,
+        "target_tcp_z_mm": 162.74894436209902,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 8,
+        "score": 0.133819118142128,
+        "target_tcp_z_mm": 69.75447238760772,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 9,
+        "score": 0.13016095757484436,
+        "target_tcp_z_mm": 97.61576913540065,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 10,
+        "score": 0.1293898969888687,
+        "target_tcp_z_mm": 124.11817458410567,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 13,
+        "score": 0.12046798318624496,
+        "target_tcp_z_mm": 92.44875313944982,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 15,
+        "score": 0.11111348122358322,
+        "target_tcp_z_mm": 146.34216239352776,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 23,
+        "score": 0.0944857969880104,
+        "target_tcp_z_mm": 132.94248919439252,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 26,
+        "score": 0.08370079100131989,
+        "target_tcp_z_mm": 158.76926431082174,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 28,
+        "score": 0.07028208673000336,
+        "target_tcp_z_mm": 98.42444853534434,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 29,
+        "score": 0.06117245554924011,
+        "target_tcp_z_mm": 161.18779576641012,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 30,
+        "score": 0.0595502108335495,
+        "target_tcp_z_mm": 161.96345386538943,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 33,
+        "score": 0.05328701436519623,
+        "target_tcp_z_mm": 163.49217422223703,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 35,
+        "score": 0.023248305544257164,
+        "target_tcp_z_mm": 153.63100667754776,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 36,
+        "score": 0.01583406887948513,
+        "target_tcp_z_mm": 147.97552383441882,
+        "min_z_mm": 165.0
+      },
+      {
+        "raw_grasp_index": 37,
+        "score": 0.0035528314765542746,
+        "target_tcp_z_mm": 85.56619846280717,
+        "min_z_mm": 165.0
+      }
+    ]
+  },
+  "center_outlier_filter": {
+    "enabled": true,
+    "method": "largest_center_cluster",
+    "radius_mm": 80.0,
+    "min_cluster_size": 3,
+    "num_input_candidates": 17,
+    "num_removed": 0,
+    "removed": [],
+    "clusters": [
+      {
+        "candidate_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "size": 17,
+        "max_score": 0.23708344995975494
+      }
+    ],
+    "selected_cluster_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ]
+  },
+  "topdown_rerank": {
+    "enabled": true,
+    "method": "min_tcp_local_z_angle_to_base_down",
+    "window_size": 10,
+    "num_input_candidates": 17,
+    "reranked": [
+      {
+        "raw_grasp_index": 19,
+        "input_rank": 8,
+        "output_rank": 0,
+        "score": 0.10595020651817322,
+        "tcp_local_z_angle_to_base_down_deg": 19.926584778641175
+      },
+      {
+        "raw_grasp_index": 1,
+        "input_rank": 0,
+        "output_rank": 1,
+        "score": 0.23708344995975494,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 2,
+        "input_rank": 1,
+        "output_rank": 2,
+        "score": 0.18402400612831116,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 4,
+        "input_rank": 2,
+        "output_rank": 3,
+        "score": 0.166490375995636,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 11,
+        "input_rank": 3,
+        "output_rank": 4,
+        "score": 0.12875498831272125,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 12,
+        "input_rank": 4,
+        "output_rank": 5,
+        "score": 0.12686684727668762,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 16,
+        "input_rank": 5,
+        "output_rank": 6,
+        "score": 0.11098873615264893,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 17,
+        "input_rank": 6,
+        "output_rank": 7,
+        "score": 0.11023103445768356,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 18,
+        "input_rank": 7,
+        "output_rank": 8,
+        "score": 0.10877355933189392,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      },
+      {
+        "raw_grasp_index": 20,
+        "input_rank": 9,
+        "output_rank": 9,
+        "score": 0.10294286906719208,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514
+      }
+    ]
+  },
+  "point_cloud_source": "interactive_sam_expanded_bbox_crop",
+  "grasp_point_cloud_source": "valid_depth_inside_expanded_object_bbox",
+  "grasp_input_mode": "bbox",
+  "point_cloud_info": {
+    "point_cloud_source": "interactive_sam_expanded_bbox_crop",
+    "grasp_point_cloud_source": "valid_depth_inside_expanded_object_bbox",
+    "grasp_input_mode": "bbox",
+    "obstacle_point_cloud_source": "full_depth_minus_interactive_sam_object_mask",
+    "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/perception/mask_sam2/part_002.png",
+    "mask_overlay_path": null,
+    "grasp_crop_overlay_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/grasp_crop_overlay.png",
+    "sam_prompt_points_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/sam_prompt_points.json",
+    "object_point_cloud_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/point_cloud_object_camera.npy",
+    "grasp_input_point_cloud_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/point_cloud_grasp_input_camera.npy",
+    "obstacle_point_cloud_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/input/point_cloud_obstacles_camera.npy",
+    "num_grasp_input_points": 382171,
+    "num_object_points": 39395,
+    "num_grasp_crop_points": 382171,
+    "num_obstacle_points": 855585,
+    "object_mask": {
+      "mode": "perception_pipeline",
+      "mask_path": "/home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_200555/perception/mask_sam2/part_002.png",
+      "mask_pixels": 39474,
+      "mask_overlay_path": null,
+      "num_depth_valid_mask_pixels": 39395,
+      "num_object_points": 39395,
+      "object_bbox_xyxy": [
+        292,
+        181,
+        625,
+        623
+      ],
+      "grasp_crop_bbox_xyxy": [
+        175,
+        43,
+        742,
+        720
+      ],
+      "grasp_crop_margin_px": 50,
+      "grasp_crop_margin_ratio": 0.2,
+      "num_grasp_crop_points": 382171,
+      "grasp_input_mode": "bbox",
+      "num_grasp_input_points": 382171,
+      "num_obstacle_points": 855585
+    },
+    "camera_intrinsics": {
+      "fx": 906.2102661132812,
+      "fy": 906.5941162109375,
+      "cx": 633.1510009765625,
+      "cy": 380.08868408203125,
+      "model": "distortion.inverse_brown_conrady",
+      "coeffs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "calibration_mode": "hand_eye",
+  "camera_to_robot_chain": "T_base_tcp_capture @ T_tcp_camera @ T_camera_grasp",
+  "hand_eye_runtime_transform": "T_tcp_camera",
+  "hand_eye_translation_offset_mm": [
+    0.0,
+    0.0,
+    -82.5
+  ],
+  "tcp_from_camera_translation_mm": [
+    47.93686895691867,
+    12.012228155339102,
+    97.59267146430741
+  ],
+  "grasp_center_to_tcp_offset_mm": 174.0,
+  "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+  "gripper_roll_offset_deg": 120.0,
+  "base_grasp_to_tcp_rotation": [
+    [
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      2.3407741941978616e-49,
+      1.0,
+      0.0
+    ],
+    [
+      -1.0,
+      -2.3407741941978616e-49,
+      0.0
+    ]
+  ],
+  "grasp_to_tcp_rotation": [
+    [
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      0.8660254037844388,
+      -0.4999999999999998,
+      0.0
+    ],
+    [
+      0.4999999999999998,
+      0.8660254037844388,
+      0.0
+    ]
+  ],
+  "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+  "gripper_opening_axis_base": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "capture_tcp_local_z_base": [
+    -1.0911682878666935e-16,
+    5.55978012349343e-17,
+    -1.0
+  ],
+  "capture_gripper_opening_axis_base": [
+    6.0666557582676e-33,
+    1.0,
+    5.55978012349343e-17
+  ],
+  "requires_ready_pose_matching_calibration": false,
+  "candidates": [
+    {
+      "grasp_index": 0,
+      "score": 0.10595020651817322,
+      "width": 0.05573374405503273,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.12223681062459946,
+        -0.0015604390064254403,
+        0.3460000157356262
+      ],
+      "rotation_camera": [
+        [
+          0.14391817152500153,
+          0.8874484300613403,
+          -0.4378616511821747
+        ],
+        [
+          -0.2771056890487671,
+          0.4609070122241974,
+          0.8430759906768799
+        ],
+        [
+          0.949999988079071,
+          0.0,
+          0.31224989891052246
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          313,
+          376
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.004352349107823479,
+          "left_finger": 0.01041666679099037,
+          "right_finger": 0.03125000037297111,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -310.98255453085807,
+        -36.09560717251303,
+        5.750826975547454,
+        3.093426583873565,
+        1.2230118143797806,
+        2.6942242450428933
+      ],
+      "target_jaka_tcp_pose": [
+        -280.51659170125816,
+        -88.74929932929962,
+        179.33346145262354,
+        -2.82979163535867,
+        0.15663905899086794,
+        0.6726643190168382
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.30727564844597655,
+          0.3912824266481601,
+          0.8674558775753612,
+          -310.98255453085807
+        ],
+        [
+          0.14743501239532528,
+          0.9201243306075836,
+          -0.36281416379768816,
+          -36.09560717251303
+        ],
+        [
+          -0.9401300832015866,
+          0.016409410594157407,
+          -0.3404205252465818,
+          5.750826975547454
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.30727564844597655,
+          0.3912824266481601,
+          0.8674558775753612,
+          -310.98255453085807
+        ],
+        [
+          0.14743501239532528,
+          0.9201243306075836,
+          -0.36281416379768816,
+          -36.09560717251303
+        ],
+        [
+          -0.9401300832015866,
+          0.016409410594157407,
+          -0.3404205252465818,
+          5.750826975547454
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.7725884603194083,
+          0.555597613318307,
+          -0.30727564844597655,
+          -280.51659170125816
+        ],
+        [
+          0.6154439630474751,
+          -0.774268448005398,
+          0.14743501239532528,
+          -88.74929932929962
+        ],
+        [
+          -0.155999296187621,
+          -0.30301752813026045,
+          -0.9401300832015866,
+          179.33346145262354
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 179.33346145262354,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -310.98255453085807,
+          -36.09560717251303,
+          5.750826975547454
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 8,
+        "tcp_local_z_angle_to_base_down_deg": 19.926584778641175,
+        "output_rank": 0
+      },
+      "raw_grasp_index": 19
+    },
+    {
+      "grasp_index": 1,
+      "score": 0.23708344995975494,
+      "width": 0.07242714613676071,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.12264493852853775,
+        0.018612965941429138,
+        0.3450000286102295
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          311,
+          429
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.01760399313759335,
+          "left_finger": 0.10416666790990371,
+          "right_finger": 0.09375000111891334,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -290.8208272768827,
+        -34.968590478653624,
+        6.356960075720622,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -233.62692468436603,
+        -70.10258052197821,
+        170.5606526236537,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -290.8208272768827
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.968590478653624
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.356960075720622
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -290.8208272768827
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.968590478653624
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.356960075720622
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -233.62692468436603
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -70.10258052197821
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          170.5606526236537
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 170.5606526236537,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -290.8208272768827,
+          -34.968590478653624,
+          6.356960075720622
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 0,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 1
+      },
+      "raw_grasp_index": 1
+    },
+    {
+      "grasp_index": 2,
+      "score": 0.18402400612831116,
+      "width": 0.018318451941013336,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.11818189173936844,
+        0.024109654128551483,
+        0.34200000762939453
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          320,
+          444
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0035723399830391244,
+          "left_finger": 0.01041666679099037,
+          "right_finger": 0.01041666679099037,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -285.62123555482776,
+        -30.17564046192699,
+        9.377617225301208,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -228.42733296231108,
+        -65.30963050525159,
+        173.5813097732343,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -285.62123555482776
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -30.17564046192699
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.377617225301208
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -285.62123555482776
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -30.17564046192699
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.377617225301208
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -228.42733296231108
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -65.30963050525159
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          173.5813097732343
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 173.5813097732343,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -285.62123555482776,
+          -30.17564046192699,
+          9.377617225301208
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 1,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 2
+      },
+      "raw_grasp_index": 2
+    },
+    {
+      "grasp_index": 3,
+      "score": 0.166490375995636,
+      "width": 0.08016420155763626,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.12188352644443512,
+        0.01138260681182146,
+        0.3450000286102295
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          313,
+          410
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.016470518536583555,
+          "left_finger": 0.10416666790990371,
+          "right_finger": 0.09375000111891334,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -298.08670255299904,
+        -34.769050878108246,
+        6.5153328153396615,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -240.89279996048236,
+        -69.90304092143285,
+        170.71902536327275,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -298.08670255299904
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.769050878108246
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.5153328153396615
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -298.08670255299904
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.769050878108246
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.5153328153396615
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -240.89279996048236
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -69.90304092143285
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          170.71902536327275
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 170.71902536327275,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -298.08670255299904,
+          -34.769050878108246,
+          6.5153328153396615
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 2,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 3
+      },
+      "raw_grasp_index": 4
+    },
+    {
+      "grasp_index": 4,
+      "score": 0.12875498831272125,
+      "width": 0.04951631277799606,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.1234479546546936,
+        0.04082707315683365,
+        0.34300002455711365
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          307,
+          488
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.01978224209531093,
+          "left_finger": 0.0729166675369326,
+          "right_finger": 0.10416666790990371,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -268.57350052769476,
+        -34.10404964340904,
+        7.912733885724435,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -211.37959793517808,
+        -69.23803968673363,
+        172.11642643365752,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -268.57350052769476
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.10404964340904
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.912733885724435
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -268.57350052769476
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.10404964340904
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.912733885724435
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -211.37959793517808
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -69.23803968673363
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          172.11642643365752
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 172.11642643365752,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -268.57350052769476,
+          -34.10404964340904,
+          7.912733885724435
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 3,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 4
+      },
+      "raw_grasp_index": 11
+    },
+    {
+      "grasp_index": 5,
+      "score": 0.12686684727668762,
+      "width": 0.03062344342470169,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.12342825531959534,
+        0.03221893310546875,
+        0.3440000116825104
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          308,
+          465
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0,
+          "left_finger": 0.0,
+          "right_finger": 0.0,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -277.17686190100636,
+        -34.72353995937726,
+        7.076766011158384,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -219.98295930848968,
+        -69.85753000270185,
+        171.28045855909147,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -277.17686190100636
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.72353995937726
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.076766011158384
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -277.17686190100636
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -34.72353995937726
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.076766011158384
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -219.98295930848968
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -69.85753000270185
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          171.28045855909147
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 171.28045855909147,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -277.17686190100636,
+          -34.72353995937726,
+          7.076766011158384
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 4,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 5
+      },
+      "raw_grasp_index": 12
+    },
+    {
+      "grasp_index": 6,
+      "score": 0.11098873615264893,
+      "width": 0.03436703234910965,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.11704970896244049,
+        0.04636658355593681,
+        0.34200000762939453
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          323,
+          503
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0,
+          "left_finger": 0.0,
+          "right_finger": 0.0,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -263.52195381634573,
+        -27.32553361601225,
+        8.988537559875056,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -206.32805122382905,
+        -62.459523659336845,
+        173.19223010780814,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -263.52195381634573
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -27.32553361601225
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          8.988537559875056
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -263.52195381634573
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -27.32553361601225
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          8.988537559875056
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -206.32805122382905
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -62.459523659336845
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          173.19223010780814
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 173.19223010780814,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -263.52195381634573,
+          -27.32553361601225,
+          8.988537559875056
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 5,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 6
+      },
+      "raw_grasp_index": 16
+    },
+    {
+      "grasp_index": 7,
+      "score": 0.11023103445768356,
+      "width": 0.061971887946128845,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.11704970896244049,
+        0.05843813717365265,
+        0.34200000762939453
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          -0.9877405166625977,
+          -0.14536793529987335
+        ],
+        [
+          -0.43903547525405884,
+          0.10601813346147537,
+          -0.8921928405761719
+        ],
+        [
+          0.8966667056083679,
+          0.11458075791597366,
+          -0.4276214838027954
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          323,
+          535
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.012258280706964468,
+          "left_finger": 0.03125000037297111,
+          "right_finger": 0.09375000111891334,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -251.48874058974917,
+        -26.391717424455663,
+        8.760122347954052,
+        -0.31720023723599633,
+        1.0891383465178364,
+        3.040509309703785
+      ],
+      "target_jaka_tcp_pose": [
+        -194.2948379972325,
+        -61.52570746778026,
+        172.96381489588714,
+        2.6686879899206613,
+        -0.09507972051419777,
+        -1.8553515455689764
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.1791332780074243,
+          -0.8691931930959966,
+          -251.48874058974917
+        ],
+        [
+          0.04674706921450917,
+          -0.9731564874834544,
+          -0.22534658810199562,
+          -26.391717424455663
+        ],
+        [
+          -0.8862281180915695,
+          -0.14449097737689331,
+          0.4401387770974129,
+          8.760122347954052
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.1791332780074243,
+          -0.8691931930959966,
+          -251.48874058974917
+        ],
+        [
+          0.04674706921450917,
+          -0.9731564874834544,
+          -0.22534658810199562,
+          -26.391717424455663
+        ],
+        [
+          -0.8862281180915695,
+          -0.14449097737689331,
+          0.4401387770974129,
+          8.760122347954052
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          -0.2794626271303884,
+          -0.8423100250213583,
+          -0.46088449765814193,
+          -194.2948379972325
+        ],
+        [
+          -0.9554515340693026,
+          0.2914223737892506,
+          0.04674706921450917,
+          -61.52570746778026
+        ],
+        [
+          0.0949365315226741,
+          0.45341685084542277,
+          -0.8862281180915695,
+          172.96381489588714
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 172.96381489588714,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -251.48874058974917,
+          -26.391717424455663,
+          8.760122347954052
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 6,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 7
+      },
+      "raw_grasp_index": 17
+    },
+    {
+      "grasp_index": 8,
+      "score": 0.10877355933189392,
+      "width": 0.059017110615968704,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.11554012447595596,
+        0.016187697649002075,
+        0.34200000762939453
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          327,
+          423
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.014728094521476163,
+          "left_finger": 0.06250000074594222,
+          "right_finger": 0.08333333432792296,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -293.7209327584933,
+        -28.155556075260904,
+        9.602323739654878,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -236.5270301659766,
+        -63.2895461185855,
+        173.80601628758797,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -293.7209327584933
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -28.155556075260904
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.602323739654878
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -293.7209327584933
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -28.155556075260904
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.602323739654878
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -236.5270301659766
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -63.2895461185855
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          173.80601628758797
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 173.80601628758797,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -293.7209327584933,
+          -28.155556075260904,
+          9.602323739654878
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 7,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 8
+      },
+      "raw_grasp_index": 18
+    },
+    {
+      "grasp_index": 9,
+      "score": 0.10294286906719208,
+      "width": 0.03317242115736008,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.11818189173936844,
+        0.035049501806497574,
+        0.34200000762939453
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          320,
+          473
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0,
+          "left_finger": 0.0,
+          "right_finger": 0.0,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -274.71613386335866,
+        -29.329369367224118,
+        9.170615897644893,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -217.52223127084198,
+        -64.46335941054872,
+        173.37430844557798,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -274.71613386335866
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -29.329369367224118
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.170615897644893
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -274.71613386335866
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -29.329369367224118
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          9.170615897644893
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -217.52223127084198
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -64.46335941054872
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          173.37430844557798
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 173.37430844557798,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -274.71613386335866,
+          -29.329369367224118,
+          9.170615897644893
+        ],
+        "kept": true
+      },
+      "topdown_rerank": {
+        "input_rank": 9,
+        "tcp_local_z_angle_to_base_down_deg": 27.596969838529514,
+        "output_rank": 9
+      },
+      "raw_grasp_index": 20
+    },
+    {
+      "grasp_index": 10,
+      "score": 0.10265125334262848,
+      "width": 0.06343378871679306,
+      "height": 0.019999999552965164,
+      "depth": 0.019999999552965164,
+      "translation_camera_m": [
+        -0.11811381578445435,
+        0.005278539378196001,
+        0.3440000116825104
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          322,
+          394
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.016113368009795254,
+          "left_finger": 0.08333333432792296,
+          "right_finger": 0.08333333432792296,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -304.4398672755823,
+        -31.510957620131165,
+        7.737019305398462,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -247.2459646830656,
+        -66.64494766345575,
+        171.94071185333155,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -304.4398672755823
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -31.510957620131165
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.737019305398462
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -304.4398672755823
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -31.510957620131165
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.737019305398462
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -247.2459646830656
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -66.64494766345575
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          171.94071185333155
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 171.94071185333155,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -304.4398672755823,
+          -31.510957620131165,
+          7.737019305398462
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 21
+    },
+    {
+      "grasp_index": 11,
+      "score": 0.09427261352539062,
+      "width": 0.04155140742659569,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.12382645159959793,
+        0.05179890990257263,
+        0.34300002455711365
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          306,
+          517
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0,
+          "left_finger": 0.0,
+          "right_finger": 0.0,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -257.60744081498177,
+        -33.63253064802852,
+        7.694409066571097,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -200.4135382224651,
+        -68.76652069135312,
+        171.89810161450418,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -257.60744081498177
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -33.63253064802852
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.694409066571097
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -257.60744081498177
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -33.63253064802852
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          7.694409066571097
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -200.4135382224651
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -68.76652069135312
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          171.89810161450418
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 171.89810161450418,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -257.60744081498177,
+          -33.63253064802852,
+          7.694409066571097
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 24
+    },
+    {
+      "grasp_index": 12,
+      "score": 0.09319733083248138,
+      "width": 0.09337493777275085,
+      "height": 0.019999999552965164,
+      "depth": 0.029999999329447746,
+      "translation_camera_m": [
+        -0.11659540235996246,
+        0.07016314566135406,
+        0.3440000116825104
+      ],
+      "rotation_camera": [
+        [
+          0.05689249932765961,
+          0.9917080998420715,
+          -0.11523126810789108
+        ],
+        [
+          -0.43903547525405884,
+          0.12851069867610931,
+          0.8892316222190857
+        ],
+        [
+          0.8966667056083679,
+          0.0,
+          0.44270631670951843
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          326,
+          565
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.01405811370378912,
+          "left_finger": 0.10416666790990371,
+          "right_finger": 0.08333333432792296,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -239.8779627401856,
+        -24.978377687346992,
+        6.55228556644164,
+        3.086191651582901,
+        1.089138343521987,
+        3.040509313411235
+      ],
+      "target_jaka_tcp_pose": [
+        -182.6840601476689,
+        -60.112367730671586,
+        170.75597811437473,
+        -2.7051298894761944,
+        0.2106079956943787,
+        1.0483851174941419
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -239.8779627401856
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -24.978377687346992
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.55228556644164
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.46088449765814193,
+          0.05193414474411294,
+          0.88593924939155,
+          -239.8779627401856
+        ],
+        [
+          0.04674706921450917,
+          0.9983209945523961,
+          -0.034203197554831956,
+          -24.978377687346992
+        ],
+        [
+          -0.8862281180915695,
+          0.02565134328269083,
+          -0.4625384239424979,
+          6.55228556644164
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.4879459133679947,
+          0.7412788238107433,
+          -0.46088449765814193,
+          -182.6840601476689
+        ],
+        [
+          0.8474697436363053,
+          -0.5287813352493401,
+          0.04674706921450917,
+          -60.112367730671586
+        ],
+        [
+          -0.20905449704724327,
+          -0.4133956970019651,
+          -0.8862281180915695,
+          170.75597811437473
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 170.75597811437473,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -239.8779627401856,
+          -24.978377687346992,
+          6.55228556644164
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 25
+    },
+    {
+      "grasp_index": 13,
+      "score": 0.07143354415893555,
+      "width": 0.04972720518708229,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.10442576557397842,
+        0.0053552621975541115,
+        0.3490000069141388
+      ],
+      "rotation_camera": [
+        [
+          -0.1149248331785202,
+          -0.9541640877723694,
+          0.27633875608444214
+        ],
+        [
+          0.36639848351478577,
+          -0.29928386211395264,
+          -0.8810115456581116
+        ],
+        [
+          0.9233333468437195,
+          0.0,
+          0.38399943709373474
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          362,
+          394
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.013931115138181953,
+          "left_finger": 0.052083333954951856,
+          "right_finger": 0.0729166675369326,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -305.51994641887893,
+        -17.729038179068027,
+        3.126088506081544,
+        -3.082219231386386,
+        1.2026192695098303,
+        -0.17164255620325064
+      ],
+      "target_jaka_tcp_pose": [
+        -390.2249572078741,
+        -34.032582579175276,
+        175.46548160830764,
+        -2.830030970919707,
+        0.1994559520054482,
+        -2.2939841790486266
+      ],
+      "target_robot_from_grasp": [
+        [
+          0.3546264987873287,
+          -0.2250484938909677,
+          -0.9075203824327209,
+          -305.51994641887893
+        ],
+        [
+          -0.061473882758004326,
+          -0.9741134415206895,
+          0.21754056188214016,
+          -17.729038179068027
+        ],
+        [
+          -0.9329850178288857,
+          -0.021356848139339468,
+          -0.35928105821301987,
+          3.126088506081544
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          0.3546264987873287,
+          -0.2250484938909677,
+          -0.9075203824327209,
+          -305.51994641887893
+        ],
+        [
+          -0.061473882758004326,
+          -0.9741134415206895,
+          0.21754056188214016,
+          -17.729038179068027
+        ],
+        [
+          -0.9329850178288857,
+          -0.021356848139339468,
+          -0.35928105821301987,
+          3.126088506081544
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          -0.6486579040093654,
+          -0.6734114586934217,
+          0.3546264987873287,
+          -390.2249572078741
+        ],
+        [
+          -0.7348367055837344,
+          0.6754523737038186,
+          -0.061473882758004326,
+          -34.032582579175276
+        ],
+        [
+          -0.19813610213994426,
+          -0.30046809944136127,
+          -0.9329850178288857,
+          175.46548160830764
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 175.46548160830764,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -305.51994641887893,
+          -17.729038179068027,
+          3.126088506081544
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 27
+    },
+    {
+      "grasp_index": 14,
+      "score": 0.05750381946563721,
+      "width": 0.0555078499019146,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.1090649738907814,
+        0.01131662167608738,
+        0.34300002455711365
+      ],
+      "rotation_camera": [
+        [
+          -0.1557886302471161,
+          0.9814772605895996,
+          -0.11150002479553223
+        ],
+        [
+          -0.33291125297546387,
+          0.054105013608932495,
+          0.9414046406745911
+        ],
+        [
+          0.9300000071525574,
+          0.1837797462940216,
+          0.31831586360931396
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          345,
+          410
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.006543964856606483,
+          "left_finger": 0.0,
+          "right_finger": 0.06250000074594222,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -299.0949125168125,
+        -22.052172367042232,
+        8.87841838828325,
+        -2.7082246646955523,
+        1.1878635001469209,
+        -2.710539107401126
+      ],
+      "target_jaka_tcp_pose": [
+        -263.02818776952927,
+        -21.887575941888905,
+        180.2760860341951,
+        -2.9136030935091624,
+        0.3103935124295667,
+        1.0807046782551855
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -299.0949125168125
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -22.052172367042232
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          8.87841838828325
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -299.0949125168125
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -22.052172367042232
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          8.87841838828325
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.44821327959725893,
+          0.8269637526241332,
+          -0.33946393532921393,
+          -263.02818776952927
+        ],
+        [
+          0.8401281217703434,
+          -0.5194340734669707,
+          -0.15611837025950187,
+          -21.887575941888905
+        ],
+        [
+          -0.30543335490387596,
+          -0.2152188621407875,
+          -0.9275728025627117,
+          180.2760860341951
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 180.2760860341951,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -299.0949125168125,
+          -22.052172367042232,
+          8.87841838828325
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 31
+    },
+    {
+      "grasp_index": 15,
+      "score": 0.05396534502506256,
+      "width": 0.044929612427949905,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.11284996569156647,
+        0.03855704143643379,
+        0.34300002455711365
+      ],
+      "rotation_camera": [
+        [
+          -0.1557886302471161,
+          0.9814772605895996,
+          -0.11150002479553223
+        ],
+        [
+          -0.33291125297546387,
+          0.054105013608932495,
+          0.9414046406745911
+        ],
+        [
+          0.9300000071525574,
+          0.1837797462940216,
+          0.31831586360931396
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          335,
+          482
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.006132529390475084,
+          "left_finger": 0.0,
+          "right_finger": 0.052083333954951856,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -271.65030364081065,
+        -23.71723091807978,
+        8.25579866744323,
+        -2.7082246646955523,
+        1.1878635001469209,
+        -2.710539107401126
+      ],
+      "target_jaka_tcp_pose": [
+        -235.58357889352743,
+        -23.55263449292645,
+        179.65346631335507,
+        -2.9136030935091624,
+        0.3103935124295667,
+        1.0807046782551855
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -271.65030364081065
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -23.71723091807978
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          8.25579866744323
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -271.65030364081065
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -23.71723091807978
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          8.25579866744323
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.44821327959725893,
+          0.8269637526241332,
+          -0.33946393532921393,
+          -235.58357889352743
+        ],
+        [
+          0.8401281217703434,
+          -0.5194340734669707,
+          -0.15611837025950187,
+          -23.55263449292645
+        ],
+        [
+          -0.30543335490387596,
+          -0.2152188621407875,
+          -0.9275728025627117,
+          179.65346631335507
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 179.65346631335507,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -271.65030364081065,
+          -23.71723091807978,
+          8.25579866744323
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 32
+    },
+    {
+      "grasp_index": 16,
+      "score": 0.04369431734085083,
+      "width": 0.04439139366149902,
+      "height": 0.019999999552965164,
+      "depth": 0.009999999776482582,
+      "translation_camera_m": [
+        -0.10603697597980499,
+        0.002614821307361126,
+        0.34300002455711365
+      ],
+      "rotation_camera": [
+        [
+          -0.1557886302471161,
+          0.9814772605895996,
+          -0.11150002479553223
+        ],
+        [
+          -0.33291125297546387,
+          0.054105013608932495,
+          0.9414046406745911
+        ],
+        [
+          0.9300000071525574,
+          0.1837797462940216,
+          0.31831586360931396
+        ]
+      ],
+      "object_id": -1,
+      "candidate_source": "graspnet",
+      "target_mask_center_filter": {
+        "pixel_uv": [
+          353,
+          387
+        ],
+        "kept": true,
+        "reason": "inside_target_mask",
+        "distance_to_mask_px": 0.0,
+        "tolerance_px": 25.0
+      },
+      "model_free_collision_filter": {
+        "collision": false,
+        "empty_grasp": false,
+        "kept": true,
+        "ious": {
+          "global": 0.0049373124128850665,
+          "left_finger": 0.0,
+          "right_finger": 0.04166666716396148,
+          "bottom": 0.0,
+          "shifting": 0.0
+        }
+      },
+      "grasp_center_jaka_pose": [
+        -308.0016412947566,
+        -19.707479754204925,
+        9.1288181356677,
+        -2.7082246646955523,
+        1.1878635001469209,
+        -2.710539107401126
+      ],
+      "target_jaka_tcp_pose": [
+        -271.9349165474734,
+        -19.542883329051598,
+        180.52648578157954,
+        -2.9136030935091624,
+        0.3103935124295667,
+        1.0807046782551855
+      ],
+      "target_robot_from_grasp": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -308.0016412947566
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -19.707479754204925
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          9.1288181356677
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_grasp_center": [
+        [
+          -0.33946393532921393,
+          -0.02531778986730268,
+          0.940278257580039,
+          -308.0016412947566
+        ],
+        [
+          -0.15611837025950187,
+          0.9872893326203089,
+          -0.02977904232845769,
+          -19.707479754204925
+        ],
+        [
+          -0.9275728025627117,
+          -0.1569036134394713,
+          -0.33910167943944086,
+          9.1288181356677
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "target_robot_from_tcp": [
+        [
+          0.44821327959725893,
+          0.8269637526241332,
+          -0.33946393532921393,
+          -271.9349165474734
+        ],
+        [
+          0.8401281217703434,
+          -0.5194340734669707,
+          -0.15611837025950187,
+          -19.542883329051598
+        ],
+        [
+          -0.30543335490387596,
+          -0.2152188621407875,
+          -0.9275728025627117,
+          180.52648578157954
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "grasp_center_to_tcp_offset_mm": 174.0,
+      "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+      "grasp_to_tcp_rotation": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.8660254037844388,
+          -0.4999999999999998,
+          0.0
+        ],
+        [
+          0.4999999999999998,
+          0.8660254037844388,
+          0.0
+        ]
+      ],
+      "gripper_roll_offset_deg": 120.0,
+      "grasp_to_tcp_rotation_convention": "derived_from_capture_pose: grasp_x=tcp_z, grasp_y=base_y_projected_to_tcp_xy",
+      "calibration_mode": "hand_eye",
+      "calibration_source": "/home/admin128/qiuguanhe/SmartGrasp/graspnet-workspace/calibration/hand_eye_tcp_camera.json",
+      "capture_tcp_pose": [
+        -279.0667437324797,
+        113.84629821777344,
+        452.5747393379485,
+        3.141592653589793,
+        -0.0,
+        -2.0420352248333655
+      ],
+      "hand_eye_runtime_transform": "T_tcp_camera",
+      "target_tcp_z_filter": {
+        "target_tcp_z_mm": 180.52648578157954,
+        "min_z_mm": 165.0,
+        "kept": true
+      },
+      "center_outlier_filter": {
+        "center_mm": [
+          -308.0016412947566,
+          -19.707479754204925,
+          9.1288181356677
+        ],
+        "kept": true
+      },
+      "raw_grasp_index": 34
+    }
+  ]
+}

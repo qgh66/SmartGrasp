@@ -67,6 +67,11 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_").replace(":", "_").replace(" ", "_")
 
 
+def _sanitize_scene_filename(scene_id) -> str:
+    """Keep nested scene ids from creating accidental subdirectories."""
+    return str(scene_id).replace("/", "_").replace("\\", "_")
+
+
 def _target_entries(args: argparse.Namespace, summary_path: Path, perception) -> list[dict]:
     """Resolve the target ids to evaluate for one scene."""
     source = args.target_source
@@ -823,7 +828,8 @@ def main():
         # Write per-scene scene_<id>.csv.
         if scene_candidate_rows:
             scene_id = perception.scene_id
-            out_path = details_dir / f"scene_{scene_id}.csv"
+            scene_filename = _sanitize_scene_filename(scene_id)
+            out_path = details_dir / f"scene_{scene_filename}.csv"
             pd.DataFrame(scene_candidate_rows).to_csv(out_path, index=False)
             print(f"  [details] scene_id={scene_id}: "
                   f"{len(scene_candidate_rows)} candidate rows -> {out_path}")

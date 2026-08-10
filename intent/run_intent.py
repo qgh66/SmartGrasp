@@ -46,7 +46,7 @@ def _default_summary(scene_id: int, root: Path) -> Path:
 
 
 def _sample_summary_paths(root: Path) -> list[Path]:
-    paths = sorted(root.glob("data_realworld/*/perception/summary.json"))
+    paths = sorted(root.glob("data_realworld/**/perception/summary.json"))
     if paths:
         return paths
     paths = sorted(root.glob("sample_data/scene_*/perception/summary.json"))
@@ -56,10 +56,22 @@ def _sample_summary_paths(root: Path) -> list[Path]:
 
 
 def _data_summary_paths(root: Path) -> list[Path]:
-    paths = sorted(root.glob("data_realworld/*/perception/summary.json"))
+    paths = sorted(root.glob("data_realworld/**/perception/summary.json"))
     if paths:
         return paths
     return sorted(root.glob("data/scene_*/perception/summary.json"))
+
+
+def _summary_matches_scene_id(summary_path: Path, scene_id: str) -> bool:
+    """Match legacy scene names and nested data_realworld scene keys."""
+    scene_dir = summary_path.parent.parent
+    candidates = {scene_dir.name, scene_dir.name.removeprefix("scene_")}
+    data_realworld_root = ROOT / "data_realworld"
+    try:
+        candidates.add(scene_dir.relative_to(data_realworld_root).as_posix())
+    except ValueError:
+        pass
+    return scene_id in candidates
 
 
 def _resolve_from_summary(
@@ -129,7 +141,7 @@ def _run_sample_mode(args: argparse.Namespace) -> int:
         summary_paths = [
             path
             for path in summary_paths
-            if path.parent.parent.name in (f"scene_{sid}", sid)
+            if _summary_matches_scene_id(path, sid)
         ]
     if not summary_paths:
         raise FileNotFoundError("No perception/summary.json files found under data_realworld/ or sample_data/.")
@@ -175,7 +187,7 @@ def _run_data_mode(args: argparse.Namespace) -> int:
         summary_paths = [
             path
             for path in summary_paths
-            if path.parent.parent.name in (f"scene_{sid}", sid)
+            if _summary_matches_scene_id(path, sid)
         ]
     if not summary_paths:
         raise FileNotFoundError("No perception/summary.json files found under data_realworld/ or data/.")

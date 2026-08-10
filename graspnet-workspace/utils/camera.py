@@ -17,6 +17,7 @@ from utils.data_loader import json_safe
 
 IMAGE_WIDTH = 1280
 IMAGE_HEIGHT = 720
+DEPTH_AVERAGING_WINDOW_SECONDS = 1.0
 _SAM_CACHE: dict[tuple[str, str], tuple[Any, Any]] = {}
 
 def _realsense_devices(rs) -> list[dict[str, str]]:
@@ -59,8 +60,54 @@ def _select_realsense_device(devices: list[dict[str, str]], serial: str | None, 
     return devices[index]
 
 
+def _capture_averaged_depth(pipeline: Any, align: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    """Average nonzero aligned depth samples collected over a fixed time window."""
+    depth_sum = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH), dtype=np.uint64)
+    valid_sample_count = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH), dtype=np.uint16)
+    frame_count = 0
+    started_at = time.monotonic()
+    deadline = started_at + DEPTH_AVERAGING_WINDOW_SECONDS
+
+    while time.monotonic() < deadline:
+        aligned_frames = align.process(pipeline.wait_for_frames())
+        depth_frame = aligned_frames.get_depth_frame()
+        if not depth_frame:
+            continue
+
+        depth_sample = np.asanyarray(depth_frame.get_data())
+        if depth_sample.shape != (IMAGE_HEIGHT, IMAGE_WIDTH):
+            raise RuntimeError(f"Depth resolution must be 1280x720, got {depth_sample.shape[::-1]}.")
+
+        valid_sample = depth_sample > 0
+        depth_sum += depth_sample
+        valid_sample_count += valid_sample
+        frame_count += 1
+
+    if frame_count == 0:
+        raise RuntimeError("RealSense did not return a valid aligned depth frame during the averaging window.")
+
+    averaged_depth = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH), dtype=np.uint16)
+    valid_pixel = valid_sample_count > 0
+    # Add half the divisor before integer division so the mean is rounded to
+    # the nearest raw Z16 unit instead of always being rounded down.
+    averaged_depth[valid_pixel] = (
+        (depth_sum[valid_pixel] + valid_sample_count[valid_pixel] // 2)
+        // valid_sample_count[valid_pixel]
+    ).astype(np.uint16)
+
+    elapsed_seconds = time.monotonic() - started_at
+    averaging_meta = {
+        "method": "mean_of_nonzero_aligned_depth_samples",
+        "requested_duration_seconds": DEPTH_AVERAGING_WINDOW_SECONDS,
+        "actual_duration_seconds": elapsed_seconds,
+        "frame_count": frame_count,
+        "pixels_without_valid_depth": int(np.count_nonzero(~valid_pixel)),
+    }
+    return averaged_depth, averaging_meta
+
+
 def capture_realsense(output_dir: Path, warmup_frames: int, camera_serial: str | None, camera_index: int) -> dict[str, Any]:
-    """Capture one aligned 1280x720 RealSense RGB-D frame and save it."""
+    """Capture one RGB frame and a one-second averaged aligned depth frame."""
     import pyrealsense2 as rs
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -84,17 +131,22 @@ def capture_realsense(output_dir: Path, warmup_frames: int, camera_serial: str |
             aligned_frames = align.process(frames)
         assert aligned_frames is not None
 
-        depth_frame = aligned_frames.get_depth_frame()
         color_frame = aligned_frames.get_color_frame()
-        if not depth_frame or not color_frame:
-            raise RuntimeError("RealSense did not return both aligned color and depth frames.")
+        if not color_frame:
+            raise RuntimeError("RealSense did not return an aligned color frame.")
 
-        depth_raw = np.asanyarray(depth_frame.get_data())
-        color_bgr = np.asanyarray(color_frame.get_data())
-        if depth_raw.shape != (IMAGE_HEIGHT, IMAGE_WIDTH):
-            raise RuntimeError(f"Depth resolution must be 1280x720, got {depth_raw.shape[::-1]}.")
+        # RGB is captured once after warmup. Depth is then sampled for one
+        # second and averaged per pixel using only nonzero (valid) readings.
+        color_bgr = np.asanyarray(color_frame.get_data()).copy()
         if color_bgr.shape[:2] != (IMAGE_HEIGHT, IMAGE_WIDTH):
             raise RuntimeError(f"RGB resolution must be 1280x720, got {color_bgr.shape[1]}x{color_bgr.shape[0]}.")
+        depth_raw, depth_averaging = _capture_averaged_depth(pipeline, align)
+        print(
+            "Depth averaging complete: "
+            f"{depth_averaging['frame_count']} frames over "
+            f"{depth_averaging['actual_duration_seconds']:.3f}s, "
+            f"{depth_averaging['pixels_without_valid_depth']} pixels had no valid depth."
+        )
 
         rgb_path = output_dir / "rgb.png"
         depth_raw_path = output_dir / "depth.raw"
@@ -110,6 +162,7 @@ def capture_realsense(output_dir: Path, warmup_frames: int, camera_serial: str |
             "depth_scale_m": depth_scale,
             "rgb_path": str(rgb_path.resolve()),
             "depth_raw_path": str(depth_raw_path.resolve()),
+            "depth_averaging": depth_averaging,
             "selected_device": selected_device,
             "available_devices": devices,
             "intrinsics": {

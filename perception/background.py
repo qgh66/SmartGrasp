@@ -181,7 +181,7 @@ def fit_plane_background_mask(
     decision plane toward the camera by ``camera_side_extension_cm`` means a
     valid point is background when its signed distance from the original plane
     is greater than or equal to ``-camera_side_extension_cm``. Invalid depth
-    pixels are also background.
+    pixels remain unknown and are not included in the background mask.
     """
     depth = np.asarray(depth_map, dtype=np.float32)
     if depth.ndim != 2:
@@ -216,7 +216,10 @@ def fit_plane_background_mask(
     far_side_points = signed_point_distance >= -float(camera_side_extension_cm)
     far_side_mask = np.zeros(depth.shape, dtype=bool)
     far_side_mask[rows[far_side_points], cols[far_side_points]] = True
-    background = ~valid | far_side_mask
+    # A missing depth measurement carries no geometric evidence that the RGB
+    # pixel is background. Only valid points classified on the plane's far
+    # side are safe to exclude from object proposals.
+    background = far_side_mask.copy()
     signed_distance = np.full(depth.shape, np.nan, dtype=np.float32)
     signed_distance[rows, cols] = signed_point_distance
 

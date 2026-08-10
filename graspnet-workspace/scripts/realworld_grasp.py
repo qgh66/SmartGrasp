@@ -183,6 +183,7 @@ def execute_grasp_sequence(record: dict[str, Any], args: argparse.Namespace) -> 
             {"type": "move", "pose": pre_grasp_pose},
             {"type": "move", "pose": grasp_pose},
             {"type": "gripper", "command": "close"},
+            {"type": "move", "pose": lift_pose},
             {"type": "joint_move", "joints_rad": initial_joints_rad},
             {"type": "joint_move", "joints_rad": place_target_joints_rad},
             {"type": "move_relative_base", "translation_mm": [0.0, 0.0, -args.place_release_lower_mm]},

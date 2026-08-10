@@ -2,22 +2,23 @@
 
 ## 正式完整 Pipeline：拍照到真实抓取
 
-正式入口是项目根目录的 `run_pipeline.py`。它按下面的顺序完整运行一次：
+正式入口是项目根目录的 `run_pipeline.py`。每轮按下面的顺序运行：
 
 ```text
-尾号 76630 的 RealSense 拍摄 RGB-D
+由 `run_pipeline.py` 配置的 RealSense 拍摄 RGB-D
 → Perception（背景 Mask、SAM2、VLM、遮挡图）
 → Intent（从英文指令选择目标对象）
 → Reason（选择当前要抓的对象和 SAM2 part）
 → GraspNet（只使用 Reason 指定的二值 part mask）
 → JAKA + Robotiq 实际抓取、放置并返回拍摄位
+→ 如果抓取的不是最终目标，从拍摄开始进入下一轮
 ```
 
 ### 运行前准备
 
 1. 确认 JAKA 工作区安全、急停已经解除、控制器和夹爪可用。
-2. 确认尾号 `76630` 的 RealSense 已连接。程序会用该唯一后缀
-   匹配完整序列号。
+2. 确认 `run_pipeline.py` 中 `DEFAULT_CAMERA_SERIAL_SUFFIX` 指定的 RealSense
+   已连接。程序会用该唯一后缀匹配完整序列号。
 3. 确认根目录存在 `api_config.json`：
 
 ```json
@@ -52,26 +53,58 @@ python -u run_pipeline.py \
 calibration-mode = hand_eye
 top-k = 50
 candidate-index = 0
-camera serial suffix = 76630
+camera serial suffix = 72659
 ```
 
-每次运行创建一个不带 `scene_` 前缀的时间戳目录：
+可直接修改 `run_pipeline.py` 顶部的 `DEFAULT_CAMERA_SERIAL_SUFFIX`，也可以仅为
+当前运行通过命令行覆盖：
+
+```bash
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --camera-serial 76630
+```
+
+每次程序启动只创建一个时间戳目录，时间戳取程序开始时刻。每次实际抓取使用
+递增的数字子目录：
 
 ```text
 data_realworld/<YYYYMMDD_HHMMSS>/
-├── input/          # RGB、raw/npy 深度、相机参数、拍摄 TCP 位姿、GraspNet 结果
-├── perception/     # SAM2 mask、背景 mask、遮挡图、summary.json
-├── intent/         # id.txt
-└── reason/         # results.csv、summary.json、reason.txt
+├── pipeline.log
+├── 1/
+│   ├── input/                # RGB-D、相机参数、GraspNet 和执行结果
+│   ├── perception/           # SAM2 mask、背景 mask、遮挡图、summary.json
+│   ├── intent/               # id.txt
+│   ├── reason/               # results.csv、summary.json、reason.txt
+│   ├── reason_runs/          # Reason 的完整结构化结果
+│   └── pipeline_round.json   # 本轮目标判断及抓取状态
+├── 2/
+│   └── ...
+└── 3/
+    └── ...
 ```
+
+拍摄阶段在预热后只保存一帧 RGB；深度会继续采集约 1 秒，并在每个像素上仅对
+非零有效深度求平均。某个像素在整个窗口内都没有有效深度时，其结果保持为 0。
+这类像素在 Perception 中视为未知区域，不会加入深度背景排除 mask。
+采样帧数、实际采样时长及无有效深度的像素数记录在 `input/camera_meta.json` 的
+`depth_averaging` 字段中。
+
+Reason 结果中的 `target_id` 是本轮 Intent 识别出的最终目标，
+`selected_object_id` 是本轮实际应该抓取的物体。两者相等表示本轮直接抓最终
+目标；不相等表示本轮先移除遮挡物。只有真实抓取命令成功且两者不相等时，程序
+会重新拍摄并从 Perception 开始下一轮。如果 GraspNet/JAKA 抓取子流程返回失败，
+本轮会记录 `grasp_succeeded=false`，随后同样递增轮次并重新运行完整 pipeline。
+安全上限由 `run_pipeline.py` 顶部的 `MAX_GRASP_ROUNDS` 固定为 10 轮。
 
 完整主日志写入：
 
 ```text
-logs/realworld_<YYYYMMDD_HHMMSS>.log
+data_realworld/<YYYYMMDD_HHMMSS>/pipeline.log
 ```
 
-Intent 只执行一次并把 `intent/id.txt` 交给 Reason。Reason 输出的
+每轮 Intent 都会针对新拍摄画面重新执行，并把 `intent/id.txt` 交给 Reason。
+Reason 输出的
 `selected_object_graspability_part_id` 会映射到：
 
 ```text
@@ -126,12 +159,13 @@ SAM2 参数不需要写在命令行中。直接修改 `run_pipeline.py` 顶部�
 
 ```bash
 python -u run_pipeline.py \
-  --scene-dir /home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260726_225018 \
+  --scene-dir /home/admin128/qiuguanhe/SmartGrasp/data_realworld/20260810_210000/1 \
   --instruction "grasp the screwdriver on the left"
 ```
 
 使用 `--scene-dir` 并执行真实抓取时，必须保证物体、相机和拍摄时的相对位置
-没有变化，并且 `input/capture_tcp_pose.json` 与该 RGB-D 帧匹配。
+没有变化，并且 `input/capture_tcp_pose.json` 与该 RGB-D 帧匹配。复用场景模式
+只处理指定场景一轮，不会在抓取遮挡物后自动创建新一轮。
 
 ---
 
