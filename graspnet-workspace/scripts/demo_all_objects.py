@@ -5,9 +5,11 @@ import json
 import os
 import pickle
 import random
+import re
 import sys
 import time
 import atexit
+from pathlib import Path
 
 import numpy as np
 import pybullet as p
@@ -30,6 +32,7 @@ from demo_closed_loop import (
 from graspnetAPI import GraspGroup
 from models.graspnet import GraspNet, pred_decode
 from simulation.camera import VirtualCamera
+from simulation.capture_artifacts import export_camera_frame
 from simulation.evaluator import GraspEvaluator
 from simulation.gripper_factory import create_gripper
 from simulation.scene import SimulationScene
@@ -49,6 +52,13 @@ def _json_safe(value):
     if isinstance(value, np.floating):
         return float(value)
     return value
+
+
+def _capture_directory(capture_root, capture_index, target_name):
+    safe_target_name = re.sub(
+        r"[^A-Za-z0-9_.-]+", "_", str(target_name)
+    ).strip("._")
+    return capture_root / f"capture_{int(capture_index):04d}_{safe_target_name}"
 
 
 def _load_network(args, device):
@@ -203,6 +213,7 @@ def _attempt_target(
     place_pose,
     release_after_place,
     release_settle_steps,
+    capture_output_dir,
 ):
     """Capture the current scene and execute one target's best candidates."""
     target = scene.get_object_info(target_body_id)
@@ -213,6 +224,18 @@ def _attempt_target(
     rgb, depth, segmentation, point_cloud, object_clouds, target_points = (
         _capture_target(scene, camera, target_body_id, config)
     )
+    camera_artifacts = export_camera_frame(
+        output_dir=capture_output_dir,
+        rgb=rgb,
+        depth=depth,
+        segmentation=segmentation,
+        object_names_by_id={
+            int(body_id): scene.get_object_info(body_id).name
+            for body_id in scene.object_ids
+        },
+        target_body_id=target_body_id,
+    )
+    print(f"  相机数据已保存: {capture_output_dir}")
     visualization = {
         "rgb": rgb,
         "depth": depth,
@@ -224,6 +247,7 @@ def _attempt_target(
         },
         "target_body_id": int(target_body_id),
         "target_object_name": target.name,
+        "camera_artifacts": camera_artifacts,
     }
     target_point_count = (
         int(len(target_points)) if target_points is not None else 0
@@ -239,6 +263,7 @@ def _attempt_target(
             "evaluated_candidates": 0,
             "target_point_count": 0,
             "grasps": [],
+            "camera_artifacts": camera_artifacts,
         }, visualization
 
     grasps, filter_stats = _infer_target_grasps(
@@ -255,6 +280,7 @@ def _attempt_target(
             "evaluated_candidates": 0,
             "target_point_count": target_point_count,
             "grasps": [],
+            "camera_artifacts": camera_artifacts,
             **filter_stats,
         }, visualization
 
@@ -335,6 +361,7 @@ def _attempt_target(
         "target_point_count": target_point_count,
         "activated_from_staging": activated_from_staging,
         "grasps": results,
+        "camera_artifacts": camera_artifacts,
         **filter_stats,
     }, visualization
 
@@ -478,6 +505,8 @@ def run_all_objects(args):
 
     last_visualization = None
     attempts = []
+    output_path = Path(args.output)
+    capture_root = output_path.with_name(f"{output_path.stem}_captures")
     if continuous_mode:
         remaining_ids = list(target_ids)
         stalled_passes = 0
@@ -508,6 +537,11 @@ def run_all_objects(args):
                     place_pose=place_pose,
                     release_after_place=True,
                     release_settle_steps=release_settle_steps,
+                    capture_output_dir=_capture_directory(
+                        capture_root,
+                        len(attempts) + 1,
+                        target.name,
+                    ),
                 )
                 attempt["pass_index"] = pass_index
                 attempt["attempt_index"] = len(attempts) + 1
@@ -555,6 +589,11 @@ def run_all_objects(args):
                 place_pose=place_pose,
                 release_after_place=release_after_place,
                 release_settle_steps=release_settle_steps,
+                capture_output_dir=_capture_directory(
+                    capture_root,
+                    object_number,
+                    target.name,
+                ),
             )
             attempt["attempt_index"] = object_number
             object_results.append(attempt)
@@ -587,6 +626,8 @@ def run_all_objects(args):
         "object_success": successful_objects,
         "objects": object_results,
         "attempts": attempts if continuous_mode else [],
+        "capture_root": str(capture_root),
+        "capture_count": len(attempts) if continuous_mode else len(object_results),
         "final_scene_objects": scene.get_object_poses(),
         "gripper": gripper.metadata(),
     })

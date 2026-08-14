@@ -85,12 +85,73 @@ def _resolve_path(path, *, config_dir=None):
     return os.path.abspath(candidates[0])
 
 
-def load_scene_config(config_path):
-    """Load an industrial scene JSON and resolve object mesh paths."""
+def load_scene_config(config_path, _visited_paths=None):
+    """Load a scene config, including optional base-config object overrides."""
     resolved_config_path = _resolve_path(config_path)
+    visited_paths = set(_visited_paths or ())
+    if resolved_config_path in visited_paths:
+        raise ValueError(
+            f"Cyclic base_scene_config reference: {resolved_config_path}"
+        )
+    visited_paths.add(resolved_config_path)
+
     config_dir = os.path.dirname(resolved_config_path)
     with open(resolved_config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
+
+    if isinstance(config, dict) and config.get("base_scene_config"):
+        base_config_path = _resolve_path(
+            config["base_scene_config"],
+            config_dir=config_dir,
+        )
+        base_config = load_scene_config(
+            base_config_path,
+            _visited_paths=visited_paths,
+        )
+        merged_config = {
+            key: value
+            for key, value in base_config.items()
+            if not key.startswith("_")
+        }
+        merged_config.update({
+            key: value
+            for key, value in config.items()
+            if key not in {"base_scene_config", "object_overrides"}
+        })
+
+        object_overrides = config.get("object_overrides", {})
+        if not isinstance(object_overrides, dict):
+            raise ValueError(
+                f"object_overrides must be an object: {resolved_config_path}"
+            )
+        base_object_specs = [
+            dict(spec) for spec in base_config["_resolved_objects"]
+        ]
+        configured_names = {
+            str(spec.get("name")) for spec in base_object_specs
+        }
+        unknown_names = sorted(set(object_overrides) - configured_names)
+        if unknown_names:
+            raise ValueError(
+                "Scene config overrides unknown object(s): "
+                + ", ".join(unknown_names)
+            )
+
+        resolved_specs = []
+        for base_spec in base_object_specs:
+            item = dict(base_spec)
+            item.update(object_overrides.get(str(item.get("name")), {}))
+            if "path" in object_overrides.get(str(item.get("name")), {}):
+                item["path"] = _resolve_path(
+                    item["path"],
+                    config_dir=config_dir,
+                )
+            resolved_specs.append(item)
+
+        merged_config["_path"] = resolved_config_path
+        merged_config["_base_path"] = base_config["_path"]
+        merged_config["_resolved_objects"] = resolved_specs
+        return merged_config
 
     object_specs = config if isinstance(config, list) else config.get("objects", [])
     if not object_specs:

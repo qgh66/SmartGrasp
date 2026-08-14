@@ -1,7 +1,7 @@
 # 堆叠遮挡与连续抓取实验命令
 
 本文档中的命令均在仓库根目录
-`/home/admin128/qiuguanhe/SmartGrasp` 执行。所有模式共用同一个入口
+`/home/admin128/qiuguanhe/Simulation/SmartGrasp` 执行。所有模式共用同一个入口
 `run_grasp_simulation.sh`，没有直接运行 Python 脚本。
 
 新增场景配置为
@@ -17,7 +17,7 @@ ssh -Y -C admin128@100.115.245.13
 
 ```bash
 conda activate smartgrasp
-cd ~/qiuguanhe/SmartGrasp
+cd ~/qiuguanhe/Simulation/SmartGrasp
 ```
 
 每个实验启动前设置相同的模型环境变量：
@@ -331,6 +331,79 @@ bash run_grasp_simulation.sh \
 动力学，因此抓取、抬升、运输和投放仍由 PyBullet 物理执行。
 连续两轮没有任何成功后停止，未清除的物体会保留在结果 JSON 中，避免死循环。
 
+### 5.1 所有物品依次抓取：SLURM 提交命令
+
+下面的命令按照 `continuous_grasp.target_order` 依次处理所有物品；成功抓取并投放
+一个物品后重新拍摄，再继续处理剩余物品。按项目运行约定，通过 SLURM 提交：
+
+```bash
+export OPENAI_BASE_URL=https://yunwu.ai/v1
+export REVIEW_MODEL_ID=gpt-5.5
+export REASON_MODEL=gpt-5.5
+export REASON_PRIOR_PROMPT=graspability
+export REASON_RANKING_SCORE=ig_graspability
+
+PYBULLET_GUI=0 \
+GRASP_RECORD_VIDEO=0 \
+GRASP_GUI_SPEED=1.0 \
+sbatch run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
+  --continuous-grasp \
+  --stop-on-success \
+  --assisted-grasp \
+  --max-candidates-per-object 30 \
+  --max-stalled-passes 3 \
+  --output results/stacked_all_objects_continuous_grasp.json
+```
+
+这条命令只能在已经安装并配置好 SLURM 的提交节点执行。当前 `labserver0` 没有
+`sbatch` 或 `srun`，不能在该机器上使用这条命令。不要只根据终端提示安装
+`slurm-client`；如果没有集群控制器地址和 SLURM 配置，安装客户端后仍然无法提交。
+
+注意：当前版本还不能通过命令行实现以下策略：
+
+- 同一个物品连续 3 次物理抓取失败后，自动执行 reveal push；
+- 一直找不到合适抓取位姿（`no_filtered_candidates`）时，自动执行 reveal push。
+
+`--max-stalled-passes 3` 只表示所有剩余物品连续 3 个完整 pass 都没有任何抓取
+成功后终止任务，不会触发推动。当前 `demo_all_objects.py` 的连续清场流程没有调用
+`RevealPushExecutor`，命令行也没有“单物体失败次数达到阈值后 push”的参数。因此，
+如果实验必须包含上述两条 reveal 规则，需要先为连续清场模式实现该状态机和对应的
+命令行参数；在实现之前不存在能够完整满足该实验定义的有效命令。
+
+### 5.2 labserver0 本地运行（仅在允许绕过 SLURM 时）
+
+如果确认本次允许不通过 SLURM、直接占用 `labserver0` 的 GPU，可以将 `sbatch`
+替换为 `bash`。这仍然通过项目 Shell 入口运行，不是裸跑 Python：
+
+```bash
+export OPENAI_BASE_URL=https://yunwu.ai/v1
+export REVIEW_MODEL_ID=gpt-5.5
+export REASON_MODEL=gpt-5.5
+export REASON_PRIOR_PROMPT=graspability
+export REASON_RANKING_SCORE=ig_graspability
+
+PYBULLET_GUI=0 \
+GRASP_RECORD_VIDEO=0 \
+GRASP_GUI_SPEED=1.0 \
+bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
+  --continuous-grasp \
+  --stop-on-success \
+  --assisted-grasp \
+  --max-candidates-per-object 30 \
+  --max-stalled-passes 3 \
+  --output results/stacked_all_objects_continuous_grasp.json
+```
+
+### 5.3 紧密堆叠场景：GUI 连续抓取动画
+
+紧密布局配置 `industrial_scene_compact_stacked_layout.json` 继承原 stacked 场景的
+物体、抓取顺序、拍摄/投放关节位姿和连续抓取参数，只覆盖相机与 12 个物体的紧密
+多层位姿。原 `industrial_scene_stacked.json` 不变。
+
+先确认当前 SSH 会话启用了 X11 转发；`echo "$DISPLAY"` 必须输出非空值。然后运行：
+
 ```bash
 export OPENAI_BASE_URL=https://yunwu.ai/v1
 export REVIEW_MODEL_ID=gpt-5.5
@@ -342,21 +415,57 @@ PYBULLET_GUI=1 \
 GRASP_RECORD_VIDEO=1 \
 GRASP_GUI_SPEED=0.5 \
 bash run_grasp_simulation.sh \
-  --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
+  --scene-config graspnet-workspace/config/industrial_scene_compact_stacked_layout.json \
   --continuous-grasp \
   --stop-on-success \
   --assisted-grasp \
   --max-candidates-per-object 30 \
-  --output results/stacked_continuous_grasp_drop.json
+  --max-stalled-passes 3 \
+  --output results/compact_stacked_continuous_grasp_gui.json
 ```
+
+运行时会弹出 PyBullet 窗口；同时录制
+`graspnet-workspace/results/compact_stacked_continuous_grasp_gui_pybullet.mp4`。
+逐次 RGB-D、实例分割和 mask 位于
+`graspnet-workspace/results/compact_stacked_continuous_grasp_gui_captures/`。
+
+该紧密场景为了复现高遮挡，初始拍摄时会锁定配置位姿；目标进入抓取评估前恢复
+动态质量。由于布局比普通 stacked 场景更密集，物体恢复动力学时可能发生明显接触
+或弹开，这正是该压力测试需要观察的现象。
 
 连续模式输出 JSON 中：
 
 - `mode` 为 `continuous_grasp_and_drop`。
 - `objects` 是每个物体的最终清除状态。
 - `attempts` 保留每轮尝试、失败原因和候选执行记录。
+- `capture_root` 是逐次相机拍摄结果目录；每一次抓取尝试都有独立的
+  `capture_NNNN_<object>` 子目录。
 - 成功候选的 `placement.released_after_place` 为 `true`。
 - `placement.post_release_object_position` 是松爪并等待下落后的物体位置。
+
+每个 `capture_NNNN_<object>` 目录包含同一时刻的完整相机输出：
+
+- `rgb.png`：虚拟相机 RGB 图像；
+- `depth_m.npy`：原始 `float32` 米制深度；
+- `depth_mm.png`：可被图像工具读取的 16-bit 毫米深度图；
+- `depth_color.png`：方便肉眼查看的伪彩色深度图；
+- `segmentation.npy`：PyBullet 原始分割标签；
+- `body_ids_plus_one.png` 和 `segmentation_color.png`：实例标签及其彩色预览；
+- `target_mask.png`：本次待抓目标的二值 mask；
+- `masks/*.png`：场景中每个配置物体的独立二值 mask；
+- `capture.json`：深度范围、mask 像素数和上述文件路径。
+
+这些 mask 是与 RGB-D 严格同帧的 PyBullet 实例真值 mask。`--continuous-grasp`
+当前不运行 Perception，因此它们不是 SAM2/Perception 的预测 mask。
+
+旧结果如果只有 `*_viz_data.pkl`，可使用下面的离线工具补导出同帧完整相机文件：
+
+```bash
+bash export_simulation_capture.sh \
+  --viz-data graspnet-workspace/results/integration_single_grasp_gui_viz_data.pkl \
+  --results graspnet-workspace/results/integration_single_grasp_gui.json \
+  --output-dir graspnet-workspace/results/camera_preview
+```
 
 需要覆盖场景默认等待参数时，可添加：
 

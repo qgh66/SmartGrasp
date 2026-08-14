@@ -1,0 +1,64 @@
+{
+  "description": "Compact multi-layer preview layout derived from industrial_scene_stacked.json.",
+  "base_scene_config": "industrial_scene_stacked.json",
+  "target_object": "flat_screwdriver_partially_occluded_b",
+  "camera": {
+    "position": [0.34, 0.0, 0.48],
+    "target": [0.34, 0.0, 0.05],
+    "width": 1280,
+    "height": 720,
+    "fov": 45.0,
+    "near": 0.01,
+    "far": 3.0
+  },
+  "object_overrides": {
+    "battery_fully_occluded_a": {
+      "position": [0.30, -0.04, 0.025],
+      "euler": [0.0, 0.0, 0.15]
+    },
+    "power_drill_cover_a": {
+      "position": [0.30, -0.04, 0.055],
+      "euler": [0.0, 0.0, -0.45]
+    },
+    "flat_screwdriver_partially_occluded_b": {
+      "position": [0.37, 0.035, 0.025],
+      "euler": [0.0, 0.0, -0.40]
+    },
+    "adjustable_wrench_cover_b": {
+      "position": [0.36, 0.025, 0.065],
+      "euler": [0.0, 0.0, 0.65]
+    },
+    "large_clamp_base_c": {
+      "position": [0.38, -0.045, 0.030],
+      "euler": [0.0, 0.0, -1.00]
+    },
+    "flat_screwdriver_cover_c": {
+      "position": [0.36, -0.040, 0.075],
+      "euler": [0.0, 0.0, 0.40]
+    },
+    "phillips_screwdriver_base_d": {
+      "position": [0.29, 0.045, 0.025],
+      "euler": [0.0, 0.0, 0.50]
+    },
+    "two_color_hammer_cover_d": {
+      "position": [0.31, 0.045, 0.075],
+      "euler": [0.0, 0.0, -0.60]
+    },
+    "medium_clamp_base_e": {
+      "position": [0.335, -0.005, 0.035],
+      "euler": [0.0, 0.0, 0.90]
+    },
+    "battery_cover_e": {
+      "position": [0.34, 0.000, 0.075],
+      "euler": [0.0, 0.0, -0.20]
+    },
+    "small_clamp_base_f": {
+      "position": [0.325, 0.015, 0.095],
+      "euler": [0.0, 0.0, -0.80]
+    },
+    "medium_clamp_cover_f": {
+      "position": [0.34, 0.000, 0.125],
+      "euler": [0.0, 0.0, 1.20]
+    }
+  }
+}
