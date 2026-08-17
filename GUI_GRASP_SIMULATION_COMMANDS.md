@@ -56,6 +56,16 @@ echo "$DISPLAY"
 
 `DISPLAY` 必须输出非空值，否则 PyBullet GUI 无法显示。
 
+当前服务器如果提示 `sbatch: command not found`，说明没有安装 SLURM 客户端。
+此时直接运行项目封装好的 Shell 入口：
+
+```bash
+bash run_grasp_simulation.sh [参数...]
+```
+
+不要直接裸跑 Python 脚本。只有在已安装并配置 SLURM 的计算节点上，才将下面
+命令开头的 `bash` 替换为 `sbatch`。
+
 ## 2. 新增：只核验 Perception + Reason，正确后删除物体
 
 新增开关为：
@@ -82,7 +92,7 @@ Reason，但不会加载 GraspNet，也不会执行抓取、投放或 Push。机
 ### 2.1 平铺场景：依次核验并删除全部十个物体
 
 ```bash
-sbatch run_grasp_simulation.sh \
+bash run_grasp_simulation.sh \
   --scene-config graspnet-workspace/config/industrial_scene.json \
   --instruction "抓取{target}" \
   --run-pipeline-after-capture \
@@ -102,7 +112,7 @@ sbatch run_grasp_simulation.sh \
 ### 2.2 堆叠场景：依次核验并删除全部十二个物体
 
 ```bash
-sbatch run_grasp_simulation.sh \
+bash run_grasp_simulation.sh \
   --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
   --instruction "抓取{target}" \
   --run-pipeline-after-capture \
@@ -122,6 +132,57 @@ sbatch run_grasp_simulation.sh \
 下层物体。电钻及其下方的电池都包含在 12 个目标中。该模式不会用 Push
 主动改变堆叠关系，场景变化只来自“核验通过后删除当前目标”。
 
+### 2.3 快速无窗口版本（推荐先运行）
+
+如果只想尽快查看 Perception + Reason 的成功率，不需要观察 PyBullet 窗口，
+可以在命令前强制设置：
+
+```bash
+PYBULLET_GUI=0 GRASP_RECORD_VIDEO=0
+```
+
+这会使用 PyBullet DIRECT 后端，并关闭 MP4 录制。核验模式没有机械臂动作，
+因此可同时使用 `--reobserve-settle-steps 0`。VLM API 调用仍然需要时间，但不会
+再产生 GUI 渲染和录屏开销。
+
+平铺场景快速无窗口命令：
+
+```bash
+PYBULLET_GUI=0 GRASP_RECORD_VIDEO=0 bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene.json \
+  --instruction "抓取{target}" \
+  --run-pipeline-after-capture \
+  --perception-reason-test \
+  --continuous-grasp \
+  --max-task-rounds 1 \
+  --max-stalled-passes 1 \
+  --target-mask-min-iou 0.05 \
+  --reobserve-settle-steps 0 \
+  --initial-pose-hold-seconds 0 \
+  --output results/validation_flat_all_objects_fast.json
+```
+
+堆叠场景快速无窗口命令：
+
+```bash
+PYBULLET_GUI=0 GRASP_RECORD_VIDEO=0 bash run_grasp_simulation.sh \
+  --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
+  --instruction "抓取{target}" \
+  --run-pipeline-after-capture \
+  --perception-reason-test \
+  --continuous-grasp \
+  --max-task-rounds 1 \
+  --max-stalled-passes 1 \
+  --target-mask-min-iou 0.05 \
+  --reobserve-settle-steps 0 \
+  --initial-pose-hold-seconds 0 \
+  --output results/validation_stacked_all_objects_fast.json
+```
+
+快速版每个目标单次进入 `_attempt_pipeline_target` 时只推理一轮，并在整轮没有
+任何成功物体后立即停止；适合先看结果。需要允许模型重试时，再使用前面的
+`--max-task-rounds 3 --max-stalled-passes 3` 完整命令。
+
 核验模式输出：
 
 ```text
@@ -129,6 +190,8 @@ graspnet-workspace/results/validation_flat_all_objects.json
 graspnet-workspace/results/validation_flat_all_objects_viz_data.pkl
 graspnet-workspace/results/validation_stacked_all_objects.json
 graspnet-workspace/results/validation_stacked_all_objects_viz_data.pkl
+graspnet-workspace/results/validation_flat_all_objects_fast.json
+graspnet-workspace/results/validation_stacked_all_objects_fast.json
 ```
 
 最终 JSON 的 `mode` 为 `perception_reason_validation_and_delete`。重点查看
@@ -170,7 +233,7 @@ JSON 中同时保存 `object_total`、`object_success`、`object_failed`、
 完整命令：
 
 ```bash
-sbatch run_grasp_simulation.sh \
+bash run_grasp_simulation.sh \
   --scene-config graspnet-workspace/config/industrial_scene.json \
   --instruction "抓取{target}" \
   --run-pipeline-after-capture \
@@ -215,7 +278,7 @@ sbatch run_grasp_simulation.sh \
 完整命令：
 
 ```bash
-sbatch run_grasp_simulation.sh \
+bash run_grasp_simulation.sh \
   --scene-config graspnet-workspace/config/industrial_scene.json \
   --instruction "抓取{target}" \
   --run-pipeline-after-capture \
@@ -257,7 +320,7 @@ GraspNet。
 完整命令：
 
 ```bash
-sbatch run_grasp_simulation.sh \
+bash run_grasp_simulation.sh \
   --scene-config graspnet-workspace/config/industrial_scene_stacked.json \
   --instruction "抓取{target}" \
   --run-pipeline-after-capture \
