@@ -220,6 +220,14 @@ class JakaZu3Robotiq85Gripper:
         self._current_opening = float(np.clip(width, 0.002, self._max_opening))
         self._move_gripper_angle(GRIPPER_ANGLE_OPEN)
 
+    def get_push_contact_link_ids(self) -> set[int]:
+        """Return gripper links that are allowed to establish push contact."""
+        link_ids = set(self.left_finger_link_ids)
+        link_ids.update(self.right_finger_link_ids)
+        if self.ee_tip_id is not None:
+            link_ids.add(int(self.ee_tip_id))
+        return link_ids
+
     def move_to_joint_pose_deg(self, joint_pose_deg):
         """Move the arm to an explicit six-joint target expressed in degrees."""
         joint_pose_deg = [float(value) for value in joint_pose_deg]

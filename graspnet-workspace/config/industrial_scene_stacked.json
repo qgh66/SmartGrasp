@@ -66,11 +66,13 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "battery",
+        "batch_instruction_target": "电钻下面的电池",
         "instruction_aliases": ["电池", "battery"],
         "role": "target",
         "stack_id": "a",
         "stack_layer": 0,
-        "occlusion_case": "fully_occluded_initially"
+        "occlusion_case": "fully_occluded_initially",
+        "grasp_min_visible_ratio": 0.001
       }
     },
     {
@@ -84,6 +86,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "power_drill",
+        "batch_instruction_target": "电钻",
         "stack_id": "a",
         "stack_layer": 1,
         "occludes": ["battery_fully_occluded_a"]
@@ -100,6 +103,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "下层的中号夹具",
         "stack_id": "e",
         "stack_layer": 0
       }
@@ -115,6 +119,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "screwdriver",
+        "batch_instruction_target": "活动扳手下面的一字螺丝刀",
         "instruction_aliases": [
           "一字螺丝刀",
           "平口螺丝刀",
@@ -138,6 +143,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "wrench",
+        "batch_instruction_target": "上层的活动扳手",
         "stack_id": "b",
         "stack_layer": 1,
         "occludes": ["flat_screwdriver_partially_occluded_b"]
@@ -154,6 +160,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "下层的小号夹具",
         "stack_id": "f",
         "stack_layer": 0
       }
@@ -169,6 +176,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "下层的大号夹具",
         "stack_id": "c",
         "stack_layer": 0
       }
@@ -184,6 +192,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "screwdriver",
+        "batch_instruction_target": "上层的一字螺丝刀",
         "stack_id": "c",
         "stack_layer": 1
       }
@@ -199,6 +208,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "battery",
+        "batch_instruction_target": "上层的电池",
         "stack_id": "e",
         "stack_layer": 1,
         "occludes": ["medium_clamp_base_e"]
@@ -215,6 +225,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "screwdriver",
+        "batch_instruction_target": "下层的十字螺丝刀",
         "stack_id": "d",
         "stack_layer": 0
       }
@@ -230,6 +241,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "hammer",
+        "batch_instruction_target": "上层的双色锤",
         "stack_id": "d",
         "stack_layer": 1,
         "occludes": ["phillips_screwdriver_base_d"]
@@ -246,6 +258,7 @@
       "spinning_friction": 0.15,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "上层的中号夹具",
         "stack_id": "f",
         "stack_layer": 1,
         "occludes": ["small_clamp_base_f"]

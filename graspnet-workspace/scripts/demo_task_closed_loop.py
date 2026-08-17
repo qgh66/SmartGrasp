@@ -111,11 +111,14 @@ def _capture_and_reason(
     requested_scene_id,
     network,
     device,
+    allow_unselected_object=False,
+    prepare_gripper=True,
 ):
     """Capture one physical state and run the full perception/reason pipeline."""
-    gripper.release_grasp()
-    gripper.set_opening(gripper._max_opening)
-    gripper.move_to_joint_pose_deg(capture_pose)
+    if prepare_gripper:
+        gripper.release_grasp()
+        gripper.set_opening(gripper._max_opening)
+        gripper.move_to_joint_pose_deg(capture_pose)
     rgb, depth, segmentation = camera.capture()
 
     scene_id = (
@@ -156,7 +159,10 @@ def _capture_and_reason(
     )
     heartbeat_thread.start()
     try:
-        reason_target = run_pipeline_for_scene(scene_id)
+        reason_target = run_pipeline_for_scene(
+            scene_id,
+            allow_unselected_object=allow_unselected_object,
+        )
     except Exception:
         elapsed = time.monotonic() - pipeline_started_at
         print(
@@ -258,6 +264,42 @@ def _map_reason_object(
     return body_id, scene_object, selection
 
 
+def _map_reason_target(scene, capture, minimum_iou):
+    """Map Reason's semantic target mask independently of its action object."""
+    reason_target = capture["reason_target"]
+    target_mask_path = reason_target.get("target_object_mask_path")
+    if not target_mask_path:
+        return None
+    body_id, scene_object, selection = match_scene_object_by_mask(
+        scene,
+        capture["segmentation"],
+        target_mask_path,
+        minimum_iou=minimum_iou,
+    )
+    selection.update(
+        {
+            "reason_scene_id": int(reason_target["scene_id"]),
+            "reason_branch": reason_target["branch"],
+            "reason_target_object_id": int(
+                reason_target["target_object_id"]
+            ),
+            "reason_target_object_label": reason_target[
+                "target_object_label"
+            ],
+            "reason_summary_path": reason_target["reason_summary_path"],
+            "occlusion_graph_path": reason_target[
+                "occlusion_graph_path"
+            ],
+        }
+    )
+    print(
+        f"  🎯 Reason Target {reason_target['target_object_id']} "
+        f"-> body_id={body_id}, name={scene_object.name}, "
+        f"IoU={selection['selected_iou']:.4f}"
+    )
+    return body_id, scene_object, selection
+
+
 def _configured_target(scene, instruction):
     """Resolve one stable simulation target from explicit scene aliases."""
     normalized_instruction = str(instruction).strip().lower()
@@ -316,6 +358,51 @@ def _configured_occlusion_branch(target_object):
     if "partial" in occlusion_case:
         return PARTIAL_BRANCH
     return PARTIAL_BRANCH
+
+
+def _configured_target_visibility(capture, body_id, target_object):
+    """Return configured target visibility when the scene defines a threshold."""
+    minimum_ratio = target_object.metadata.get("grasp_min_visible_ratio")
+    if minimum_ratio is None:
+        return None
+    minimum_ratio = float(minimum_ratio)
+    if not 0.0 < minimum_ratio <= 1.0:
+        raise ValueError(
+            "grasp_min_visible_ratio must be in (0, 1], got "
+            f"{minimum_ratio} for {target_object.name}"
+        )
+
+    segmentation = np.asarray(capture["segmentation"], dtype=np.int64)
+    decoded_body_ids = np.where(
+        segmentation >= 0,
+        segmentation & ((1 << 24) - 1),
+        -1,
+    )
+    visible_pixels = int(np.count_nonzero(decoded_body_ids == int(body_id)))
+    total_pixels = int(segmentation.size)
+    visible_ratio = visible_pixels / total_pixels if total_pixels else 0.0
+    return {
+        "source": "configured_target_visibility",
+        "selected_body_id": int(body_id),
+        "selected_object_name": target_object.name,
+        "visible_pixels": visible_pixels,
+        "total_pixels": total_pixels,
+        "visible_ratio": visible_ratio,
+        "minimum_visible_ratio": minimum_ratio,
+        "visible_enough_for_grasp": visible_ratio >= minimum_ratio,
+    }
+
+
+def _round_instruction(instruction, round_index):
+    """Describe the initial relation without freezing later visual state."""
+    instruction = str(instruction).strip()
+    if round_index <= 1:
+        return instruction
+    return (
+        f"{instruction}\n"
+        "这是执行遮挡物操作后的重新观察。指令中的遮挡描述仅指"
+        "初始状态；请以当前图像为准，重新判断目标现在是否可见。"
+    )
 
 
 def _selection_override(
@@ -383,7 +470,15 @@ def _execute_push(
     gui,
     gui_speed,
 ):
-    activated = scene.activate_staged_object(body_id)
+    staged = scene.is_object_staged(body_id)
+    activated = False
+
+    def activate_for_contact():
+        nonlocal activated
+        if staged and not activated:
+            activated = scene.activate_staged_object(body_id)
+        return activated
+
     direction = (
         np.asarray(requested_direction, dtype=float)
         if requested_direction is not None
@@ -401,6 +496,7 @@ def _execute_push(
             center_point=object_center_from_aabb(body_id),
             direction=direction,
             move_distance=move_distance,
+            activate_callback=(activate_for_contact if staged else None),
         )
     except Exception:
         if activated:
@@ -408,9 +504,19 @@ def _execute_push(
         raise
     if activated:
         if result["success"]:
-            scene.finish_staged_object(body_id)
+            scene.stage_object_at_current_pose(body_id)
         else:
             scene.restage_object(body_id)
+    if result.get("unsafe_motion"):
+        recovery_status = (
+            "已恢复到上一次稳定位置"
+            if activated
+            else "物体保持在静态稳定位置"
+        )
+        print(
+            f"  ⚠️ 检测到不安全 push，{recovery_status}: "
+            f"{result.get('failure_reason')}"
+        )
     return result, activated
 
 
@@ -757,6 +863,7 @@ def run_task_closed_loop(args):
     pushed_occluder_ids = set()
     configured_target_body_id = None
     configured_target_name = None
+    configured_target_object = None
     pending_occluder_ids = set()
     output_path = Path(args.output)
 
@@ -783,9 +890,7 @@ def run_task_closed_loop(args):
             str(args.instruction).strip(),
         )
         if configured_target is not None:
-            configured_target_body_id, configured_target_object = (
-                configured_target
-            )
+            configured_target_body_id, configured_target_object = configured_target
             configured_target_name = configured_target_object.name
             pending_occluder_ids = set(
                 _configured_occluders(
@@ -852,21 +957,140 @@ def run_task_closed_loop(args):
                     camera=camera,
                     gripper=gripper,
                     capture_pose=capture_pose,
-                    instruction=str(args.instruction).strip(),
+                    instruction=_round_instruction(
+                        args.instruction,
+                        round_index,
+                    ),
                     requested_scene_id=requested_scene_id,
                     network=network,
                     device=device,
+                    allow_unselected_object=(
+                        configured_target_body_id is not None
+                    ),
                 )
-                (
-                    reason_body_id,
-                    reason_scene_object,
-                    reason_selection,
-                ) = _map_reason_object(
-                    scene,
-                    capture,
-                    args.target_mask_min_iou,
-                    prefer_part_mask=args.use_reason_part_mask,
+                reason_target = capture["reason_target"]
+                reason_mapping_role = None
+                target_visibility = (
+                    _configured_target_visibility(
+                        capture,
+                        configured_target_body_id,
+                        configured_target_object,
+                    )
+                    if (
+                        configured_target_body_id is not None
+                        and configured_target_object is not None
+                    )
+                    else None
                 )
+                if (
+                    target_visibility is not None
+                    and target_visibility["visible_enough_for_grasp"]
+                ):
+                    reason_body_id = configured_target_body_id
+                    reason_scene_object = configured_target_object
+                    reason_mapping_role = "configured_target"
+                    reason_selection = target_visibility
+                    print(
+                        "  👁️ 配置目标已充分显露: "
+                        f"pixels={target_visibility['visible_pixels']}, "
+                        f"ratio={target_visibility['visible_ratio']:.6f}, "
+                        "转入目标抓取"
+                    )
+                elif reason_target.get("object_id") is None:
+                    if configured_target_body_id is None:
+                        raise RuntimeError(
+                            "Reason did not select grasp_object.id and no "
+                            "configured target fallback is available: "
+                            f"{reason_target['reason_summary_path']}"
+                        )
+                    reason_body_id = None
+                    reason_scene_object = None
+                    reason_selection = {
+                        "source": "reason_no_visible_grasp_object",
+                        "reason_status": reason_target.get("status"),
+                        "reason_branch": reason_target.get("branch"),
+                        "reason_summary_path": reason_target[
+                            "reason_summary_path"
+                        ],
+                    }
+                    print(
+                        "  👁️ Reason 未发现可见抓取目标；"
+                        "使用场景配置继续闭环"
+                    )
+                else:
+                    configured_target_mapping = None
+                    if configured_target_body_id is not None:
+                        try:
+                            target_mapping = _map_reason_target(
+                                scene,
+                                capture,
+                                args.target_mask_min_iou,
+                            )
+                            if (
+                                target_mapping is not None
+                                and target_mapping[0]
+                                == configured_target_body_id
+                            ):
+                                configured_target_mapping = target_mapping
+                        except Exception as target_mapping_error:
+                            print(
+                                "  ⚠️ Reason 目标 mask 映射失败；"
+                                f"继续检查动作对象: {target_mapping_error}"
+                            )
+                    try:
+                        (
+                            reason_body_id,
+                            reason_scene_object,
+                            reason_selection,
+                        ) = _map_reason_object(
+                            scene,
+                            capture,
+                            args.target_mask_min_iou,
+                            prefer_part_mask=args.use_reason_part_mask,
+                        )
+                        reason_mapping_role = "grasp_object"
+                    except Exception as grasp_mapping_error:
+                        if configured_target_mapping is not None:
+                            (
+                                reason_body_id,
+                                reason_scene_object,
+                                target_selection,
+                            ) = configured_target_mapping
+                            reason_mapping_role = "target_object"
+                            reason_selection = {
+                                **target_selection,
+                                "source": "configured_target_mask_fallback",
+                                "grasp_object_mapping_error": str(
+                                    grasp_mapping_error
+                                ),
+                            }
+                            print(
+                                "  🎯 Reason 动作对象无法映射；"
+                                "已验证目标 mask，直接转入目标抓取"
+                            )
+                        elif (
+                            configured_target_body_id is not None
+                            and pending_occluder_ids
+                        ):
+                            reason_body_id = None
+                            reason_scene_object = None
+                            reason_mapping_role = None
+                            reason_selection = {
+                                "source": "configured_occluder_after_"
+                                "invalid_reason_mask",
+                                "grasp_object_mapping_error": str(
+                                    grasp_mapping_error
+                                ),
+                                "reason_summary_path": reason_target[
+                                    "reason_summary_path"
+                                ],
+                            }
+                            print(
+                                "  ⚠️ Reason 动作对象无法映射；"
+                                "目标尚未显露，继续使用配置遮挡物"
+                            )
+                        else:
+                            raise
             except Exception as error:
                 task_status = f"pipeline_failed: {error}"
                 rounds.append(
@@ -880,17 +1104,37 @@ def run_task_closed_loop(args):
                 save_round_checkpoint()
                 break
 
-            reason_target = capture["reason_target"]
             reason_branch = str(reason_target.get("branch") or "")
             body_id = reason_body_id
             scene_object = reason_scene_object
             selection = reason_selection
             branch = reason_branch
 
-            # PyBullet scene configs can provide stable aliases and explicit
-            # occlusion relations. Use them to prevent a merged Perception mask
-            # from turning an occluder into the final semantic target.
+            # A Reason mask mapped to the configured target is the evidence
+            # that a pushed occluder has revealed it. Prefer that evidence over
+            # the still-pending configured occlusion relation.
             if (
+                configured_target_body_id is not None
+                and reason_body_id == configured_target_body_id
+            ):
+                if pending_occluder_ids:
+                    print(
+                        "  👀 已重新观察到配置目标；"
+                        "遮挡物处理阶段结束"
+                    )
+                pending_occluder_ids.clear()
+                body_id = configured_target_body_id
+                scene_object = scene.get_object_info(body_id)
+                branch = FINAL_BRANCH
+                selection = _selection_override(
+                    reason_selection=reason_selection,
+                    selected_body_id=body_id,
+                    selected_object=scene_object,
+                    source="reason_mapped_configured_target",
+                )
+            # Otherwise keep acting on the configured occluder. A successful
+            # push only proves motion, not that the target is visible yet.
+            elif (
                 configured_target_body_id is not None
                 and pending_occluder_ids
             ):
@@ -957,13 +1201,30 @@ def run_task_closed_loop(args):
                     ),
                 },
                 "reason_mapped_object": {
-                    "reason_id": int(reason_target["object_id"]),
-                    "reason_label": reason_target["object_label"],
-                    "body_id": int(reason_body_id),
-                    "name": reason_scene_object.name,
+                    "role": reason_mapping_role,
+                    "reason_id": (
+                        reason_target.get("target_object_id")
+                        if reason_mapping_role == "target_object"
+                        else reason_target.get("object_id")
+                    ),
+                    "reason_label": (
+                        reason_target.get("target_object_label")
+                        if reason_mapping_role == "target_object"
+                        else reason_target["object_label"]
+                    ),
+                    "body_id": (
+                        int(reason_body_id)
+                        if reason_body_id is not None
+                        else None
+                    ),
+                    "name": (
+                        reason_scene_object.name
+                        if reason_scene_object is not None
+                        else None
+                    ),
                 },
                 "grasp_object": {
-                    "reason_id": int(reason_target["object_id"]),
+                    "reason_id": reason_target.get("object_id"),
                     "reason_label": reason_target["object_label"],
                     "body_id": int(body_id),
                     "name": scene_object.name,
@@ -1016,6 +1277,7 @@ def run_task_closed_loop(args):
                         use_reason_part_mask=bool(
                             args.use_reason_part_mask
                             and body_id == reason_body_id
+                            and reason_mapping_role == "grasp_object"
                         ),
                         release_settle_steps=release_settle_steps,
                     )
@@ -1049,10 +1311,14 @@ def run_task_closed_loop(args):
                 and action_success
                 and body_id in pending_occluder_ids
             ):
-                pending_occluder_ids.discard(body_id)
                 if action == "push":
                     pushed_occluder_ids.add(body_id)
+                    print(
+                        "  🔄 遮挡物推动成功；保留待处理状态，"
+                        "下一轮重观察确认目标是否显露"
+                    )
                 else:
+                    pending_occluder_ids.discard(body_id)
                     pushed_occluder_ids.discard(body_id)
 
             if final_action and action_success:

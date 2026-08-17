@@ -283,7 +283,7 @@ class SimulationScene:
         return True
 
     def restage_object(self, body_id: int) -> bool:
-        """Restore a failed target to its original staged pose."""
+        """Restore a failed target to its latest stable staged pose."""
         staged_pose = self._staged_object_poses.get(body_id)
         if staged_pose is None:
             return False
@@ -300,9 +300,36 @@ class SimulationScene:
         )
         return True
 
+    def stage_object_at_current_pose(self, body_id: int) -> bool:
+        """Save a stable intermediate pose and lock it for re-observation."""
+        if body_id not in self._staged_object_poses:
+            return False
+        position, orientation = self.get_object_pose(body_id)
+        self._staged_object_poses[body_id] = (
+            tuple(float(value) for value in position),
+            tuple(float(value) for value in orientation),
+        )
+        p.resetBaseVelocity(
+            body_id,
+            linearVelocity=(0.0, 0.0, 0.0),
+            angularVelocity=(0.0, 0.0, 0.0),
+        )
+        p.changeDynamics(body_id, -1, mass=0.0)
+        return True
+
     def finish_staged_object(self, body_id: int) -> None:
         """Remove a successfully grasped body from staging bookkeeping."""
         self._staged_object_poses.pop(body_id, None)
+
+    def remove_object(self, body_id: int) -> SceneObject:
+        """Remove one registered object from both PyBullet and the scene registry."""
+        scene_object = self.get_object_info(body_id)
+        p.removeBody(body_id)
+        self.object_ids.remove(body_id)
+        self.objects_by_id.pop(body_id, None)
+        self.objects_by_name.pop(scene_object.name, None)
+        self._staged_object_poses.pop(body_id, None)
+        return scene_object
 
     def is_object_staged(self, body_id: int) -> bool:
         return body_id in self._staged_object_poses

@@ -35,7 +35,31 @@ from simulation.camera import VirtualCamera
 from simulation.capture_artifacts import export_camera_frame
 from simulation.evaluator import GraspEvaluator
 from simulation.gripper_factory import create_gripper
+from simulation.object_mapping import match_scene_object_by_mask
 from simulation.scene import SimulationScene
+
+
+def _pipeline_helpers():
+    """Import task-loop helpers lazily to keep the legacy batch path light."""
+    from demo_task_closed_loop import (
+        _capture_and_reason,
+        _configured_occluders,
+        _execute_grasp,
+        _execute_push,
+        _map_reason_object,
+        _map_reason_target,
+        _round_instruction,
+    )
+
+    return {
+        "capture_and_reason": _capture_and_reason,
+        "configured_occluders": _configured_occluders,
+        "execute_grasp": _execute_grasp,
+        "execute_push": _execute_push,
+        "map_reason_object": _map_reason_object,
+        "map_reason_target": _map_reason_target,
+        "round_instruction": _round_instruction,
+    }
 
 
 def _json_safe(value):
@@ -197,6 +221,500 @@ def _ordered_target_ids(scene, args, config):
     return target_ids, [
         scene.get_object_info(body_id).name for body_id in target_ids
     ]
+
+
+def _format_pipeline_instruction(template, target):
+    """Build one unambiguous instruction for the current batch target."""
+    aliases = target.metadata.get("instruction_aliases") or ()
+    target_label = str(
+        target.metadata.get("batch_instruction_target")
+        or (aliases[0] if aliases else target.name.replace("_", " "))
+    ).strip()
+    try:
+        instruction = str(template).format(
+            target=target_label,
+            target_name=target.name,
+        )
+    except (KeyError, ValueError) as error:
+        raise ValueError(
+            "Invalid batch Pipeline --instruction template; only "
+            "{target} and {target_name} are supported"
+        ) from error
+    if not instruction.strip():
+        raise ValueError("Batch Pipeline instruction resolved to an empty string")
+    return instruction.strip()
+
+
+def _evaluate_perception_target(
+    scene,
+    capture,
+    target_body_id,
+    minimum_iou,
+):
+    """Check whether any Perception object mask matches the simulator target."""
+    graph_path = Path(capture["reason_target"]["occlusion_graph_path"])
+    with graph_path.open("r", encoding="utf-8") as graph_file:
+        graph_data = json.load(graph_file)
+    nodes = graph_data.get("graph", {}).get("nodes", [])
+    matching_nodes = []
+    mask_errors = []
+    for node in nodes:
+        mask_path = node.get("mask_path")
+        if not mask_path:
+            continue
+        resolved_mask_path = Path(mask_path).expanduser()
+        if not resolved_mask_path.is_absolute():
+            resolved_mask_path = graph_path.parent / resolved_mask_path
+        try:
+            body_id, scene_object, selection = match_scene_object_by_mask(
+                scene,
+                capture["segmentation"],
+                resolved_mask_path,
+                minimum_iou=minimum_iou,
+            )
+        except Exception as error:
+            mask_errors.append({
+                "object_id": node.get("object_id"),
+                "label": node.get("label"),
+                "error": str(error),
+            })
+            continue
+        if body_id != target_body_id:
+            continue
+        matching_nodes.append({
+            "object_id": node.get("object_id"),
+            "label": node.get("label"),
+            "mask_path": str(resolved_mask_path.resolve()),
+            "selected_body_id": int(body_id),
+            "selected_object_name": scene_object.name,
+            "selected_iou": float(selection["selected_iou"]),
+            "mask_pixels": int(selection["mask_pixels"]),
+        })
+
+    matching_nodes.sort(
+        key=lambda item: item["selected_iou"],
+        reverse=True,
+    )
+    return {
+        "correct": bool(matching_nodes),
+        "expected_body_id": int(target_body_id),
+        "expected_object_name": scene.get_object_info(target_body_id).name,
+        "minimum_iou": float(minimum_iou),
+        "perception_object_count": len(nodes),
+        "matching_mask_count": len(matching_nodes),
+        "best_matching_mask": matching_nodes[0] if matching_nodes else None,
+        "mask_error_count": len(mask_errors),
+        "mask_errors": mask_errors,
+    }
+
+
+def _build_reason_validation(
+    target_body_id,
+    target_mapping,
+    action_mapping,
+):
+    """Check both Reason's semantic target and proposed grasp object."""
+    semantic_target_body_id = (
+        int(target_mapping[0]) if target_mapping is not None else None
+    )
+    action_object_body_id = (
+        int(action_mapping[0]) if action_mapping is not None else None
+    )
+    semantic_target_correct = semantic_target_body_id == int(target_body_id)
+    action_object_correct = action_object_body_id == int(target_body_id)
+    return {
+        "correct": semantic_target_correct and action_object_correct,
+        "expected_body_id": int(target_body_id),
+        "semantic_target_correct": semantic_target_correct,
+        "semantic_target_body_id": semantic_target_body_id,
+        "semantic_target_object_name": (
+            target_mapping[1].name if target_mapping is not None else None
+        ),
+        "action_object_correct": action_object_correct,
+        "action_object_body_id": action_object_body_id,
+        "action_object_name": (
+            action_mapping[1].name if action_mapping is not None else None
+        ),
+    }
+
+
+def _attempt_pipeline_target(
+    *,
+    scene,
+    gripper,
+    camera,
+    network,
+    device,
+    config,
+    args,
+    target_body_id,
+    capture_pose,
+    release_settle_steps,
+    completed_body_ids,
+    batch_target_body_ids,
+):
+    """Run Perception/Reason before every action for one batch target.
+
+    Explicit scene occlusion relations are used only as a physical fallback
+    when Reason cannot see the requested target. The occluder is pushed, never
+    silently substituted as the requested grasp target.
+    """
+    helpers = _pipeline_helpers()
+    target = scene.get_object_info(target_body_id)
+    instruction = _format_pipeline_instruction(args.instruction, target)
+    configured_occluders = set(
+        helpers["configured_occluders"](scene, target.name)
+    )
+    pending_occluders = configured_occluders.difference(completed_body_ids)
+    pipeline_rounds = []
+    latest_visualization = None
+    latest_validation = None
+
+    print(f"  Pipeline 指令: {instruction}")
+    if pending_occluders:
+        pending_names = [
+            scene.get_object_info(body_id).name
+            for body_id in sorted(pending_occluders)
+        ]
+        print(f"  配置遮挡物: {pending_names}")
+
+    for round_index in range(1, args.max_task_rounds + 1):
+        round_instruction = helpers["round_instruction"](
+            instruction,
+            round_index,
+        )
+        try:
+            capture = helpers["capture_and_reason"](
+                camera=camera,
+                gripper=gripper,
+                capture_pose=capture_pose,
+                instruction=round_instruction,
+                requested_scene_id=None,
+                network=network,
+                device=device,
+                allow_unselected_object=True,
+                prepare_gripper=not args.perception_reason_test,
+            )
+            reason_target = capture["reason_target"]
+
+            reason_target_mapping = None
+            target_mapping = None
+            try:
+                reason_target_mapping = helpers["map_reason_target"](
+                    scene,
+                    capture,
+                    args.target_mask_min_iou,
+                )
+                if (
+                    reason_target_mapping is not None
+                    and reason_target_mapping[0] == target_body_id
+                ):
+                    target_mapping = reason_target_mapping
+            except Exception as error:
+                print(f"  ⚠️ Reason 目标 mask 映射失败: {error}")
+
+            action_mapping = None
+            if reason_target.get("object_id") is not None:
+                try:
+                    action_mapping = helpers["map_reason_object"](
+                        scene,
+                        capture,
+                        args.target_mask_min_iou,
+                        prefer_part_mask=args.use_reason_part_mask,
+                    )
+                except Exception as error:
+                    print(f"  ⚠️ Reason 动作 mask 映射失败: {error}")
+
+            if args.perception_reason_test:
+                perception_validation = _evaluate_perception_target(
+                    scene,
+                    capture,
+                    target_body_id,
+                    args.target_mask_min_iou,
+                )
+                reason_validation = _build_reason_validation(
+                    target_body_id,
+                    reason_target_mapping,
+                    action_mapping,
+                )
+                validation_passed = bool(
+                    perception_validation["correct"]
+                    and reason_validation["correct"]
+                )
+                removed_from_scene = False
+                if validation_passed:
+                    scene.remove_object(target_body_id)
+                    removed_from_scene = True
+                    print(
+                        "  ✅ Perception/Reason 核验正确，已从场景删除: "
+                        f"{target.name} (body_id={target_body_id})"
+                    )
+                else:
+                    print(
+                        "  ❌ Perception/Reason 核验未通过，不删除物体: "
+                        f"perception={perception_validation['correct']}, "
+                        f"reason={reason_validation['correct']}"
+                    )
+
+                latest_validation = {
+                    "passed": validation_passed,
+                    "perception": perception_validation,
+                    "reason": reason_validation,
+                    "removed_from_scene": removed_from_scene,
+                }
+                selected_mapping = action_mapping or reason_target_mapping
+                selection = (
+                    selected_mapping[2] if selected_mapping is not None else None
+                )
+                round_record = {
+                    "round": round_index,
+                    "scene_id": int(capture["scene_id"]),
+                    "instruction": round_instruction,
+                    "reason_target": reason_target,
+                    "selected_body_id": (
+                        int(selected_mapping[0])
+                        if selected_mapping is not None
+                        else None
+                    ),
+                    "selected_object_name": (
+                        selected_mapping[1].name
+                        if selected_mapping is not None
+                        else None
+                    ),
+                    "selection_role": "validation_only",
+                    "selection": selection,
+                    "action": (
+                        "delete-validated-target"
+                        if validation_passed
+                        else "no-action-validation-failed"
+                    ),
+                    "action_result": latest_validation,
+                    "action_success": validation_passed,
+                }
+                pipeline_rounds.append(round_record)
+                latest_visualization = {
+                    "rgb": capture["rgb"],
+                    "depth": capture["depth"],
+                    "seg": capture["segmentation"],
+                    "point_cloud": camera.generate_point_cloud(
+                        capture["depth"],
+                        num_points=20000,
+                    ).numpy(),
+                    "perception_input": capture["perception_input"],
+                    "reason_target": reason_target,
+                    "target_selection": selection,
+                    "target_body_id": int(target_body_id),
+                    "target_object_name": target.name,
+                    "perception_reason_validation": latest_validation,
+                }
+                if validation_passed:
+                    return {
+                        "target_body_id": int(target_body_id),
+                        "target_object_name": target.name,
+                        "obj_path": target.path,
+                        "instruction": instruction,
+                        "success": True,
+                        "failure_reason": None,
+                        "evaluated_candidates": 0,
+                        "perception_correct": True,
+                        "reason_correct": True,
+                        "removed_from_scene": True,
+                        "pipeline_rounds": pipeline_rounds,
+                    }, latest_visualization
+                scene.step(args.reobserve_settle_steps)
+                continue
+
+            # Prefer Reason's action-object mapping when it resolves to the
+            # requested target. This preserves the validated grasp part mask
+            # for execution. The semantic target mask is only a whole-object
+            # fallback when the action mask cannot be mapped reliably.
+            if (
+                action_mapping is not None
+                and action_mapping[0] == target_body_id
+            ):
+                selected_body_id, selected_object, selection = action_mapping
+                selection_role = "grasp_object"
+            elif target_mapping is not None:
+                selected_body_id, selected_object, selection = target_mapping
+                selection_role = "target_object"
+            elif pending_occluders:
+                unfinished_target_occluders = pending_occluders.intersection(
+                    batch_target_body_ids
+                )
+                if unfinished_target_occluders:
+                    names = [
+                        scene.get_object_info(body_id).name
+                        for body_id in sorted(unfinished_target_occluders)
+                    ]
+                    raise RuntimeError(
+                        "Configured occluder is also an unfinished batch "
+                        f"target and must be grasped first: {names}"
+                    )
+                selected_body_id = (
+                    action_mapping[0]
+                    if (
+                        action_mapping is not None
+                        and action_mapping[0] in pending_occluders
+                    )
+                    else min(pending_occluders)
+                )
+                selected_object = scene.get_object_info(selected_body_id)
+                selection = {
+                    "source": "configured_occlusion_relation",
+                    "reason_selection": (
+                        action_mapping[2]
+                        if action_mapping is not None
+                        else None
+                    ),
+                }
+                selection_role = "occluder"
+            else:
+                mapped_name = (
+                    action_mapping[1].name
+                    if action_mapping is not None
+                    else None
+                )
+                raise RuntimeError(
+                    "Reason did not map the requested target to its PyBullet "
+                    f"body: requested={target.name!r}, mapped={mapped_name!r}"
+                )
+
+            is_target_action = selected_body_id == target_body_id
+            action = "grasp-target" if is_target_action else "push"
+            print(
+                "  🧭 批量 Pipeline 动作: "
+                f"round={round_index}, action={action}, "
+                f"name={selected_object.name}, role={selection_role}"
+            )
+
+            if is_target_action:
+                action_result = helpers["execute_grasp"](
+                    scene=scene,
+                    gripper=gripper,
+                    camera=camera,
+                    capture=capture,
+                    network=network,
+                    device=device,
+                    body_id=selected_body_id,
+                    reason_target=reason_target,
+                    config=config,
+                    args=args,
+                    final_target=False,
+                    use_reason_part_mask=bool(
+                        args.use_reason_part_mask
+                        and selection_role == "grasp_object"
+                    ),
+                    release_settle_steps=release_settle_steps,
+                )
+            else:
+                push_result, activated = helpers["execute_push"](
+                    scene=scene,
+                    gripper=gripper,
+                    body_id=selected_body_id,
+                    config=config,
+                    requested_direction=args.push_direction,
+                    move_distance=args.push_distance,
+                    gui=args.gui,
+                    gui_speed=args.gui_speed,
+                )
+                action_result = {
+                    "success": bool(push_result["success"]),
+                    "activated_from_staging": activated,
+                    "push": push_result,
+                }
+
+            round_record = {
+                "round": round_index,
+                "scene_id": int(capture["scene_id"]),
+                "instruction": round_instruction,
+                "reason_target": reason_target,
+                "selected_body_id": int(selected_body_id),
+                "selected_object_name": selected_object.name,
+                "selection_role": selection_role,
+                "selection": selection,
+                "action": action,
+                "action_result": action_result,
+                "action_success": bool(action_result["success"]),
+            }
+            pipeline_rounds.append(round_record)
+            latest_visualization = {
+                "rgb": capture["rgb"],
+                "depth": capture["depth"],
+                "seg": capture["segmentation"],
+                "point_cloud": action_result.get("point_cloud"),
+                "perception_input": capture["perception_input"],
+                "reason_target": reason_target,
+                "target_selection": selection,
+                "target_body_id": int(target_body_id),
+                "target_object_name": target.name,
+            }
+
+            if is_target_action:
+                return {
+                    "target_body_id": int(target_body_id),
+                    "target_object_name": target.name,
+                    "obj_path": target.path,
+                    "instruction": instruction,
+                    "success": bool(action_result["success"]),
+                    "failure_reason": (
+                        None
+                        if action_result["success"]
+                        else "target_grasp_failed"
+                    ),
+                    "evaluated_candidates": len(
+                        action_result.get("grasps") or []
+                    ),
+                    "pipeline_rounds": pipeline_rounds,
+                }, latest_visualization
+
+            if not action_result["success"]:
+                print(
+                    "  ⚠️ 遮挡物 Push 未成功；下一轮仍会重新感知后重试"
+                )
+            scene.step(args.reobserve_settle_steps)
+        except Exception as error:
+            print(f"  ❌ 批量 Pipeline 目标失败: {error}")
+            return {
+                "target_body_id": int(target_body_id),
+                "target_object_name": target.name,
+                "obj_path": target.path,
+                "instruction": instruction,
+                "success": False,
+                "failure_reason": f"pipeline_failed: {error}",
+                "evaluated_candidates": 0,
+                "pipeline_rounds": pipeline_rounds,
+                "perception_correct": bool(
+                    latest_validation
+                    and latest_validation["perception"]["correct"]
+                ),
+                "reason_correct": bool(
+                    latest_validation
+                    and latest_validation["reason"]["correct"]
+                ),
+                "removed_from_scene": False,
+                "perception_reason_validation": latest_validation,
+            }, latest_visualization
+
+    return {
+        "target_body_id": int(target_body_id),
+        "target_object_name": target.name,
+        "obj_path": target.path,
+        "instruction": instruction,
+        "success": False,
+        "failure_reason": "max_task_rounds_reached",
+        "evaluated_candidates": 0,
+        "pipeline_rounds": pipeline_rounds,
+        "perception_correct": bool(
+            latest_validation
+            and latest_validation["perception"]["correct"]
+        ),
+        "reason_correct": bool(
+            latest_validation
+            and latest_validation["reason"]["correct"]
+        ),
+        "removed_from_scene": False,
+        "perception_reason_validation": latest_validation,
+    }, latest_visualization
 
 
 def _attempt_target(
@@ -366,11 +884,10 @@ def _attempt_target(
     }, visualization
 
 
-def _summarize_continuous_objects(scene, target_ids, attempts):
+def _summarize_continuous_objects(target_ids, target_names, attempts):
     """Build one compact final record per requested object."""
     summaries = []
-    for target_body_id in target_ids:
-        target = scene.get_object_info(target_body_id)
+    for target_body_id, target_name in zip(target_ids, target_names):
         object_attempts = [
             attempt
             for attempt in attempts
@@ -381,9 +898,9 @@ def _summarize_continuous_objects(scene, target_ids, attempts):
             None,
         )
         last_attempt = object_attempts[-1] if object_attempts else {}
-        summaries.append({
+        summary = {
             "target_body_id": int(target_body_id),
-            "target_object_name": target.name,
+            "target_object_name": target_name,
             "success": successful_attempt is not None,
             "attempt_count": len(object_attempts),
             "successful_attempt_index": (
@@ -396,7 +913,21 @@ def _summarize_continuous_objects(scene, target_ids, attempts):
                 if successful_attempt
                 else last_attempt.get("failure_reason", "not_attempted")
             ),
-        })
+        }
+        validation_attempt = successful_attempt or last_attempt
+        if "perception_correct" in validation_attempt:
+            summary.update({
+                "perception_correct": bool(
+                    validation_attempt.get("perception_correct", False)
+                ),
+                "reason_correct": bool(
+                    validation_attempt.get("reason_correct", False)
+                ),
+                "removed_from_scene": bool(
+                    validation_attempt.get("removed_from_scene", False)
+                ),
+            })
+        summaries.append(summary)
     return summaries
 
 
@@ -414,13 +945,22 @@ def run_all_objects(args):
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
+    validation_only = bool(args.perception_reason_test)
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print(f"[All Objects] seed={args.seed}, device={device}")
-    network = _load_network(args, device)
+    network = None if validation_only else _load_network(args, device)
+    if validation_only:
+        print(
+            "  测试模式: 仅运行 Perception + Intent + Reason；"
+            "不加载 GraspNet，不执行机械臂抓取或 Push"
+        )
 
     config = load_scene_config(args.scene_config)
     continuous_config = config.get("continuous_grasp", {})
-    release_after_place = bool(args.drop_after_grasp or continuous_mode)
+    release_after_place = bool(
+        not validation_only
+        and (args.drop_after_grasp or continuous_mode)
+    )
     release_settle_steps = (
         args.drop_settle_steps
         if args.drop_settle_steps is not None
@@ -476,11 +1016,14 @@ def run_all_objects(args):
         video_recorder.start()
         atexit.register(video_recorder.close)
         print(f"  PyBullet GUI 录制: {video_path}")
-    gripper.move_to_joint_pose_deg(capture_pose)
     print(f"  场景已倒入并稳定: {len(scene.object_ids)} 个物体")
-    _hold_initial_pose(
-        scene, gripper, args.initial_pose_hold_seconds, args.gui
-    )
+    if validation_only:
+        print("  机械臂保持初始拍摄位姿，测试过程中不发送运动指令")
+    else:
+        gripper.move_to_joint_pose_deg(capture_pose)
+        _hold_initial_pose(
+            scene, gripper, args.initial_pose_hold_seconds, args.gui
+        )
 
     camera_config = config.get("camera", {})
     camera = VirtualCamera(
@@ -497,6 +1040,11 @@ def run_all_objects(args):
         scene, args, config
     )
     print(f"  处理顺序: {' -> '.join(target_names)}")
+    if args.run_pipeline_after_capture:
+        print(
+            "  感知策略: 每个目标、每次重试均重新运行 "
+            "Perception + Intent + Reason"
+        )
     if release_after_place:
         print(
             "  投放策略: 到达 place_target_joint_pose_deg 后松爪，"
@@ -524,6 +1072,93 @@ def run_all_objects(args):
                     f"\n  尝试目标: {target.name} "
                     f"(pass={pass_index}, attempt={len(attempts) + 1})"
                 )
+                if args.run_pipeline_after_capture:
+                    attempt, visualization = _attempt_pipeline_target(
+                        scene=scene,
+                        gripper=gripper,
+                        camera=camera,
+                        network=network,
+                        device=device,
+                        config=config,
+                        args=args,
+                        target_body_id=target_body_id,
+                        capture_pose=capture_pose,
+                        release_settle_steps=release_settle_steps,
+                        completed_body_ids=set(target_ids).difference(
+                            remaining_ids
+                        ),
+                        batch_target_body_ids=set(target_ids),
+                    )
+                else:
+                    attempt, visualization = _attempt_target(
+                        scene=scene,
+                        gripper=gripper,
+                        camera=camera,
+                        network=network,
+                        device=device,
+                        config=config,
+                        args=args,
+                        target_body_id=target_body_id,
+                        capture_pose=capture_pose,
+                        place_pose=place_pose,
+                        release_after_place=True,
+                        release_settle_steps=release_settle_steps,
+                        capture_output_dir=_capture_directory(
+                            capture_root,
+                            len(attempts) + 1,
+                            target.name,
+                        ),
+                    )
+                attempt["pass_index"] = pass_index
+                attempt["attempt_index"] = len(attempts) + 1
+                attempts.append(attempt)
+                last_visualization = visualization
+                if attempt["success"]:
+                    remaining_ids.remove(target_body_id)
+                    pass_succeeded = True
+                    # A successful drop or validation deletion changes the
+                    # scene, so following targets need a fresh camera frame.
+                    break
+
+            if pass_succeeded:
+                stalled_passes = 0
+            else:
+                stalled_passes += 1
+                print(
+                    "  本轮无物体处理成功；"
+                    f"连续停滞 {stalled_passes}/{max_stalled_passes} 轮"
+                )
+        object_results = _summarize_continuous_objects(
+            target_ids, target_names, attempts
+        )
+    else:
+        object_results = []
+        completed_body_ids = set()
+        for object_number, target_body_id in enumerate(
+            target_ids,
+            start=1,
+        ):
+            target = scene.get_object_info(target_body_id)
+            print(
+                f"\n[{object_number}/{len(target_ids)}] "
+                f"目标物体: {target.name}"
+            )
+            if args.run_pipeline_after_capture:
+                attempt, visualization = _attempt_pipeline_target(
+                    scene=scene,
+                    gripper=gripper,
+                    camera=camera,
+                    network=network,
+                    device=device,
+                    config=config,
+                    args=args,
+                    target_body_id=target_body_id,
+                    capture_pose=capture_pose,
+                    release_settle_steps=release_settle_steps,
+                    completed_body_ids=completed_body_ids,
+                    batch_target_body_ids=set(target_ids),
+                )
+            else:
                 attempt, visualization = _attempt_target(
                     scene=scene,
                     gripper=gripper,
@@ -535,76 +1170,54 @@ def run_all_objects(args):
                     target_body_id=target_body_id,
                     capture_pose=capture_pose,
                     place_pose=place_pose,
-                    release_after_place=True,
+                    release_after_place=release_after_place,
                     release_settle_steps=release_settle_steps,
                     capture_output_dir=_capture_directory(
                         capture_root,
-                        len(attempts) + 1,
+                        object_number,
                         target.name,
                     ),
                 )
-                attempt["pass_index"] = pass_index
-                attempt["attempt_index"] = len(attempts) + 1
-                attempts.append(attempt)
-                last_visualization = visualization
-                if attempt["success"]:
-                    remaining_ids.remove(target_body_id)
-                    pass_succeeded = True
-                    # The pile changed after every successful drop. Start a new
-                    # pass so all following candidates use a fresh camera frame.
-                    break
-
-            if pass_succeeded:
-                stalled_passes = 0
-            else:
-                stalled_passes += 1
-                print(
-                    "  本轮无物体抓取成功；"
-                    f"连续停滞 {stalled_passes}/{max_stalled_passes} 轮"
-                )
-        object_results = _summarize_continuous_objects(
-            scene, target_ids, attempts
-        )
-    else:
-        object_results = []
-        for object_number, target_body_id in enumerate(
-            target_ids,
-            start=1,
-        ):
-            target = scene.get_object_info(target_body_id)
-            print(
-                f"\n[{object_number}/{len(target_ids)}] "
-                f"目标物体: {target.name}"
-            )
-            attempt, visualization = _attempt_target(
-                scene=scene,
-                gripper=gripper,
-                camera=camera,
-                network=network,
-                device=device,
-                config=config,
-                args=args,
-                target_body_id=target_body_id,
-                capture_pose=capture_pose,
-                place_pose=place_pose,
-                release_after_place=release_after_place,
-                release_settle_steps=release_settle_steps,
-                capture_output_dir=_capture_directory(
-                    capture_root,
-                    object_number,
-                    target.name,
-                ),
-            )
             attempt["attempt_index"] = object_number
             object_results.append(attempt)
             last_visualization = visualization
+            if attempt["success"]:
+                completed_body_ids.add(target_body_id)
 
     successful_objects = sum(item["success"] for item in object_results)
+    failed_objects = len(object_results) - successful_objects
+    success_rate = (
+        successful_objects / len(object_results)
+        if object_results
+        else 0.0
+    )
+    successful_object_names = [
+        item["target_object_name"]
+        for item in object_results
+        if item["success"]
+    ]
+    failed_object_names = [
+        item["target_object_name"]
+        for item in object_results
+        if not item["success"]
+    ]
     output = _json_safe({
         "mode": (
-            "continuous_grasp_and_drop"
-            if continuous_mode
-            else "all_objects_sequential_pick_and_place"
+            "perception_reason_validation_and_delete"
+            if validation_only
+            else (
+                "pipeline_continuous_grasp_and_drop"
+                if continuous_mode and args.run_pipeline_after_capture
+                else (
+                    "continuous_grasp_and_drop"
+                    if continuous_mode
+                    else (
+                        "pipeline_all_objects_sequential_pick_and_place"
+                        if args.run_pipeline_after_capture
+                        else "all_objects_sequential_pick_and_place"
+                    )
+                )
+            )
         ),
         "scene_config": config["_path"],
         "seed": int(args.seed),
@@ -621,9 +1234,31 @@ def run_all_objects(args):
         ),
         "gui_speed": float(args.gui_speed),
         "assisted_grasp": bool(args.assisted_grasp),
+        "run_pipeline_after_capture": bool(
+            args.run_pipeline_after_capture
+        ),
+        "perception_reason_test": validation_only,
+        "graspnet_enabled": network is not None,
+        "physical_actions_enabled": not validation_only,
+        "instruction_template": (
+            str(args.instruction)
+            if args.run_pipeline_after_capture
+            else None
+        ),
         "gripper_model": args.gripper_model,
         "object_total": len(object_results),
         "object_success": successful_objects,
+        "object_failed": failed_objects,
+        "success_rate": success_rate,
+        "experiment_summary": {
+            "total": len(object_results),
+            "success": successful_objects,
+            "failed": failed_objects,
+            "success_rate": success_rate,
+            "success_rate_percent": success_rate * 100.0,
+            "successful_objects": successful_object_names,
+            "failed_objects": failed_object_names,
+        },
         "objects": object_results,
         "attempts": attempts if continuous_mode else [],
         "capture_root": str(capture_root),
@@ -644,9 +1279,20 @@ def run_all_objects(args):
         with open(visualization_path, "wb") as visualization_file:
             pickle.dump(last_visualization, visualization_file)
 
+    print("\n实验结果汇总:")
     print(
-        f"\n全部物体结果: "
-        f"{successful_objects}/{len(object_results)} 成功"
+        f"  成功率: {success_rate:.2%} "
+        f"({successful_objects}/{len(object_results)})"
+    )
+    print(f"  成功: {successful_objects} 个")
+    print(f"  失败: {failed_objects} 个")
+    print(
+        "  成功物体: "
+        + (", ".join(successful_object_names) or "无")
+    )
+    print(
+        "  失败物体: "
+        + (", ".join(failed_object_names) or "无")
     )
     print(f"结果已保存: {args.output}")
     if video_recorder is not None:

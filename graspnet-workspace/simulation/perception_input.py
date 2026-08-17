@@ -252,8 +252,18 @@ def _resolve_reason_part_mask_path(
     return candidates[0].resolve()
 
 
-def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
-    """Run Perception + Intent + Reason and resolve the selected object mask."""
+def run_pipeline_for_scene(
+    scene_id: int,
+    *,
+    allow_unselected_object: bool = False,
+) -> dict[str, Any]:
+    """Run the pipeline and resolve the selected object's mask when present.
+
+    A fully hidden target can legitimately produce no ``grasp_object``. Task
+    closed-loop callers with a configured occlusion relation may opt into that
+    result and select the known physical occluder themselves. Other callers
+    remain strict so an unexpected missing selection is still reported.
+    """
     scene_id = int(scene_id)
     script_path = REPO_ROOT / "run_pipeline.sh"
     if not script_path.exists():
@@ -298,16 +308,32 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
     reason_summary = _load_json(reason_summary_path)
     grasp_object = reason_summary.get("grasp_object") or {}
     target_object = reason_summary.get("target_object") or {}
+    target_object_id = target_object.get("id")
+    target_object_id = (
+        int(target_object_id) if target_object_id is not None else None
+    )
+    target_object_mask_path = (
+        _resolve_graph_mask_path(
+            graph_path=graph_path,
+            object_id=target_object_id,
+        )
+        if target_object_id is not None
+        else None
+    )
     object_id = grasp_object.get("id")
-    if object_id is None:
+    if object_id is None and not allow_unselected_object:
         raise RuntimeError(
             "Reason did not select grasp_object.id: "
             f"{reason_summary_path}"
         )
-    object_id = int(object_id)
-    object_mask_path = _resolve_graph_mask_path(
-        graph_path=graph_path,
-        object_id=object_id,
+    object_id = int(object_id) if object_id is not None else None
+    object_mask_path = (
+        _resolve_graph_mask_path(
+            graph_path=graph_path,
+            object_id=object_id,
+        )
+        if object_id is not None
+        else None
     )
     grasp_part_mask = reason_summary.get("grasp_part_mask")
     grasp_part_mask_path = _resolve_reason_part_mask_path(
@@ -320,11 +346,18 @@ def run_pipeline_for_scene(scene_id: int) -> dict[str, Any]:
         "branch": reason_summary.get("branch"),
         "status": reason_summary.get("status"),
         "instruction": reason_summary.get("instruction"),
-        "target_object_id": target_object.get("id"),
+        "target_object_id": target_object_id,
         "target_object_label": target_object.get("label"),
+        "target_object_mask_path": (
+            str(target_object_mask_path)
+            if target_object_mask_path is not None
+            else None
+        ),
         "object_id": object_id,
         "object_label": grasp_object.get("label"),
-        "object_mask_path": str(object_mask_path),
+        "object_mask_path": (
+            str(object_mask_path) if object_mask_path is not None else None
+        ),
         "perception_output_dir": str(perception_output_dir.resolve()),
         "perception_summary_path": str(perception_summary_path.resolve()),
         "occlusion_graph_path": str(graph_path.resolve()),

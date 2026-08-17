@@ -45,6 +45,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "screwdriver",
+        "batch_instruction_target": "十字螺丝刀",
         "source": "ycb",
         "role": "target"
       }
@@ -60,6 +61,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "screwdriver",
+        "batch_instruction_target": "一字螺丝刀",
         "source": "ycb"
       }
     },
@@ -74,6 +76,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "wrench",
+        "batch_instruction_target": "活动扳手",
         "source": "ycb"
       }
     },
@@ -88,6 +91,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "power_drill",
+        "batch_instruction_target": "电钻",
         "source": "ycb"
       }
     },
@@ -102,6 +106,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "hammer",
+        "batch_instruction_target": "银色羊角锤",
         "source": "ycb"
       }
     },
@@ -116,6 +121,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "中号夹具",
         "source": "ycb"
       }
     },
@@ -130,6 +136,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "大号夹具",
         "source": "ycb"
       }
     },
@@ -144,6 +151,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "hammer",
+        "batch_instruction_target": "双色锤",
         "source": "local"
       }
     },
@@ -158,6 +166,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "clamp",
+        "batch_instruction_target": "小号夹具",
         "source": "local"
       }
     },
@@ -172,6 +181,7 @@
       "spinning_friction": 0.1,
       "metadata": {
         "category": "battery",
+        "batch_instruction_target": "电池",
         "source": "local"
       }
     }

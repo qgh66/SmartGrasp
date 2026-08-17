@@ -7,6 +7,7 @@ import os
 import pickle
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +27,14 @@ from simulation.object_mapping import match_scene_object_by_mask
 
 
 TABLE_CLEARANCE = 0.005
-DEFAULT_PUSH_PENETRATION = 0.04
+DEFAULT_PUSH_PENETRATION = 0.006
 DEFAULT_CONTACT_MARGIN = 0.02
 PYBULLET_SIMULATION_HZ = 240.0
+PUSH_CONTACT_HEIGHT_FRACTION = 0.45
+PUSH_CONTACT_PROXIMITY = 0.002
+PUSH_CONTACT_SEARCH_DISTANCE = 0.05
+MAX_PUSH_VERTICAL_RISE = 0.03
+MAX_PUSH_FRAME_DISPLACEMENT = 0.04
 
 
 def json_safe(value):
@@ -137,6 +143,41 @@ def rotation_for_push(direction: np.ndarray, opening_axis: np.ndarray | None = N
     return np.column_stack([approach_axis, opening_axis, side_axis]).astype(float)
 
 
+def surface_point_for_push(
+    body_id: int,
+    center: np.ndarray,
+    direction: np.ndarray,
+    aabb_min: np.ndarray,
+    aabb_max: np.ndarray,
+) -> tuple[np.ndarray, str]:
+    """Find the near-side mesh surface instead of treating the AABB as solid."""
+    aabb_size = aabb_max - aabb_min
+    push_height = max(
+        aabb_min[2] + PUSH_CONTACT_HEIGHT_FRACTION * aabb_size[2],
+        TABLE_CLEARANCE + 0.01,
+    )
+    push_height = min(push_height, aabb_max[2] - 0.005)
+    ray_center = np.asarray(center, dtype=float).copy()
+    ray_center[2] = push_height
+
+    half_size = 0.5 * aabb_size
+    axis_distances = [
+        half_size[axis] / abs(direction[axis])
+        for axis in range(3)
+        if abs(direction[axis]) > 1e-8
+    ]
+    boundary_distance = min(axis_distances) if axis_distances else 0.0
+    ray_start = ray_center - direction * (boundary_distance + 0.015)
+    ray_end = ray_center + direction * 0.01
+    hit = p.rayTest(ray_start.tolist(), ray_end.tolist())[0]
+    if int(hit[0]) == int(body_id):
+        return np.asarray(hit[3], dtype=float), "mesh_ray"
+
+    # A ray can miss a thin or disconnected mesh. The directional AABB entry
+    # is a deterministic fallback and is less biased than one dominant axis.
+    return ray_center - direction * boundary_distance, "directional_aabb"
+
+
 def snapshot(body_id: int, gripper: JakaZu3Robotiq85Gripper | None = None) -> dict[str, Any]:
     obj_pos, obj_orn = p.getBasePositionAndOrientation(body_id)
     item = {
@@ -190,10 +231,11 @@ class RevealPushExecutor:
         approach_distance: float = 0.06,
         contact_margin: float = DEFAULT_CONTACT_MARGIN,
         penetration_distance: float = DEFAULT_PUSH_PENETRATION,
-        approach_steps: int = 18,
+        approach_steps: int = 60,
         push_steps: int = 36,
         retreat_steps: int = 12,
         closed_width: float = 0.012,
+        activate_callback: Callable[[], Any] | None = None,
     ) -> dict[str, Any]:
         center = np.asarray(center_point, dtype=float)
         if center.shape != (3,):
@@ -209,63 +251,207 @@ class RevealPushExecutor:
         aabb_min = np.asarray(aabb_min, dtype=float)
         aabb_max = np.asarray(aabb_max, dtype=float)
 
-        # Pick the surface opposite to the push direction, so the gripper pushes
-        # through the object instead of approaching from the far side.
-        contact_face = np.where(direction >= 0, aabb_min, aabb_max)
-        face_point = center.copy()
-        dominant_axis = int(np.argmax(np.abs(direction)))
-        face_point[dominant_axis] = contact_face[dominant_axis]
-        face_point[2] = max(
-            center[2],
-            aabb_min[2] + 0.6 * (aabb_max[2] - aabb_min[2]),
-            TABLE_CLEARANCE + 0.01,
+        face_point, contact_surface_source = surface_point_for_push(
+            self.object_id,
+            center,
+            direction,
+            aabb_min,
+            aabb_max,
         )
 
         rotation = rotation_for_push(direction)
-        # TCP is not the outermost collision geometry of the Robotiq hand. Start
-        # before the near face and move through the AABB so the fingers/palm
-        # actually contact the object instead of stopping just outside it.
-        contact_pos = face_point - direction * float(contact_margin)
-        pre_push_pos = contact_pos - direction * float(approach_distance)
-        push_end_pos = contact_pos + direction * (float(move_distance) + float(penetration_distance))
-        retreat_pos = push_end_pos - direction * min(float(approach_distance), 0.03)
+        planned_contact_pos = face_point - direction * float(contact_margin)
+        pre_push_pos = planned_contact_pos - direction * float(
+            approach_distance
+        )
 
         self.gripper.release_grasp()
         self.gripper.set_opening(closed_width)
         self.gripper.set_pose(pre_push_pos, rotation)
         self.step(20)
-        frame_log.append({"phase": "push_ready", "step": "ready", **snapshot(self.object_id, self.gripper)})
+        frame_log.append(
+            {
+                "phase": "push_ready",
+                "step": "ready",
+                **snapshot(self.object_id, self.gripper),
+            }
+        )
 
+        contact_pos = planned_contact_pos.copy()
+        contact_detected = False
+        contact_distance = None
+        contact_link_id = None
+        approach_failure_reason = None
+        push_link_ids = self.gripper.get_push_contact_link_ids()
+        contact_search_end = planned_contact_pos + (
+            direction * PUSH_CONTACT_SEARCH_DISTANCE
+        )
         for i in range(max(1, int(approach_steps))):
-            frac = (i + 1) / max(1, int(approach_steps))
-            pos = pre_push_pos + (contact_pos - pre_push_pos) * frac
+            linear_fraction = (i + 1) / max(1, int(approach_steps))
+            fraction = linear_fraction * linear_fraction * (
+                3.0 - 2.0 * linear_fraction
+            )
+            pos = pre_push_pos + (
+                contact_search_end - pre_push_pos
+            ) * fraction
             self.gripper.set_pose(pos, rotation)
             self.step(3)
-            frame_log.append({"phase": "push_approach", "step": i, **snapshot(self.object_id, self.gripper)})
+            frame_log.append(
+                {
+                    "phase": "push_approach",
+                    "step": i,
+                    **snapshot(self.object_id, self.gripper),
+                }
+            )
+
+            nearby_contacts = p.getClosestPoints(
+                self.gripper.robot_id,
+                self.object_id,
+                distance=PUSH_CONTACT_PROXIMITY,
+            )
+            valid_contacts = [
+                point
+                for point in nearby_contacts
+                if int(point[3]) in push_link_ids
+            ]
+            if valid_contacts:
+                contact_pos = pos
+                contact_distance = float(
+                    min(point[8] for point in valid_contacts)
+                )
+                contact_link_id = int(
+                    min(valid_contacts, key=lambda point: point[8])[3]
+                )
+                contact_detected = True
+                break
+            if nearby_contacts:
+                unexpected_links = sorted(
+                    {int(point[3]) for point in nearby_contacts}
+                )
+                approach_failure_reason = (
+                    "unexpected_robot_link_contact:"
+                    f"links={unexpected_links}@approach_{i}"
+                )
+                contact_pos = pos
+                break
+
+        if not contact_detected and approach_failure_reason is None:
+            approach_failure_reason = "push_contact_not_found"
+
+        if activate_callback is not None and approach_failure_reason is None:
+            activate_callback()
+        reference_pos = np.asarray(
+            p.getBasePositionAndOrientation(self.object_id)[0],
+            dtype=float,
+        )
+        previous_observed_pos = reference_pos.copy()
+        maximum_vertical_rise = 0.0
+        maximum_frame_displacement = 0.0
+        unsafe_reason = approach_failure_reason
+
+        def observe_motion(phase: str) -> None:
+            nonlocal previous_observed_pos
+            nonlocal maximum_vertical_rise
+            nonlocal maximum_frame_displacement
+            nonlocal unsafe_reason
+            current_pos = np.asarray(
+                p.getBasePositionAndOrientation(self.object_id)[0],
+                dtype=float,
+            )
+            vertical_rise = float(current_pos[2] - reference_pos[2])
+            frame_displacement = float(
+                np.linalg.norm(current_pos - previous_observed_pos)
+            )
+            maximum_vertical_rise = max(
+                maximum_vertical_rise,
+                vertical_rise,
+            )
+            maximum_frame_displacement = max(
+                maximum_frame_displacement,
+                frame_displacement,
+            )
+            if (
+                unsafe_reason is None
+                and vertical_rise > MAX_PUSH_VERTICAL_RISE
+            ):
+                unsafe_reason = (
+                    f"unsafe_vertical_rise:{vertical_rise:.6f}m@{phase}"
+                )
+            if (
+                unsafe_reason is None
+                and frame_displacement > MAX_PUSH_FRAME_DISPLACEMENT
+            ):
+                unsafe_reason = (
+                    "unsafe_frame_displacement:"
+                    f"{frame_displacement:.6f}m@{phase}"
+                )
+            previous_observed_pos = current_pos
+
+        self.step(8)
+        observe_motion("contact_settle")
 
         start_pos, start_orn = p.getBasePositionAndOrientation(self.object_id)
         start_pos = np.asarray(start_pos, dtype=float)
+        push_end_pos = contact_pos + direction * (
+            float(move_distance) + float(penetration_distance)
+        )
+        last_commanded_pos = contact_pos.copy()
         for i in range(max(1, int(push_steps))):
-            frac = (i + 1) / max(1, int(push_steps))
-            pos = contact_pos + (push_end_pos - contact_pos) * frac
+            if unsafe_reason is not None:
+                break
+            linear_fraction = (i + 1) / max(1, int(push_steps))
+            fraction = linear_fraction ** 3 * (
+                linear_fraction * (linear_fraction * 6.0 - 15.0) + 10.0
+            )
+            pos = contact_pos + (push_end_pos - contact_pos) * fraction
             self.gripper.set_pose(pos, rotation)
             self.step(4)
-            frame_log.append({"phase": "push", "step": i, **snapshot(self.object_id, self.gripper)})
+            last_commanded_pos = pos
+            frame_log.append(
+                {
+                    "phase": "push",
+                    "step": i,
+                    **snapshot(self.object_id, self.gripper),
+                }
+            )
+            observe_motion(f"push_{i}")
 
+        # Lift away after the push. Retracing against the push direction can
+        # hook a drill handle or finger geometry and pull the object upward.
+        retreat_pos = last_commanded_pos + np.array(
+            [0.0, 0.0, min(float(approach_distance), 0.05)],
+            dtype=float,
+        )
         for i in range(max(1, int(retreat_steps))):
             frac = (i + 1) / max(1, int(retreat_steps))
-            pos = push_end_pos + (retreat_pos - push_end_pos) * frac
+            pos = last_commanded_pos + (
+                retreat_pos - last_commanded_pos
+            ) * frac
             self.gripper.set_pose(pos, rotation)
             self.step(3)
-            frame_log.append({"phase": "retreat", "step": i, **snapshot(self.object_id, self.gripper)})
+            frame_log.append(
+                {
+                    "phase": "retreat",
+                    "step": i,
+                    **snapshot(self.object_id, self.gripper),
+                }
+            )
+            observe_motion(f"retreat_{i}")
 
-        self.step(80)
+        for settle_index in range(20):
+            self.step(4)
+            observe_motion(f"settle_{settle_index}")
+            if unsafe_reason is not None:
+                break
         final_pos, final_orn = p.getBasePositionAndOrientation(self.object_id)
         final_pos = np.asarray(final_pos, dtype=float)
         displacement = final_pos - start_pos
         signed_displacement = float(np.dot(displacement, direction))
         success_threshold = min(0.01, move_distance * 0.2)
-        success = signed_displacement >= success_threshold
+        success = (
+            unsafe_reason is None
+            and signed_displacement >= success_threshold
+        )
         frame_log.append({
             "phase": "done",
             "step": "final",
@@ -287,12 +473,23 @@ class RevealPushExecutor:
             "actual_displacement": displacement,
             "signed_displacement": signed_displacement,
             "success_threshold": float(success_threshold),
+            "failure_reason": unsafe_reason,
+            "unsafe_motion": unsafe_reason is not None,
+            "maximum_vertical_rise": maximum_vertical_rise,
+            "maximum_frame_displacement": maximum_frame_displacement,
             "start_position": start_pos,
             "start_orientation": start_orn,
             "target_position": start_pos + direction * move_distance,
             "final_position": final_pos,
             "final_orientation": final_orn,
             "contact_position": contact_pos,
+            "planned_contact_position": planned_contact_pos,
+            "contact_surface_point": face_point,
+            "contact_surface_source": contact_surface_source,
+            "contact_detected": contact_detected,
+            "contact_distance": contact_distance,
+            "contact_link_id": contact_link_id,
+            "contact_search_end": contact_search_end,
             "pre_push_position": pre_push_pos,
             "push_end_position": push_end_pos,
             "contact_margin": float(contact_margin),

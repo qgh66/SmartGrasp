@@ -394,11 +394,13 @@ def parse_args():
     p.add_argument('--scene-id', type=int, default=None,
                    help='手工指定本次拍照 ID；不指定时按 1、2、3... 自动递增')
     p.add_argument('--instruction', default=None,
-                   help='用户指令；提供后自动为本次拍照生成 ID 并保存 Perception 输入')
+                   help='用户指令；批量 Pipeline 模式可用 {target} 和 {target_name} 作为逐物体占位符')
     p.add_argument('--run-perception-after-capture', action='store_true',
                    help='导出同帧输入后，把本次拍照 ID 传给 perception/run_perception.sh')
     p.add_argument('--run-pipeline-after-capture', action='store_true',
                    help='导出同帧输入后运行 Perception+Intent+Reason，并将 Reason Object ID 映射为当前 PyBullet 目标')
+    p.add_argument('--perception-reason-test', action='store_true',
+                   help='批量只测 Perception+Reason：用仿真真值核验目标，正确后直接删除物体，不运行 GraspNet 或机械臂动作')
     p.add_argument('--task-closed-loop', action='store_true',
                    help='语义目标物理闭环：遮挡动作后重新拍摄和推理，只有最终目标抓取成功才结束')
     p.add_argument(
@@ -421,7 +423,7 @@ def parse_args():
     p.add_argument('--target-objects', nargs='+', default=None,
                    help='顺序抓取目标名称列表，例如 battery flat_screwdriver')
     p.add_argument('--all-objects', action='store_true',
-                   help='启用顺序抓取与搬运流程；配合 --target-objects 指定目标及顺序')
+                   help='启用顺序抓取与搬运流程；可配合完整 Pipeline 为每个目标重新感知和推理')
     p.add_argument('--continuous-grasp', action='store_true',
                    help='连续清场模式：每次成功投放并松爪后重新拍摄，重试先前被遮挡的剩余物体')
     p.add_argument('--drop-after-grasp', action='store_true',
@@ -483,6 +485,22 @@ def main():
         )
     if args.task_closed_loop and not args.scene_config:
         raise ValueError("--task-closed-loop requires --scene-config")
+    if args.perception_reason_test and not args.run_pipeline_after_capture:
+        raise ValueError(
+            "--perception-reason-test requires --run-pipeline-after-capture"
+        )
+    if args.perception_reason_test and not (
+        args.all_objects or args.continuous_grasp
+    ):
+        raise ValueError(
+            "--perception-reason-test requires --all-objects or "
+            "--continuous-grasp"
+        )
+    if args.perception_reason_test and args.task_closed_loop:
+        raise ValueError(
+            "--perception-reason-test is a batch validation flow and cannot "
+            "be combined with --task-closed-loop"
+        )
     if args.max_task_rounds <= 0:
         raise ValueError("--max-task-rounds must be greater than zero")
     if args.push_distance <= 0:
@@ -508,19 +526,24 @@ def main():
             "--run-pipeline-after-capture resolves its own target object and "
             "cannot be combined with --target-object"
         )
-    if args.run_pipeline_after_capture and args.all_objects:
-        raise ValueError(
-            "--run-pipeline-after-capture is currently a single-target flow "
-            "and cannot be combined with --all-objects"
-        )
-    if args.run_pipeline_after_capture and args.continuous_grasp:
-        raise ValueError(
-            "--run-pipeline-after-capture is currently a single-target flow "
-            "and cannot be combined with --continuous-grasp"
-        )
     if args.all_objects and args.continuous_grasp:
         raise ValueError(
             "--all-objects and --continuous-grasp are independent batch modes"
+        )
+    if args.task_closed_loop and (args.all_objects or args.continuous_grasp):
+        raise ValueError(
+            "--task-closed-loop is the single-target loop; batch Pipeline "
+            "uses --all-objects or --continuous-grasp directly"
+        )
+    if (
+        args.run_pipeline_after_capture
+        and (args.all_objects or args.continuous_grasp)
+        and "{target}" not in instruction
+        and "{target_name}" not in instruction
+    ):
+        raise ValueError(
+            "Batch Pipeline instruction must contain {target} or "
+            "{target_name} so every object gets a distinct instruction"
         )
     if args.drop_after_grasp and not (
         args.all_objects or args.continuous_grasp
