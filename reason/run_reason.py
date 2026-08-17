@@ -110,6 +110,23 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
             }
         ]
 
+    if source == "missing":
+        instruction = args.instruction or str(perception.annotation or "").strip()
+        if not instruction:
+            raise ValueError(
+                f"--target-source missing requires --instruction or annotation in {summary_path}"
+            )
+        return [
+            {
+                "target_id": None,
+                "target_source": "missing",
+                "intent_instruction": instruction,
+                "intent_reason": "Intent reported that the target is not currently visible.",
+                "intent_candidate_ids": [],
+                "intent_vlm_decision": {"target_present": False},
+            }
+        ]
+
     instruction = args.instruction or str(perception.annotation or "").strip()
     if not instruction:
         raise ValueError(f"--target-source intent requires --instruction or annotation in {summary_path}")
@@ -421,14 +438,20 @@ def main():
     )
     parser.add_argument(
         "--target-source",
-        choices=["auto", "all", "id", "intent"],
+        choices=["auto", "all", "id", "intent", "missing"],
         default="auto",
-        help="Target source: all graph ids, direct --target-id, or run_intent-style VLM intent resolution.",
+        help=(
+            "Target source: all graph ids, direct --target-id, run_intent-style "
+            "VLM resolution, or a target already known to be missing from perception."
+        ),
     )
     parser.add_argument(
         "--instruction",
         default=None,
-        help="Instruction for --target-source intent. Defaults to summary annotation.",
+        help=(
+            "Instruction for --target-source intent or missing. "
+            "Defaults to summary annotation."
+        ),
     )
     parser.add_argument("--intent-api-key-env", default=RUN_INTENT_API_KEY_ENV)
     parser.add_argument("--intent-base-url", default=RUN_INTENT_BASE_URL)
@@ -597,7 +620,14 @@ def main():
         actions_seq = None
         for target_entry in targets:
             mid = target_entry["target_id"]
-            p = replace(perception, target_molmo_id=mid)
+            p = replace(
+                perception,
+                target_molmo_id=mid,
+                annotation=(
+                    target_entry.get("intent_instruction")
+                    or perception.annotation
+                ),
+            )
 
             # 1) Branch classification.
             try:

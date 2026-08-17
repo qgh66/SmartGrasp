@@ -509,6 +509,7 @@ def build_org_json(
     depth_sam2_crop_n_layers: int | None = None,
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
+    disable_depth_proposals: bool = False,
     max_contact_background_ratio: float = 0.3,
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
@@ -544,6 +545,7 @@ def build_org_json(
         device=device,
         background_exclusion_mask=background_exclusion_mask,
         depth_map=depth_map,
+        disable_depth_proposals=disable_depth_proposals,
         sam2_points_per_side=sam2_points_per_side,
         sam2_crop_n_layers=sam2_crop_n_layers,
         sam2_pred_iou_thresh=sam2_pred_iou_thresh,

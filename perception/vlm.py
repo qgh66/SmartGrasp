@@ -128,6 +128,7 @@ def review_and_assign_sam2(
         "- An object may have multiple SAM2 ids if fragmented.",
         "- Do not force a nearby mask into an object if it is better explained as another instance.",
         "- Name each object by the complete physical instance in the RGB image. Use neutral descriptions when uncertain.",
+        "- Meaningless sam2 mask fragments such as shadows, background, or noise, could be dropped.",
         "",
         "Output only valid JSON with this schema:",
         '{"objects":[',

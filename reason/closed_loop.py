@@ -18,7 +18,7 @@ from .invisible import handle as handle_fully_occluded
 @dataclass
 class ClosedLoopResult:
     """Result of a closed-loop rollout."""
-    target_molmo_id: int
+    target_molmo_id: int | None
     actions: list[GraspDecision] = field(default_factory=list)
     success: bool = False
     final_status: str = ""

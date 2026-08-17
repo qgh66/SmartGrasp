@@ -799,6 +799,7 @@ def _sam2_auto_candidate_pool(
     pred_iou_thresh: float | None = None,
     stability_score_thresh: float | None = None,
     depth_map: np.ndarray | None = None,
+    disable_depth_proposals: bool = False,
     depth_points_per_side: int | None = None,
     depth_crop_n_layers: int | None = None,
     depth_pred_iou_thresh: float | None = None,
@@ -839,7 +840,15 @@ def _sam2_auto_candidate_pool(
     )
 
     depth_candidates: list[dict[str, Any]] = []
-    depth_image = _depth_map_to_near_white_image(depth_map, image_np.shape[:2])
+    depth_image = None
+    if disable_depth_proposals:
+        report.append({
+            "stage": "depth_sam2_auto_generator",
+            "configured": False,
+            "reason": "disabled_by_flag",
+        })
+    else:
+        depth_image = _depth_map_to_near_white_image(depth_map, image_np.shape[:2])
     if depth_image is not None:
         depth_generator_settings = _configure_sam2_auto_generator(
             model,
@@ -1055,6 +1064,7 @@ def generate_masks_with_sam2_vlm_pipeline(
     device: str | None,
     background_exclusion_mask: np.ndarray | None,
     depth_map: np.ndarray | None = None,
+    disable_depth_proposals: bool = False,
     sam2_points_per_side: int | None = None,
     sam2_crop_n_layers: int | None = None,
     sam2_pred_iou_thresh: float | None = None,
@@ -1082,6 +1092,7 @@ def generate_masks_with_sam2_vlm_pipeline(
         stability_score_thresh=sam2_stability_score_thresh,
         border_fraction_threshold=proposal_border_fraction_threshold,
         depth_map=depth_map,
+        disable_depth_proposals=disable_depth_proposals,
         depth_points_per_side=depth_sam2_points_per_side,
         depth_crop_n_layers=depth_sam2_crop_n_layers,
         depth_pred_iou_thresh=depth_sam2_pred_iou_thresh,

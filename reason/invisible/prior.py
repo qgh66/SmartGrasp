@@ -25,7 +25,7 @@ def _client() -> VLMClient:
 
 def compute_semantic_prior(
     occluder_mids: list[int],
-    target_mid: int,
+    target_mid: int | None,
     perception,
     client: VLMClient | None = None,
 ) -> dict[int, float]:
@@ -38,7 +38,7 @@ def compute_semantic_prior(
 
 def compute_semantic_prior_payload(
     occluder_mids: list[int],
-    target_mid: int,
+    target_mid: int | None,
     perception,
     client: VLMClient | None = None,
 ) -> dict[str, Any]:

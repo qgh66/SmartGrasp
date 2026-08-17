@@ -76,7 +76,7 @@ def equivalent_height(mid: int, geom_cache: dict) -> float:
 
 def compute_geometric_prior(
     occluder_mids: list[int],
-    target_mid: int,
+    target_mid: int | None,
     perception,
     geom_cache: dict | None = None,
 ) -> dict[int, float]:

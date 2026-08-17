@@ -43,8 +43,7 @@ graspnet-workspace/calibration/hand_eye_tcp_camera.json
 conda activate smartgrasp
 cd /home/admin128/qiuguanhe/SmartGrasp
 
-python -u run_pipeline.py \
-  --instruction "grasp the screwdriver on the left"
+python -u run_pipeline.py --instruction "grasp the screwdriver on the left"
 ```
 
 这条命令会真实移动机械臂和夹爪，不是测试或 dry-run。默认使用：
@@ -104,6 +103,11 @@ data_realworld/<YYYYMMDD_HHMMSS>/pipeline.log
 ```
 
 每轮 Intent 都会针对新拍摄画面重新执行，并把 `intent/id.txt` 交给 Reason。
+如果目标完全不可见，Intent 会写入 `none`；正式 Pipeline 会让 Reason 进入
+`fully_occluded` 分支，从当前顶层可见物体中选择一个遮挡物先抓走。抓取成功后
+重新拍摄并再次运行 Perception、Intent 和 Reason，直到目标出现并被直接抓取，
+或达到 10 轮安全上限。若目标不在图中且场景没有任何遮挡边，则仍按
+`no_item_found` 处理，不会盲目移除物体。
 Reason 输出的
 `selected_object_graspability_part_id` 会映射到：
 
@@ -154,6 +158,16 @@ python -u run_pipeline.py \
 SAM2 参数不需要写在命令行中。直接修改 `run_pipeline.py` 顶部的
 `SAM2_PARAMETERS` 字典即可，正常 Perception 和 `--debug sam2` 会共用这一套值。
 深度 SAM2 参数为 `None` 时会跟随对应的 RGB SAM2 值。
+
+如需在 SAM2 自动分割阶段仅使用 RGB proposals，可在最终入口脚本增加
+`--disable-depth-proposals`（别名：`--disable-depth-sam2-proposals`）。该参数只禁用
+深度图的 SAM2 proposal 生成，背景排除、深度边缘和遮挡关系仍继续使用深度信息：
+
+```bash
+python -u run_pipeline.py \
+  --instruction "grasp the screwdriver on the left" \
+  --disable-depth-proposals
+```
 
 复用已经拍摄的场景、重新执行后续阶段：
 

@@ -105,7 +105,8 @@ Inside `reason/`:
 - `intent_handle/`
   Resolves language instructions to perception object ids. This is used when
   `--target-source intent` or the default `--target-source auto` chooses the
-  annotation path.
+  annotation path. `--target-source missing` skips another intent call and
+  carries a previously established fully hidden target into Reason.
 
 - `closed_loop.py`
   Simulates repeated grasp decisions by removing the selected object from the
@@ -695,14 +696,17 @@ bash reason/run_reason.sh
   - `id`: use `--target-id`.
   - `intent`: resolve `--instruction` or `summary.json["annotation"]` with the
     VLM intent resolver.
+  - `missing`: preserve a target already reported as not visible, using
+    `--instruction` or the summary annotation as its semantic description.
 
 - `--target-id`
   Target id used with `--target-source id`, or used automatically by
   `--target-source auto`.
 
 - `--instruction`
-  Natural-language target instruction for `--target-source intent`. If omitted,
-  reason uses `summary.json["annotation"]`.
+  Natural-language target instruction for `--target-source intent` or
+  `--target-source missing`. If omitted, reason uses
+  `summary.json["annotation"]`.
 
 - `--intent-api-key-env`
   Environment variable name for the intent VLM API key. Default:
