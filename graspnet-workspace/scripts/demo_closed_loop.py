@@ -462,6 +462,8 @@ def parse_args():
                    help='PyBullet GUI MP4 输出路径')
     p.add_argument('--device', default='cuda:0', help='推理设备')
     p.add_argument('--output', default='results/grasp_simulation.json', help='输出文件')
+    p.add_argument('--skip-viz-data', action='store_true',
+                   help='不写入额外的 visualization PKL，用于只需 JSON 的快速批量评估')
     return p.parse_args()
 
 

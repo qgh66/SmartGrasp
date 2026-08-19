@@ -67,6 +67,7 @@
       "metadata": {
         "category": "battery",
         "batch_instruction_target": "电钻下面的电池",
+        "batch_instruction_target_after_reveal": "画面左下方的电池",
         "instruction_aliases": ["电池", "battery"],
         "role": "target",
         "stack_id": "a",
@@ -104,6 +105,7 @@
       "metadata": {
         "category": "clamp",
         "batch_instruction_target": "下层的中号夹具",
+        "batch_instruction_target_after_reveal": "画面中央的中号夹具",
         "stack_id": "e",
         "stack_layer": 0
       }
@@ -120,6 +122,7 @@
       "metadata": {
         "category": "screwdriver",
         "batch_instruction_target": "活动扳手下面的一字螺丝刀",
+        "batch_instruction_target_after_reveal": "画面右上方的一字螺丝刀",
         "instruction_aliases": [
           "一字螺丝刀",
           "平口螺丝刀",
@@ -161,6 +164,7 @@
       "metadata": {
         "category": "clamp",
         "batch_instruction_target": "下层的小号夹具",
+        "batch_instruction_target_after_reveal": "画面左下方的小号夹具",
         "stack_id": "f",
         "stack_layer": 0
       }
@@ -177,6 +181,7 @@
       "metadata": {
         "category": "clamp",
         "batch_instruction_target": "下层的大号夹具",
+        "batch_instruction_target_after_reveal": "画面右下方的大号夹具",
         "stack_id": "c",
         "stack_layer": 0
       }
@@ -226,6 +231,7 @@
       "metadata": {
         "category": "screwdriver",
         "batch_instruction_target": "下层的十字螺丝刀",
+        "batch_instruction_target_after_reveal": "画面左上方的十字螺丝刀",
         "stack_id": "d",
         "stack_layer": 0
       }

@@ -223,11 +223,17 @@ def _ordered_target_ids(scene, args, config):
     ]
 
 
-def _format_pipeline_instruction(template, target):
-    """Build one unambiguous instruction for the current batch target."""
+def _format_pipeline_instruction(template, target, *, after_reveal=False):
+    """Build the instruction for the target in the scene's current state."""
     aliases = target.metadata.get("instruction_aliases") or ()
+    target_label_key = (
+        "batch_instruction_target_after_reveal"
+        if after_reveal
+        else "batch_instruction_target"
+    )
     target_label = str(
-        target.metadata.get("batch_instruction_target")
+        target.metadata.get(target_label_key)
+        or target.metadata.get("batch_instruction_target")
         or (aliases[0] if aliases else target.name.replace("_", " "))
     ).strip()
     try:
@@ -361,11 +367,29 @@ def _attempt_pipeline_target(
     """
     helpers = _pipeline_helpers()
     target = scene.get_object_info(target_body_id)
-    instruction = _format_pipeline_instruction(args.instruction, target)
     configured_occluders = set(
         helpers["configured_occluders"](scene, target.name)
     )
     pending_occluders = configured_occluders.difference(completed_body_ids)
+    configured_occluder_names = {
+        str(object_spec.get("name"))
+        for object_spec in config.get("_resolved_objects", [])
+        if target.name
+        in (object_spec.get("metadata", {}).get("occludes") or ())
+    }
+    active_object_names = {
+        scene_object.name
+        for scene_object in scene.get_object_registry().values()
+    }
+    target_has_been_revealed = bool(
+        configured_occluder_names
+        and configured_occluder_names.isdisjoint(active_object_names)
+    )
+    instruction = _format_pipeline_instruction(
+        args.instruction,
+        target,
+        after_reveal=target_has_been_revealed,
+    )
     pipeline_rounds = []
     latest_visualization = None
     latest_validation = None
@@ -1271,13 +1295,15 @@ def run_all_objects(args):
         json.dump(output, output_file, indent=2, ensure_ascii=False)
 
     visualization_path = args.output.replace(".json", "_viz_data.pkl")
-    if last_visualization is not None:
+    if last_visualization is not None and not args.skip_viz_data:
         last_visualization.update({
             "objects": scene.get_object_poses(),
             "scene_config": config["_path"],
         })
         with open(visualization_path, "wb") as visualization_file:
             pickle.dump(last_visualization, visualization_file)
+    elif args.skip_viz_data:
+        print("已跳过 visualization PKL 输出")
 
     print("\n实验结果汇总:")
     print(
