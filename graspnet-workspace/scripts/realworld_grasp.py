@@ -50,11 +50,13 @@ from utils.grasp_processing import (  # noqa: E402
     filter_grasp_center_outliers,
     filter_grasp_centers_in_target_mask,
     filter_grasp_collisions,
+    filter_grasp_widths_by_mask_consistency,
     filter_target_tcp_z,
     grasp_to_record,
     jaka_pose_to_transform,
     load_hand_eye_calibration,
     load_legacy_plate_calibration,
+    offset_transform_along_tcp_z,
     print_candidate_target_centers,
     renumber_candidate_records,
     rerank_candidates_by_topdown,
@@ -87,7 +89,7 @@ DEFAULT_CAMERA_COORDINATES_DIR = config_path(
     "/home/admin128/ChengyuanWang/high_low_comm/scripts/human_playdata_process/hand_object_detector/camera_coordinates/camera_coordinates - 副本",
 )
 DEFAULT_TCP_CAMERA_TRANSLATION_OFFSET_MM = config_get(REALWORLD_CONFIG, "calibration.tcp_camera_translation_offset_mm", [0.0, 0.0, -82.5])
-DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM = float(config_get(REALWORLD_CONFIG, "calibration.grasp_center_to_tcp_offset_mm", 174.0))
+DEFAULT_GRASP_CENTER_TO_TCP_OFFSET_MM = float(config_get(REALWORLD_CONFIG, "calibration.grasp_center_to_tcp_offset_mm", 165.0))
 BASE_GRIPPER_OPENING_AXIS = np.array(config_get(REALWORLD_CONFIG, "calibration.gripper_opening_axis_base", [0.0, 1.0, 0.0]), dtype=float)
 DEFAULT_GRIPPER_ROLL_OFFSET_DEG = float(config_get(REALWORLD_CONFIG, "calibration.gripper_roll_offset_deg", 120.0))
 DEFAULT_TCP_TARGET_TRANSLATION_OFFSET_MM = np.array(
@@ -102,6 +104,7 @@ DEFAULT_READY_POSE = config_get(REALWORLD_CONFIG, "robot.ready_pose", [300.0, 0.
 DEFAULT_CAPTURE_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.capture_joint_pose_deg", [0.0, 90.0, 45.0, 135.0, 270.0, 72.0])
 DEFAULT_PLACE_TARGET_JOINT_POSE_DEG = config_get(REALWORLD_CONFIG, "robot.place_target_joint_pose_deg", [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0])
 DEFAULT_PLACE_RELEASE_LOWER_MM = float(config_get(REALWORLD_CONFIG, "robot.place_release_lower_mm", 50.0))
+DEFAULT_GRASP_EXTRA_DEPTH_MM = float(config_get(REALWORLD_CONFIG, "robot.grasp_extra_depth_mm", 10.0))
 DEFAULT_JOINT_VELOCITY_RAD_S = float(config_get(REALWORLD_CONFIG, "robot.joint_velocity_rad_s", 0.5))
 DEFAULT_CAMERA_INDEX = int(config_get(REALWORLD_CONFIG, "camera.default_index", 1))
 DEFAULT_CAMERA_SERIAL_SUFFIX = str(config_get(REALWORLD_CONFIG, "camera.default_serial_suffix", "76630"))
@@ -110,6 +113,37 @@ DEFAULT_JAKA_PYTHON = os.environ.get(
     str(config_path(REALWORLD_CONFIG, "paths.jaka_python", WORKSPACE_ROOT, "/home/admin128/anaconda3/envs/smartgrasp310/bin/python")),
 )
 DEFAULT_TARGET_MASK_CENTER_TOLERANCE_PX = float(config_get(REALWORLD_CONFIG, "filters.target_mask_center_tolerance_px", 25.0))
+DEFAULT_FILTER_GRASP_CENTERS_IN_MASK = bool(
+    config_get(REALWORLD_CONFIG, "filters.filter_grasp_centers_in_mask", False)
+)
+DEFAULT_FILTER_GRASP_OUTLIERS = bool(config_get(REALWORLD_CONFIG, "filters.filter_grasp_outliers", False))
+DEFAULT_FILTER_GRASP_CLOSING_POINTS = bool(
+    config_get(REALWORLD_CONFIG, "filters.filter_grasp_closing_points", False)
+)
+DEFAULT_FILTER_GRASP_WIDTH_FROM_MASK = bool(
+    config_get(REALWORLD_CONFIG, "filters.filter_grasp_width_from_mask", False)
+)
+DEFAULT_MIN_TARGET_TCP_Z_MM = float(config_get(REALWORLD_CONFIG, "filters.min_target_tcp_z_mm", 125.0))
+DEFAULT_GEOMETRY_SCORE_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.geometry_score_weight", 0.5))
+DEFAULT_WIDTH_QUALITY_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.width_quality_weight", 2.0))
+DEFAULT_CENTERING_QUALITY_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.centering_quality_weight", 1.0))
+DEFAULT_GRASP_WIDTH_MIN_CONTACT_POINTS = int(config_get(REALWORLD_CONFIG, "filters.grasp_width_min_contact_points", 200))
+DEFAULT_GRASP_CLOSING_MIN_POINTS = int(config_get(REALWORLD_CONFIG, "filters.grasp_closing_min_points", 4000))
+DEFAULT_GRASP_CLOSING_MIN_INPUT_RATIO = float(
+    config_get(REALWORLD_CONFIG, "filters.grasp_closing_min_input_ratio", 0.6)
+)
+DEFAULT_GRASP_WIDTH_PERCENTILE_LOW = float(config_get(REALWORLD_CONFIG, "filters.grasp_width_percentile_low", 2.0))
+DEFAULT_GRASP_WIDTH_PERCENTILE_HIGH = float(config_get(REALWORLD_CONFIG, "filters.grasp_width_percentile_high", 98.0))
+DEFAULT_GRASP_WIDTH_TOLERANCE_MM = float(config_get(REALWORLD_CONFIG, "filters.grasp_width_tolerance_mm", 20.0))
+DEFAULT_GRASP_WIDTH_MAX_CENTER_OFFSET_RATIO = float(
+    config_get(REALWORLD_CONFIG, "filters.grasp_width_max_center_offset_ratio", 0.5)
+)
+DEFAULT_GRASP_FILTER_FINGER_LENGTH_MM = float(
+    config_get(REALWORLD_CONFIG, "filters.grasp_filter_finger_length_mm", 60.0)
+)
+DEFAULT_GRASP_FILTER_FINGER_WIDTH_MM = float(
+    config_get(REALWORLD_CONFIG, "filters.grasp_filter_finger_width_mm", 30.0)
+)
 VENDOR_DIR = WORKSPACE_ROOT / "vendor"
 JKRC_DIR = config_path(REALWORLD_CONFIG, "paths.jkrc_dir", WORKSPACE_ROOT, WORKSPACE_ROOT / "jkrc")
 JAKA_WORKER = config_path(REALWORLD_CONFIG, "paths.jaka_worker", WORKSPACE_ROOT, WORKSPACE_ROOT / "scripts" / "jaka_motion_worker.py")
@@ -170,9 +204,13 @@ def execute_grasp_sequence(record: dict[str, Any], args: argparse.Namespace) -> 
         record.get("target_robot_from_tcp", record["target_robot_from_grasp"]),
         dtype=float,
     ).reshape(4, 4)
+    execution_target = record.get("execution_target_robot_from_tcp")
+    if execution_target is None:
+        execution_target = offset_transform_along_tcp_z(target_transform, args.grasp_extra_depth_mm)
+    execution_target_transform = np.asarray(execution_target, dtype=float).reshape(4, 4)
     pre_grasp_pose = offset_pose_along_approach(target_transform, args.approach_offset_mm)
-    grasp_pose = transform_to_jaka_pose(target_transform)
-    lift_pose = lift_pose_from_target(target_transform, args.lift_mm)
+    grasp_pose = transform_to_jaka_pose(execution_target_transform)
+    lift_pose = lift_pose_from_target(execution_target_transform, args.lift_mm)
     initial_joints_rad = np.deg2rad(np.asarray(args.capture_joint_pose_deg, dtype=float)).astype(float).tolist()
     place_target_joints_rad = np.deg2rad(
         np.asarray(args.place_target_joint_pose_deg, dtype=float)
@@ -218,18 +256,6 @@ def save_outputs(
     target_mask = None if point_cloud_info is None else point_cloud_info.get("object_mask_array")
     intrinsics = None if point_cloud_info is None else point_cloud_info.get("camera_intrinsics")
     records, target_mask_filter_info = filter_grasp_centers_in_target_mask(records, target_mask, intrinsics, args)
-    top_grasps_for_collision = GraspGroup()
-    for record in records:
-        raw_index = int(record["grasp_index"])
-        if 0 <= raw_index < len(top_grasps):
-            top_grasps_for_collision.add(top_grasps[raw_index])
-    collision_obstacle_cloud = grasp_cloud if obstacle_cloud is None else obstacle_cloud
-    records, collision_filter_info = filter_grasp_collisions(
-        records,
-        top_grasps_for_collision,
-        collision_obstacle_cloud,
-        args,
-    )
     records = compute_robot_targets(
         records,
         calibration,
@@ -239,6 +265,29 @@ def save_outputs(
         DEFAULT_TCP_TARGET_TRANSLATION_OFFSET_MM,
     )
     records, target_tcp_z_filter_info = filter_target_tcp_z(records, args)
+    top_grasps_for_collision = GraspGroup()
+    for record in records:
+        raw_index = int(record["grasp_index"])
+        if 0 <= raw_index < len(top_grasps):
+            grasp_for_collision = top_grasps[raw_index]
+            grasp_for_collision.width = float(record["width"])
+            top_grasps_for_collision.add(grasp_for_collision)
+    collision_obstacle_cloud = grasp_cloud if obstacle_cloud is None else obstacle_cloud
+    records, collision_filter_info = filter_grasp_collisions(
+        records,
+        top_grasps_for_collision,
+        collision_obstacle_cloud,
+        args,
+    )
+    object_cloud_for_width = None
+    if point_cloud_info is not None and point_cloud_info.get("object_point_cloud_path") is not None:
+        object_cloud_for_width = np.load(point_cloud_info["object_point_cloud_path"])
+    records, grasp_width_filter_info = filter_grasp_widths_by_mask_consistency(
+        records,
+        object_cloud_for_width,
+        len(grasp_cloud),
+        args,
+    )
     records, outlier_filter_info = filter_grasp_center_outliers(records, args)
     records, topdown_rerank_info = rerank_candidates_by_topdown(records, args)
     records = renumber_candidate_records(records)
@@ -293,6 +342,7 @@ def save_outputs(
         "num_candidates_after_filter": len(records),
         "grasp_candidates_ply": str((output_dir / "grasp_candidates.ply").resolve()),
         "target_mask_center_filter": target_mask_filter_info,
+        "mask_grasp_width_filter": grasp_width_filter_info,
         "model_free_collision_filter": collision_filter_info,
         "target_tcp_z_filter": target_tcp_z_filter_info,
         "center_outlier_filter": outlier_filter_info,
@@ -324,6 +374,8 @@ def save_outputs(
         ),
         "grasp_center_to_tcp_offset_mm": float(args.grasp_center_to_tcp_offset_mm),
         "grasp_center_to_tcp_offset_axis": "-tcp_local_z",
+        "grasp_extra_depth_mm": float(args.grasp_extra_depth_mm),
+        "grasp_extra_depth_axis": "+tcp_local_z",
         "gripper_roll_offset_deg": float(args.gripper_roll_offset_deg),
         "base_grasp_to_tcp_rotation": (
             calibration.get("base_grasp_to_tcp_rotation")
@@ -583,7 +635,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "to the SAM-masked object point cloud. Disabled by default."
         ),
     )
-    parser.add_argument("--top-k", type=int, default=50, help="Number of candidates to save and visualize.")
+    parser.add_argument("--top-k", type=int, default=100, help="Number of candidates to save and visualize.")
     parser.add_argument("--viz-max-points", type=int, default=18000, help="Maximum points rendered in grasp_candidates.png.")
     parser.add_argument("--plotly-max-points", type=int, default=30000, help="Maximum points rendered in grasp_candidates_3d.html.")
     parser.add_argument("--ply-max-points", type=int, default=60000, help="Maximum points written to grasp_candidates.ply.")
@@ -630,7 +682,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--grasp-input-mode",
         choices=("bbox", "mask"),
-        default="bbox",
+        default="mask",
         help=(
             "Point-cloud region sent to GraspNet when SAM is enabled: bbox keeps all valid depth "
             "inside the expanded mask bounding box; mask keeps only valid depth inside the SAM mask."
@@ -651,8 +703,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--filter-grasp-centers-in-mask",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Project each candidate center to the RGB image and keep it only if it lands inside the SAM target mask.",
+        default=DEFAULT_FILTER_GRASP_CENTERS_IN_MASK,
+        help="Optionally require each projected candidate center to land inside or near the SAM target mask.",
     )
     parser.add_argument(
         "--target-mask-center-tolerance-px",
@@ -664,10 +716,88 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--filter-grasp-width-from-mask",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_FILTER_GRASP_WIDTH_FROM_MASK,
+        help=(
+            "Optionally hard-filter candidates using masked width and centering thresholds. Geometry "
+            "metrics are still calculated for composite ranking when this is disabled."
+        ),
+    )
+    parser.add_argument(
+        "--grasp-width-percentile-low",
+        type=float,
+        default=DEFAULT_GRASP_WIDTH_PERCENTILE_LOW,
+        help="Lower percentile used to measure masked point-cloud width inside each gripper.",
+    )
+    parser.add_argument(
+        "--grasp-width-percentile-high",
+        type=float,
+        default=DEFAULT_GRASP_WIDTH_PERCENTILE_HIGH,
+        help="Upper percentile used to measure masked point-cloud width inside each gripper.",
+    )
+    parser.add_argument(
+        "--grasp-width-min-contact-points",
+        type=int,
+        default=DEFAULT_GRASP_WIDTH_MIN_CONTACT_POINTS,
+        help="Minimum masked point count in the candidate contact slice.",
+    )
+    parser.add_argument(
+        "--filter-grasp-closing-points",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_FILTER_GRASP_CLOSING_POINTS,
+        help=(
+            "Optionally reject candidates whose closing-sweep point count satisfies neither the fixed "
+            "minimum nor the GraspNet-input ratio threshold. Counts are still logged when disabled."
+        ),
+    )
+    parser.add_argument(
+        "--grasp-closing-min-points",
+        type=int,
+        default=DEFAULT_GRASP_CLOSING_MIN_POINTS,
+        help=(
+            "Minimum target-mask point count swept by the jaws while closing from predicted width to zero. "
+            "Candidates below this count may still pass via --grasp-closing-min-input-ratio."
+        ),
+    )
+    parser.add_argument(
+        "--grasp-closing-min-input-ratio",
+        type=float,
+        default=DEFAULT_GRASP_CLOSING_MIN_INPUT_RATIO,
+        help=(
+            "When closing-sweep points are below the fixed minimum, require their count divided by the "
+            "unsampled GraspNet input-cloud point count to exceed this ratio."
+        ),
+    )
+    parser.add_argument(
+        "--grasp-width-tolerance-mm",
+        type=float,
+        default=DEFAULT_GRASP_WIDTH_TOLERANCE_MM,
+        help="Maximum absolute difference between GraspNet width and masked point-cloud width.",
+    )
+    parser.add_argument(
+        "--grasp-width-max-center-offset-ratio",
+        type=float,
+        default=DEFAULT_GRASP_WIDTH_MAX_CENTER_OFFSET_RATIO,
+        help="Maximum object-center offset divided by half its local opening-axis width.",
+    )
+    parser.add_argument(
+        "--grasp-filter-finger-length-mm",
+        type=float,
+        default=DEFAULT_GRASP_FILTER_FINGER_LENGTH_MM,
+        help="Effective finger length along gripper-local X used to select the contact point-cloud slice.",
+    )
+    parser.add_argument(
+        "--grasp-filter-finger-width-mm",
+        type=float,
+        default=DEFAULT_GRASP_FILTER_FINGER_WIDTH_MM,
+        help="Total finger width along gripper-local Z used to select the contact point-cloud slice.",
+    )
+    parser.add_argument(
         "--filter-grasp-outliers",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Remove grasp candidates whose centers are outside the largest spatial cluster.",
+        default=DEFAULT_FILTER_GRASP_OUTLIERS,
+        help="Optionally remove grasp candidates whose centers are outside the largest spatial cluster.",
     )
     parser.add_argument(
         "--filter-target-tcp-z",
@@ -678,7 +808,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-target-tcp-z-mm",
         type=float,
-        default=165.0,
+        default=DEFAULT_MIN_TARGET_TCP_Z_MM,
         help="Minimum allowed final TCP z in JAKA base frame, in millimeters.",
     )
     parser.add_argument(
@@ -829,13 +959,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--prefer-topdown-candidate",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Rerank the first --topdown-rerank-window surviving candidates by TCP local Z closeness to base -Z.",
+        help="Jointly rank all safety-filtered candidates by mask geometry quality and vertical approach.",
+    )
+    parser.add_argument(
+        "--geometry-score-weight",
+        type=float,
+        default=DEFAULT_GEOMETRY_SCORE_WEIGHT,
+        help="Composite-ranking weight for width/centering quality; the remaining weight is vertical approach.",
+    )
+    parser.add_argument(
+        "--width-quality-weight",
+        type=float,
+        default=DEFAULT_WIDTH_QUALITY_WEIGHT,
+        help="Relative weight of point-cloud width consistency inside the geometry score.",
+    )
+    parser.add_argument(
+        "--centering-quality-weight",
+        type=float,
+        default=DEFAULT_CENTERING_QUALITY_WEIGHT,
+        help="Relative weight of centering quality inside the geometry score.",
     )
     parser.add_argument(
         "--topdown-rerank-window",
         type=int,
         default=10,
-        help="Only rerank this many highest-score surviving candidates when --prefer-topdown-candidate is enabled.",
+        help="Deprecated compatibility option; composite ranking now evaluates every surviving candidate.",
     )
     parser.add_argument("--velocity", type=float, default=60.0, help="JAKA linear_move_extend velocity.")
     parser.add_argument("--acceleration", type=float, default=60.0, help="JAKA linear_move_extend acceleration.")
@@ -856,6 +1004,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Fixed rotation around TCP local Z to align the physical gripper opening direction.",
     )
     parser.add_argument("--approach-offset-mm", type=float, default=80.0, help="Pre-grasp retreat along TCP local Z.")
+    parser.add_argument(
+        "--grasp-extra-depth-mm",
+        type=float,
+        default=DEFAULT_GRASP_EXTRA_DEPTH_MM,
+        help=(
+            "Signed offset from the planned grasp target along TCP local Z: "
+            "positive moves along +Z and negative moves along -Z."
+        ),
+    )
     parser.add_argument("--lift-mm", type=float, default=170.0, help="Post-close vertical lift in robot base frame.")
     parser.add_argument(
         "--num-cycles",
@@ -1066,7 +1223,28 @@ def main() -> None:
         args.num_cycles = 0
     if args.num_cycles < 0:
         raise ValueError("--num-cycles must be >= 0")
-
+    if args.grasp_width_min_contact_points < 1:
+        raise ValueError("--grasp-width-min-contact-points must be >= 1")
+    if args.grasp_closing_min_points < 1:
+        raise ValueError("--grasp-closing-min-points must be >= 1")
+    if not 0 <= args.grasp_closing_min_input_ratio <= 1:
+        raise ValueError("--grasp-closing-min-input-ratio must be between 0 and 1")
+    if not 0 <= args.grasp_width_percentile_low < args.grasp_width_percentile_high <= 100:
+        raise ValueError("grasp width percentiles must satisfy 0 <= low < high <= 100")
+    if args.grasp_width_tolerance_mm < 0:
+        raise ValueError("--grasp-width-tolerance-mm must be >= 0")
+    if args.grasp_width_max_center_offset_ratio < 0:
+        raise ValueError("--grasp-width-max-center-offset-ratio must be >= 0")
+    if args.grasp_filter_finger_length_mm <= 0:
+        raise ValueError("--grasp-filter-finger-length-mm must be > 0")
+    if args.grasp_filter_finger_width_mm <= 0:
+        raise ValueError("--grasp-filter-finger-width-mm must be > 0")
+    if not 0 <= args.geometry_score_weight <= 1:
+        raise ValueError("--geometry-score-weight must be between 0 and 1")
+    if args.width_quality_weight < 0 or args.centering_quality_weight < 0:
+        raise ValueError("geometry component weights must be >= 0")
+    if args.width_quality_weight + args.centering_quality_weight <= 0:
+        raise ValueError("at least one geometry component weight must be > 0")
     output_dir = Path(args.output_dir).expanduser().resolve()
     checkpoint_path = Path(args.ckpt).expanduser().resolve()
     camera_coordinates_dir = Path(args.camera_coordinates_dir).expanduser().resolve()

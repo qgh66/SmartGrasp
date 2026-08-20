@@ -35,6 +35,7 @@ LOGS_DIR = SMARTGRASP_ROOT / "logs"
 DEFAULT_CAMERA_SERIAL_SUFFIX = "72659"
 # Stop repeated physical actions if perception never converges on the target.
 MAX_GRASP_ROUNDS = 10
+DEFAULT_GRASP_EXTRA_DEPTH_MM = 0.0
 
 # Edit SAM2 settings here. These values are used by both the full Perception
 # pipeline and ``--debug sam2``. A ``None`` depth value inherits the matching
@@ -45,9 +46,9 @@ SAM2_PARAMETERS: dict[str, int | float | None] = {
     "--proposal-max-area-ratio": 0.11,
     "--proposal-border-fraction-threshold": 0.18,
     "--sam2-points-per-side": 24,
-    "--sam2-crop-n-layers": 0,
-    "--sam2-pred-iou-thresh": 0.68,
-    "--sam2-stability-score-thresh": 0.83,
+    "--sam2-crop-n-layers": 1,
+    "--sam2-pred-iou-thresh": 0.65,
+    "--sam2-stability-score-thresh": 0.78,
     "--depth-sam2-points-per-side": 24,
     "--depth-sam2-crop-n-layers": 1,
     "--depth-sam2-pred-iou-thresh": 0.58,
@@ -364,6 +365,7 @@ def run_grasp(scene_dir: Path, perception_mask: Path, args: argparse.Namespace) 
         "--perception-mask", str(perception_mask),
         "--use-sam-mask",
         "--no-trial-log",
+        "--grasp-extra-depth-mm", str(args.grasp_extra_depth_mm),
     ]
 
     if args.top_k:
@@ -418,8 +420,17 @@ def main():
             f"(default: {DEFAULT_CAMERA_SERIAL_SUFFIX})"
         ),
     )
-    parser.add_argument("--top-k", type=int, default=50, help="Top K grasp candidates")
+    parser.add_argument("--top-k", type=int, default=100, help="Top K grasp candidates")
     parser.add_argument("--candidate-index", type=int, default=0, help="Grasp candidate index to execute")
+    parser.add_argument(
+        "--grasp-extra-depth-mm",
+        type=float,
+        default=DEFAULT_GRASP_EXTRA_DEPTH_MM,
+        help=(
+            "Signed final grasp offset along TCP local Z in millimeters: positive moves along +Z, "
+            f"negative along -Z (default: {DEFAULT_GRASP_EXTRA_DEPTH_MM:g})"
+        ),
+    )
     parser.add_argument("--calibration-mode", default="hand_eye", choices=["legacy_plate", "hand_eye"],
                         help="Calibration mode for robot-camera transform")
     parser.add_argument("--capture-only", action="store_true", help="Only capture RGB-D, skip perception+grasp")

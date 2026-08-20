@@ -50,9 +50,10 @@ python -u run_pipeline.py --instruction "grasp the screwdriver on the left"
 
 ```text
 calibration-mode = hand_eye
-top-k = 50
+top-k = 100
 candidate-index = 0
 camera serial suffix = 72659
+final grasp extra depth = 10 mm (TCP local +Z)
 ```
 
 可直接修改 `run_pipeline.py` 顶部的 `DEFAULT_CAMERA_SERIAL_SUFFIX`，也可以仅为
@@ -63,6 +64,9 @@ python -u run_pipeline.py \
   --instruction "grasp the screwdriver on the left" \
   --camera-serial 76630
 ```
+
+完整 pipeline 同样支持 `--grasp-extra-depth-mm`。`0` 表示不偏移，正数沿 TCP
+局部 `+Z` 下探，负数沿 TCP 局部 `-Z` 回退。
 
 每次程序启动只创建一个时间戳目录，时间戳取程序开始时刻。每次实际抓取使用
 递增的数字子目录：
@@ -804,12 +808,13 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --velocity 10 \
   --acceleration 10 \
   --approach-offset-mm 100 \
+  --grasp-extra-depth-mm 10 \
   --lift-mm 80
 ```
 
 `--candidate-index` 指向当前这次运行过滤、重排后的候选。若通过第 2 节的 `--reuse-capture` 调试后直接执行，机械臂必须仍处于该帧对应的拍照位姿；复用输入仍会重新采样点云和运行 GraspNet，不保证同编号候选与上一次完全相同。
 
-实际执行顺序为：预抓取位姿 -> 抓取位姿 -> 闭合夹爪 -> 回拍照关节位 -> 到放置关节位 -> 沿机器人 base Z 向下 100 mm -> 打开夹爪 -> 回拍照关节位。
+实际执行顺序为：预抓取位姿 -> 沿 TCP 局部 +Z 下探到规划抓取点并额外前进 10 mm -> 闭合夹爪 -> 沿机器人 base Z 抬升 -> 回拍照关节位 -> 到放置关节位 -> 沿机器人 base Z 向下 100 mm -> 打开夹爪 -> 回拍照关节位。额外下探量可用 `--grasp-extra-depth-mm` 调整，设为 `0` 可恢复原行为；最低 TCP 高度过滤会按额外下探后的实际目标位姿检查。
 
 ### 4. 连续拍照、抓取和放置
 
@@ -833,8 +838,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
   --execute \
   --grasp-input-mode bbox \
   --grasp-crop-margin-px 50 \
-  --grasp-crop-margin-ratio 0 \
-  --target-mask-center-tolerance-px 0
+  --grasp-crop-margin-ratio 0
 ```
 
 使用严格 mask 点云时，只需将末尾的输入参数替换为：
@@ -857,15 +861,29 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 | `--warmup-frames` | `30` | 新采集前的相机预热帧数 |
 | `--device` | `cuda:0` | GraspNet 推理设备 |
 | `--num-points` | `20000` | 输入 GraspNet 的采样点数 |
-| `--top-k` | `50` | 保存和过滤的高分候选数量 |
+| `--top-k` | `100` | 保存和过滤的高分候选数量 |
 | `--if-pca` | 关闭 | GraspNet 原始候选为 0 时，用目标点云生成 PCA fallback |
-| `--grasp-input-mode` | `bbox` | SAM 启用时选择 `bbox` 或 `mask` 点云 |
+| `--grasp-input-mode` | `mask` | SAM 启用时选择 `bbox` 或 `mask` 点云 |
+| `--filter-grasp-centers-in-mask` | 关闭 | 是否要求抓取中心投影位于目标 mask 内或容差范围内 |
+| `--filter-grasp-width-from-mask` | 关闭 | 是否将宽度/偏心阈值作为硬过滤；默认只计算几何质量分数用于候选排序 |
+| `--grasp-width-percentile-low` / `--grasp-width-percentile-high` | `2` / `98` | 点云宽度使用的上下分位数 |
+| `--grasp-width-tolerance-mm` | `35` | 点云宽度与 GraspNet 预测宽度允许的最大绝对误差 |
+| `--grasp-width-min-contact-points` | `200` | 计算候选点云宽度所需的最少点数 |
+| `--filter-grasp-closing-points` | 关闭 | 是否根据完全闭合扫掠点数和其占 GraspNet 输入点云的比例删除候选；关闭时仍记录统计数据 |
+| `--grasp-closing-min-points` | `4000` | 夹爪从预测开口闭合到零时，扫掠体积内至少应包含的目标 mask 点数 |
+| `--grasp-closing-min-input-ratio` | `0.6` | 闭合点数不足 `4000` 时，其占未采样 GraspNet 输入点云的比例必须超过此值 |
+| `--grasp-width-max-center-offset-ratio` | `0.6` | 目标沿开口轴允许的最大归一化偏心比例，且点云必须跨过抓取中心 |
+| `--grasp-filter-finger-length-mm` | `60` | 沿夹爪局部 X 方向选取接触点云的有效手指长度 |
+| `--grasp-filter-finger-width-mm` | `30` | 沿两指平面法向（夹爪局部 Z）的手指总宽度 |
+| `--filter-grasp-outliers` | 关闭 | 是否仅保留抓取中心最大空间聚类中的候选 |
 | `--grasp-crop-margin-px` | `50` | bbox 每侧固定扩张像素数 |
 | `--grasp-crop-margin-ratio` | `0.2` | bbox 按目标尺寸扩张的比例 |
 | `--target-mask-center-tolerance-px` | `25` | 候选中心允许落在 mask 外的像素距离 |
-| `--min-target-tcp-z-mm` | `165` | 最终物理 TCP 的最低允许 base Z |
+| `--min-target-tcp-z-mm` | `125` | 最终物理 TCP 的最低允许 base Z |
 | `--filter-grasp-collisions` | 开启 | 启用 model-free 碰撞过滤 |
-| `--prefer-topdown-candidate` | 开启 | 在前 10 个候选中优先选择接近俯抓的姿态 |
+| `--prefer-topdown-candidate` | 开启 | 对所有通过 TCP Z 和碰撞过滤的候选进行“几何质量+垂直下探”联合排序 |
+| `--geometry-score-weight` | `0.5` | 联合分数中宽度/偏心几何质量的权重，剩余权重用于垂直下探 |
+| `--width-quality-weight` / `--centering-quality-weight` | `2` / `1` | 几何分内部的点云宽度一致性与偏心质量相对权重 |
 
 执行和运动参数：
 
@@ -877,6 +895,7 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 | `--acceleration` | `60` | JAKA 笛卡尔直线运动加速度 |
 | `--joint-velocity-rad-s` | `0.5` | 关节运动速度，单位 rad/s |
 | `--approach-offset-mm` | `80` | 抓取前沿 TCP 局部 Z 的退让距离 |
+| `--grasp-extra-depth-mm` | `10` | 相对规划抓取点沿 TCP 局部 Z 的有符号偏移；正数沿 `+Z`，负数沿 `-Z`，`0` 表示不偏移 |
 | `--lift-mm` | `170` | 闭合后沿机器人 base Z 的抬升距离 |
 | `--capture-joint-pose-deg` | `[0, 90, 45, 135, 270, 72]` | 每轮拍照前的 JAKA 关节角 |
 | `--place-target-joint-pose-deg` | `[-75, 90, 45, 135, 270, 72]` | 抓取后的放置关节角 |

@@ -148,6 +148,17 @@ def transform_from_rotation_translation(rotation: np.ndarray, translation: np.nd
     return transform
 
 
+def offset_transform_along_tcp_z(transform: np.ndarray, distance_mm: float) -> np.ndarray:
+    """Translate a TCP transform along its local +Z axis without changing orientation."""
+    result = np.asarray(transform, dtype=float).reshape(4, 4).copy()
+    tcp_z_axis = result[:3, 2]
+    axis_norm = float(np.linalg.norm(tcp_z_axis))
+    if axis_norm <= 1e-12:
+        raise ValueError("TCP local Z axis has near-zero length")
+    result[:3, 3] += tcp_z_axis / axis_norm * float(distance_mm)
+    return result
+
+
 def jaka_pose_to_transform(pose: list[float]) -> np.ndarray:
     if len(pose) != 6:
         raise ValueError(f"JAKA TCP pose must be 6D, got {pose!r}")
@@ -335,18 +346,38 @@ def target_tcp_z_mm(record: dict[str, Any]) -> float | None:
     return None
 
 
+def target_tcp_transform(record: dict[str, Any]) -> np.ndarray | None:
+    if "target_robot_from_tcp" in record:
+        return np.asarray(record["target_robot_from_tcp"], dtype=float).reshape(4, 4)
+    if "target_jaka_tcp_pose" in record:
+        return jaka_pose_to_transform(record["target_jaka_tcp_pose"])
+    return None
+
+
 def filter_target_tcp_z(
     records: list[dict[str, Any]],
     args: argparse.Namespace,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    extra_depth_mm = float(getattr(args, "grasp_extra_depth_mm", 0.0))
     info: dict[str, Any] = {
         "enabled": bool(args.filter_target_tcp_z),
-        "method": "min_target_tcp_z",
+        "method": "min_execution_target_tcp_z",
         "min_z_mm": float(args.min_target_tcp_z_mm),
+        "grasp_extra_depth_mm": extra_depth_mm,
         "num_input_candidates": int(len(records)),
         "num_removed": 0,
         "removed": [],
     }
+
+    for record in records:
+        planned_transform = target_tcp_transform(record)
+        if planned_transform is None:
+            continue
+        execution_transform = offset_transform_along_tcp_z(planned_transform, extra_depth_mm)
+        record["grasp_extra_depth_mm"] = extra_depth_mm
+        record["execution_target_robot_from_tcp"] = execution_transform
+        record["execution_target_jaka_tcp_pose"] = transform_to_jaka_pose(execution_transform)
+
     if not args.filter_target_tcp_z or len(records) == 0:
         info["reason"] = "disabled_or_no_candidates"
         return records, info
@@ -354,10 +385,15 @@ def filter_target_tcp_z(
     filtered_records: list[dict[str, Any]] = []
     removed_records: list[dict[str, Any]] = []
     for record in records:
-        z_mm = target_tcp_z_mm(record)
-        kept = z_mm is not None and z_mm >= float(args.min_target_tcp_z_mm)
+        planned_z_mm = target_tcp_z_mm(record)
+        execution_pose = record.get("execution_target_jaka_tcp_pose")
+        execution_z_mm = None if execution_pose is None else float(execution_pose[2])
+        kept = execution_z_mm is not None and execution_z_mm >= float(args.min_target_tcp_z_mm)
         record["target_tcp_z_filter"] = {
-            "target_tcp_z_mm": z_mm,
+            "target_tcp_z_mm": execution_z_mm,
+            "planned_target_tcp_z_mm": planned_z_mm,
+            "execution_target_tcp_z_mm": execution_z_mm,
+            "grasp_extra_depth_mm": extra_depth_mm,
             "min_z_mm": float(args.min_target_tcp_z_mm),
             "kept": bool(kept),
         }
@@ -372,6 +408,8 @@ def filter_target_tcp_z(
             "raw_grasp_index": int(record.get("grasp_index", -1)),
             "score": float(record["score"]),
             "target_tcp_z_mm": record["target_tcp_z_filter"]["target_tcp_z_mm"],
+            "planned_target_tcp_z_mm": record["target_tcp_z_filter"]["planned_target_tcp_z_mm"],
+            "execution_target_tcp_z_mm": record["target_tcp_z_filter"]["execution_target_tcp_z_mm"],
             "min_z_mm": record["target_tcp_z_filter"]["min_z_mm"],
         }
         for record in removed_records
@@ -407,10 +445,18 @@ def rerank_candidates_by_topdown(
     records: list[dict[str, Any]],
     args: argparse.Namespace,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    geometry_weight = float(args.geometry_score_weight)
+    vertical_weight = 1.0 - geometry_weight
+    width_quality_weight = float(args.width_quality_weight)
+    centering_quality_weight = float(args.centering_quality_weight)
+    geometry_component_weight_sum = width_quality_weight + centering_quality_weight
     info: dict[str, Any] = {
         "enabled": bool(args.prefer_topdown_candidate),
-        "method": "min_tcp_local_z_angle_to_base_down",
-        "window_size": int(args.topdown_rerank_window),
+        "method": "weighted_mask_geometry_and_vertical_approach",
+        "geometry_score_weight": geometry_weight,
+        "vertical_score_weight": vertical_weight,
+        "width_score_weight_within_geometry": width_quality_weight / geometry_component_weight_sum,
+        "centering_score_weight_within_geometry": centering_quality_weight / geometry_component_weight_sum,
         "num_input_candidates": int(len(records)),
         "reranked": [],
     }
@@ -418,50 +464,65 @@ def rerank_candidates_by_topdown(
         info["reason"] = "disabled_or_no_candidates"
         return records, info
 
-    window_size = max(1, min(int(args.topdown_rerank_window), len(records)))
-    window = records[:window_size]
-    tail = records[window_size:]
-    for rank, record in enumerate(window):
+    for rank, record in enumerate(records):
         angle_deg = tcp_downward_angle_deg(record)
-        record["topdown_rerank"] = {
+        vertical_score = (
+            0.0
+            if angle_deg is None
+            else float((np.cos(np.radians(angle_deg)) + 1.0) / 2.0)
+        )
+        geometry_score = float(
+            record.get("grasp_width_filter", {}).get("geometry_quality_score", 0.0)
+        )
+        combined_score = geometry_weight * geometry_score + vertical_weight * vertical_score
+        record["composite_ranking"] = {
             "input_rank": int(rank),
             "tcp_local_z_angle_to_base_down_deg": angle_deg,
+            "vertical_approach_score": vertical_score,
+            "geometry_quality_score": geometry_score,
+            "combined_score": combined_score,
+            "geometry_score_weight": geometry_weight,
+            "vertical_score_weight": vertical_weight,
         }
 
-    reranked_window = sorted(
-        window,
+    reranked_records = sorted(
+        records,
         key=lambda record: (
-            float("inf") if record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"] is None
-            else float(record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"]),
+            -float(record["composite_ranking"]["combined_score"]),
             -float(record["score"]),
         ),
     )
-    for output_rank, record in enumerate(reranked_window):
-        record["topdown_rerank"]["output_rank"] = int(output_rank)
+    for output_rank, record in enumerate(reranked_records):
+        record["composite_ranking"]["output_rank"] = int(output_rank)
 
     info["reranked"] = [
         {
             "raw_grasp_index": int(record.get("raw_grasp_index", record.get("grasp_index", -1))),
-            "input_rank": int(record["topdown_rerank"]["input_rank"]),
-            "output_rank": int(record["topdown_rerank"]["output_rank"]),
-            "score": float(record["score"]),
-            "tcp_local_z_angle_to_base_down_deg": record["topdown_rerank"]["tcp_local_z_angle_to_base_down_deg"],
+            "input_rank": int(record["composite_ranking"]["input_rank"]),
+            "output_rank": int(record["composite_ranking"]["output_rank"]),
+            "graspnet_score": float(record["score"]),
+            "geometry_quality_score": float(record["composite_ranking"]["geometry_quality_score"]),
+            "vertical_approach_score": float(record["composite_ranking"]["vertical_approach_score"]),
+            "combined_score": float(record["composite_ranking"]["combined_score"]),
+            "tcp_local_z_angle_to_base_down_deg": record["composite_ranking"]["tcp_local_z_angle_to_base_down_deg"],
         }
-        for record in reranked_window
+        for record in reranked_records
     ]
-    if reranked_window:
+    if reranked_records:
         print(
-            "[candidate-rerank] top-down preferred order: "
+            "[candidate-rerank] geometry + vertical approach order: "
             + ", ".join(
                 f"raw_grasp_{item['raw_grasp_index']} "
                 f"angle={item['tcp_local_z_angle_to_base_down_deg']:.3f}deg "
-                f"score={item['score']:.4f}"
+                f"geometry={item['geometry_quality_score']:.3f} "
+                f"vertical={item['vertical_approach_score']:.3f} "
+                f"combined={item['combined_score']:.3f}"
                 for item in info["reranked"]
                 if item["tcp_local_z_angle_to_base_down_deg"] is not None
             ),
             flush=True,
         )
-    return reranked_window + tail, info
+    return reranked_records, info
 
 
 def filter_grasp_centers_in_target_mask(
@@ -548,6 +609,238 @@ def filter_grasp_centers_in_target_mask(
             flush=True,
         )
     return filtered_records, info
+
+
+def filter_grasp_widths_by_mask_consistency(
+    records: list[dict[str, Any]],
+    object_cloud: np.ndarray | None,
+    grasp_input_point_count: int,
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Evaluate masked width/centering quality and optionally apply hard thresholds."""
+    min_contact_points = int(args.grasp_width_min_contact_points)
+    apply_geometry_filter = bool(args.filter_grasp_width_from_mask)
+    filter_closing_points = bool(args.filter_grasp_closing_points)
+    min_closing_points = int(args.grasp_closing_min_points)
+    min_closing_input_ratio = float(args.grasp_closing_min_input_ratio)
+    grasp_input_point_count = int(grasp_input_point_count)
+    width_tolerance_m = float(args.grasp_width_tolerance_mm) / 1000.0
+    max_center_offset_ratio = float(args.grasp_width_max_center_offset_ratio)
+    width_quality_weight = float(args.width_quality_weight)
+    centering_quality_weight = float(args.centering_quality_weight)
+    geometry_component_weight_sum = width_quality_weight + centering_quality_weight
+    finger_length_m = float(args.grasp_filter_finger_length_mm) / 1000.0
+    contact_half_width_m = float(args.grasp_filter_finger_width_mm) / 2000.0
+    percentile_bounds = (
+        float(args.grasp_width_percentile_low),
+        float(args.grasp_width_percentile_high),
+    )
+    info: dict[str, Any] = {
+        "enabled": True,
+        "hard_filter_enabled": apply_geometry_filter,
+        "method": "masked_contact_slice_width_and_center_quality",
+        "width_tolerance_mm": float(args.grasp_width_tolerance_mm),
+        "max_center_offset_ratio": max_center_offset_ratio,
+        "width_quality_weight": width_quality_weight,
+        "centering_quality_weight": centering_quality_weight,
+        "min_contact_points": min_contact_points,
+        "filter_closing_points": filter_closing_points,
+        "min_closing_points": min_closing_points,
+        "min_closing_input_ratio": min_closing_input_ratio,
+        "num_grasp_input_points": grasp_input_point_count,
+        "finger_length_m": finger_length_m,
+        "finger_length_mm": float(args.grasp_filter_finger_length_mm),
+        "finger_width_mm": float(args.grasp_filter_finger_width_mm),
+        "contact_half_width_m": contact_half_width_m,
+        "percentile_bounds": list(percentile_bounds),
+        "num_input_candidates": int(len(records)),
+        "num_removed": 0,
+        "removed": [],
+        "kept": [],
+    }
+    if len(records) == 0:
+        info["reason"] = "no_candidates"
+        return records, info
+    if object_cloud is None:
+        info["reason"] = "missing_masked_object_cloud"
+        return records, info
+    if grasp_input_point_count < 1:
+        info["reason"] = "empty_grasp_input_cloud"
+        if apply_geometry_filter:
+            info["num_removed"] = int(len(records))
+            return [], info
+        return records, info
+
+    points = np.asarray(object_cloud, dtype=float).reshape(-1, 3)
+    points = points[np.all(np.isfinite(points), axis=1)]
+    info["num_object_points"] = int(len(points))
+    if len(points) < min_contact_points:
+        info["reason"] = "masked_object_cloud_has_too_few_points"
+        if apply_geometry_filter:
+            info["num_removed"] = int(len(records))
+            return [], info
+        return records, info
+
+    kept_records: list[dict[str, Any]] = []
+    removed_records: list[dict[str, Any]] = []
+    for record in records:
+        raw_index = int(record.get("raw_grasp_index", record.get("grasp_index", -1)))
+        network_width_m = float(record["width"])
+        center = np.asarray(record["translation_camera_m"], dtype=float).reshape(3)
+        rotation = np.asarray(record["rotation_camera"], dtype=float).reshape(3, 3)
+        depth_m = float(record["depth"])
+        local_points = (points - center) @ rotation
+        contact_mask = (
+            (np.abs(local_points[:, 2]) <= contact_half_width_m)
+            & (local_points[:, 0] >= depth_m - finger_length_m)
+            & (local_points[:, 0] <= depth_m)
+        )
+        opening_coordinates = local_points[contact_mask, 1]
+        contact_count = int(len(opening_coordinates))
+        closing_sweep_coordinates = opening_coordinates[
+            np.abs(opening_coordinates) <= network_width_m / 2.0
+        ]
+        closing_point_count = int(len(closing_sweep_coordinates))
+        closing_input_ratio = closing_point_count / grasp_input_point_count
+        closing_left_point_count = int(np.count_nonzero(closing_sweep_coordinates < 0.0))
+        closing_right_point_count = int(np.count_nonzero(closing_sweep_coordinates > 0.0))
+        filter_record: dict[str, Any] = {
+            "raw_grasp_index": raw_index,
+            "graspnet_width_m": network_width_m,
+            "graspnet_width_mm": network_width_m * 1000.0,
+            "contact_point_count": contact_count,
+            "closing_sweep_point_count": closing_point_count,
+            "grasp_input_point_count": grasp_input_point_count,
+            "closing_sweep_input_ratio": closing_input_ratio,
+            "closing_sweep_left_point_count": closing_left_point_count,
+            "closing_sweep_right_point_count": closing_right_point_count,
+            "contact_half_width_m": contact_half_width_m,
+            "width_quality_score": 0.0,
+            "centering_quality_score": 0.0,
+            "geometry_quality_score": 0.0,
+            "quality_issues": [],
+            "kept": False,
+            "reasons": [],
+        }
+
+        if contact_count < min_contact_points:
+            filter_record["quality_issues"].append("too_few_contact_points")
+        else:
+            low_m, high_m = np.percentile(opening_coordinates, percentile_bounds)
+            geometry_width_m = float(high_m - low_m)
+            width_error_m = abs(network_width_m - geometry_width_m)
+            center_offset_m = abs(float((low_m + high_m) / 2.0))
+            half_geometry_width_m = geometry_width_m / 2.0
+            center_offset_ratio = (
+                float("inf")
+                if half_geometry_width_m <= 1e-9
+                else center_offset_m / half_geometry_width_m
+            )
+            width_quality_score = (
+                float(width_error_m <= 1e-12)
+                if width_tolerance_m <= 1e-12
+                else float(np.clip(1.0 - width_error_m / width_tolerance_m, 0.0, 1.0))
+            )
+            straddles_center = bool(low_m < 0.0 < high_m)
+            centering_quality_score = (
+                0.0
+                if not straddles_center
+                else (
+                    float(center_offset_ratio <= 1e-12)
+                    if max_center_offset_ratio <= 1e-12
+                    else float(np.clip(1.0 - center_offset_ratio / max_center_offset_ratio, 0.0, 1.0))
+                )
+            )
+            geometry_quality_score = (
+                width_quality_weight * width_quality_score
+                + centering_quality_weight * centering_quality_score
+            ) / geometry_component_weight_sum
+            filter_record.update(
+                {
+                    "opening_low_m": float(low_m),
+                    "opening_high_m": float(high_m),
+                    "mask_geometry_width_m": geometry_width_m,
+                    "mask_geometry_width_mm": geometry_width_m * 1000.0,
+                    "width_error_m": width_error_m,
+                    "width_error_mm": width_error_m * 1000.0,
+                    "center_offset_m": center_offset_m,
+                    "center_offset_mm": center_offset_m * 1000.0,
+                    "center_offset_ratio": center_offset_ratio,
+                    "straddles_grasp_center": straddles_center,
+                    "width_quality_score": width_quality_score,
+                    "centering_quality_score": centering_quality_score,
+                    "geometry_quality_score": geometry_quality_score,
+                }
+            )
+            if geometry_width_m <= 1e-9:
+                filter_record["quality_issues"].append("near_zero_geometry_width")
+            if width_error_m > width_tolerance_m:
+                filter_record["quality_issues"].append("predicted_and_point_cloud_width_mismatch")
+            if not straddles_center:
+                filter_record["quality_issues"].append("object_does_not_straddle_grasp_center")
+            if center_offset_ratio > max_center_offset_ratio:
+                filter_record["quality_issues"].append("center_offset_ratio_too_large")
+        if apply_geometry_filter:
+            filter_record["reasons"].extend(filter_record["quality_issues"])
+        closing_count_passed = closing_point_count >= min_closing_points
+        closing_ratio_passed = closing_input_ratio > min_closing_input_ratio
+        filter_record["closing_count_passed"] = closing_count_passed
+        filter_record["closing_ratio_passed"] = closing_ratio_passed
+        if filter_closing_points and not (closing_count_passed or closing_ratio_passed):
+            filter_record["reasons"].append("too_few_points_and_too_small_input_ratio_in_closing_sweep")
+
+        kept = len(filter_record["reasons"]) == 0
+        filter_record["kept"] = kept
+        record["graspnet_predicted_width"] = network_width_m
+        record["grasp_width_filter"] = filter_record
+        if kept:
+            if "mask_geometry_width_m" in filter_record:
+                record["mask_geometry_width"] = float(filter_record["mask_geometry_width_m"])
+            kept_records.append(record)
+            info["kept"].append(filter_record)
+        else:
+            removed_records.append(record)
+            info["removed"].append(filter_record)
+
+    info["num_removed"] = int(len(removed_records))
+    info["num_kept"] = int(len(kept_records))
+    for item in info["kept"]:
+        geometry_details = (
+            f"geometry={item['mask_geometry_width_mm']:.2f}mm "
+            f"error={item['width_error_mm']:.2f}mm "
+            f"offset_ratio={item['center_offset_ratio']:.3f} "
+            if "mask_geometry_width_mm" in item
+            else "geometry=unavailable "
+        )
+        print(
+            f"[candidate-geometry] evaluated raw_grasp_{item['raw_grasp_index']}: "
+            f"predicted={item['graspnet_width_mm']:.2f}mm "
+            f"{geometry_details}"
+            f"geometry_score={item['geometry_quality_score']:.3f} "
+            f"closing_points={item['closing_sweep_point_count']} "
+            f"closing_input_ratio={item['closing_sweep_input_ratio']:.3f} "
+            f"left={item['closing_sweep_left_point_count']} "
+            f"right={item['closing_sweep_right_point_count']}",
+            flush=True,
+        )
+    for item in info["removed"]:
+        details = " ".join(
+            f"{field}={item[field]:.2f}"
+            for field in ("graspnet_width_mm", "mask_geometry_width_mm", "width_error_mm")
+            if field in item
+        )
+        closing_details = (
+            f"closing_points={item['closing_sweep_point_count']} "
+            f"closing_input_ratio={item['closing_sweep_input_ratio']:.3f} "
+            f"left={item['closing_sweep_left_point_count']} "
+            f"right={item['closing_sweep_right_point_count']}"
+        )
+        print(
+            f"[candidate-width] removed raw_grasp_{item['raw_grasp_index']}: "
+            f"{','.join(item['reasons'])} {details} {closing_details}",
+            flush=True,
+        )
+    return kept_records, info
 
 
 def connected_components_from_distance(centers_mm: np.ndarray, radius_mm: float) -> list[list[int]]:
@@ -766,13 +1059,20 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
             continue
         center_transform = np.asarray(record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
         tcp_transform = np.asarray(record.get("target_robot_from_tcp", center_transform), dtype=float).reshape(4, 4)
+        execution_tcp_transform = np.asarray(
+            record.get("execution_target_robot_from_tcp", tcp_transform),
+            dtype=float,
+        ).reshape(4, 4)
         center_mm = center_transform[:3, 3]
         tcp_mm = tcp_transform[:3, 3]
+        execution_tcp_mm = execution_tcp_transform[:3, 3]
         if index == selected_index:
             selected_record = record
         print(
             f"grasp_{index} center x={center_mm[0]:.3f} y={center_mm[1]:.3f} z={center_mm[2]:.3f} mm "
-            f"tcp x={tcp_mm[0]:.3f} y={tcp_mm[1]:.3f} z={tcp_mm[2]:.3f} mm",
+            f"planned_tcp x={tcp_mm[0]:.3f} y={tcp_mm[1]:.3f} z={tcp_mm[2]:.3f} mm "
+            f"execution_tcp x={execution_tcp_mm[0]:.3f} y={execution_tcp_mm[1]:.3f} "
+            f"z={execution_tcp_mm[2]:.3f} mm",
             flush=True,
         )
     if selected_record is None and records:
@@ -780,8 +1080,13 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
     if selected_record is not None and "target_robot_from_grasp" in selected_record:
         center_transform = np.asarray(selected_record["target_robot_from_grasp"], dtype=float).reshape(4, 4)
         target_transform = np.asarray(selected_record.get("target_robot_from_tcp", center_transform), dtype=float).reshape(4, 4)
+        execution_target_transform = np.asarray(
+            selected_record.get("execution_target_robot_from_tcp", target_transform),
+            dtype=float,
+        ).reshape(4, 4)
         center_mm = center_transform[:3, 3]
         tcp_mm = target_transform[:3, 3]
+        execution_tcp_mm = execution_target_transform[:3, 3]
         moving_vector_mm = target_transform[:3, 2] * float(approach_offset_mm)
         pre_grasp_mm = tcp_mm - moving_vector_mm
         capture_tcp_pose = selected_record.get("capture_tcp_pose")
@@ -804,6 +1109,11 @@ def print_candidate_target_centers(records: list[dict[str, Any]], selected_index
             flush=True,
         )
         print(
-            f"tcp target = [{tcp_mm[0]:.3f}, {tcp_mm[1]:.3f}, {tcp_mm[2]:.3f}] mm",
+            f"planned tcp target = [{tcp_mm[0]:.3f}, {tcp_mm[1]:.3f}, {tcp_mm[2]:.3f}] mm",
+            flush=True,
+        )
+        print(
+            "execution tcp target = "
+            f"[{execution_tcp_mm[0]:.3f}, {execution_tcp_mm[1]:.3f}, {execution_tcp_mm[2]:.3f}] mm",
             flush=True,
         )
