@@ -4,22 +4,76 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import open3d as o3d
 
 
+SMARTGRASP_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DATA_ROOT = SMARTGRASP_ROOT / "data_realworld"
+TIMESTAMP_PATTERN = re.compile(r"^\d{8}_\d{6}$")
+
+
+def _candidate_sort_key(ply_path: Path, data_root: Path) -> tuple[str, int, int, str]:
+    """Sort candidates by session timestamp, round, mtime, and path."""
+    try:
+        relative_parts = ply_path.relative_to(data_root).parts
+    except ValueError:
+        relative_parts = ply_path.parts
+
+    timestamp = max(
+        (part for part in relative_parts if TIMESTAMP_PATTERN.fullmatch(part)),
+        default="",
+    )
+    round_index = max(
+        (int(part) for part in relative_parts if part.isdigit()),
+        default=-1,
+    )
+    return timestamp, round_index, ply_path.stat().st_mtime_ns, str(ply_path)
+
+
+def find_latest_grasp_candidates_ply(data_root: Path) -> Path:
+    """Return the newest timestamped grasp-candidate PLY under data_realworld."""
+    data_root = data_root.expanduser().resolve()
+    if not data_root.is_dir():
+        raise FileNotFoundError(f"SmartGrasp data directory not found: {data_root}")
+
+    candidates = [path for path in data_root.rglob("grasp_candidates.ply") if path.is_file()]
+    if not candidates:
+        raise FileNotFoundError(f"No grasp_candidates.ply found under: {data_root}")
+    return max(candidates, key=lambda path: _candidate_sort_key(path, data_root))
+
+
 def parse_args() -> argparse.Namespace:
-    default_path = Path(__file__).resolve().parents[1] / "result" / "grasp_candidates.ply"
     parser = argparse.ArgumentParser(description="Open a SmartGrasp PLY with point cloud and grasp gripper meshes.")
-    parser.add_argument("ply_path", nargs="?", default=str(default_path), help="PLY file to visualize.")
+    parser.add_argument(
+        "ply_path",
+        nargs="?",
+        default=None,
+        help=(
+            "PLY file to visualize. When omitted, automatically use the newest "
+            "timestamped data_realworld/**/grasp_candidates.ply."
+        ),
+    )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=DEFAULT_DATA_ROOT,
+        help=f"Root searched for the latest candidate PLY (default: {DEFAULT_DATA_ROOT}).",
+    )
     parser.add_argument("--point-size", type=float, default=2.0, help="Rendered point size.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    ply_path = Path(args.ply_path).expanduser().resolve()
+    if args.ply_path is None:
+        ply_path = find_latest_grasp_candidates_ply(args.data_root)
+        print(f"[visualize-ply] latest candidate PLY: {ply_path}")
+    else:
+        ply_path = Path(args.ply_path).expanduser().resolve()
+        print(f"[visualize-ply] requested PLY: {ply_path}")
     if not ply_path.exists():
         raise FileNotFoundError(f"PLY file not found: {ply_path}")
 
