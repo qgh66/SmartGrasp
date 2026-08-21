@@ -525,6 +525,136 @@ def rerank_candidates_by_topdown(
     return reranked_records, info
 
 
+def rerank_candidates_by_pose_mean(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Put the real candidate closest to the mean executable TCP pose first.
+
+    Translation and rotation live in different units, so each distance is
+    normalized by the median distance of the candidate set to its mean. This
+    makes the selection adapt to compact and widely spread candidate clouds
+    without constructing a synthetic pose for execution.
+    """
+    info: dict[str, Any] = {
+        "enabled": True,
+        "method": "closest_candidate_to_mean_executable_tcp_pose",
+        "num_input_candidates": int(len(records)),
+        "translation_distance_unit": "mm",
+        "rotation_distance_unit": "degree",
+        "reranked": [],
+    }
+    if len(records) == 0:
+        info["reason"] = "no_candidates"
+        return records, info
+
+    transforms: list[np.ndarray] = []
+    for record in records:
+        transform_value = record.get(
+            "execution_target_robot_from_tcp",
+            record.get("target_robot_from_tcp"),
+        )
+        if transform_value is None:
+            info["enabled"] = False
+            info["reason"] = "candidate_missing_executable_tcp_transform"
+            return records, info
+        transform = np.asarray(transform_value, dtype=float).reshape(4, 4)
+        if not np.all(np.isfinite(transform)):
+            info["enabled"] = False
+            info["reason"] = "candidate_has_non_finite_executable_tcp_transform"
+            return records, info
+        transforms.append(transform)
+
+    transform_array = np.stack(transforms, axis=0)
+    translations_mm = transform_array[:, :3, 3]
+    rotations = Rotation.from_matrix(transform_array[:, :3, :3])
+    mean_translation_mm = translations_mm.mean(axis=0)
+    mean_rotation = rotations.mean()
+
+    translation_distances_mm = np.linalg.norm(
+        translations_mm - mean_translation_mm,
+        axis=1,
+    )
+    rotation_distances_deg = np.degrees((mean_rotation.inv() * rotations).magnitude())
+
+    # Robust, data-adaptive scales keep millimetres and degrees comparable.
+    # The floors also keep an almost-identical candidate set numerically stable.
+    translation_scale_mm = max(float(np.median(translation_distances_mm)), 1.0)
+    rotation_scale_deg = max(float(np.median(rotation_distances_deg)), 1.0)
+    normalized_distances = np.hypot(
+        translation_distances_mm / translation_scale_mm,
+        rotation_distances_deg / rotation_scale_deg,
+    )
+
+    mean_transform = np.eye(4, dtype=float)
+    mean_transform[:3, :3] = mean_rotation.as_matrix()
+    mean_transform[:3, 3] = mean_translation_mm
+    info.update(
+        {
+            "mean_execution_tcp_pose": transform_to_jaka_pose(mean_transform),
+            "mean_execution_tcp_transform": mean_transform,
+            "translation_scale_mm": translation_scale_mm,
+            "rotation_scale_deg": rotation_scale_deg,
+        }
+    )
+
+    for input_rank, (record, translation_distance, rotation_distance, normalized_distance) in enumerate(
+        zip(
+            records,
+            translation_distances_mm,
+            rotation_distances_deg,
+            normalized_distances,
+        )
+    ):
+        record["pose_mean_ranking"] = {
+            "input_rank": int(input_rank),
+            "translation_distance_to_mean_mm": float(translation_distance),
+            "rotation_distance_to_mean_deg": float(rotation_distance),
+            "normalized_pose_distance": float(normalized_distance),
+            "translation_scale_mm": translation_scale_mm,
+            "rotation_scale_deg": rotation_scale_deg,
+        }
+
+    reranked_records = sorted(
+        records,
+        key=lambda record: (
+            float(record["pose_mean_ranking"]["normalized_pose_distance"]),
+            -float(record["score"]),
+        ),
+    )
+    for output_rank, record in enumerate(reranked_records):
+        record["pose_mean_ranking"]["output_rank"] = int(output_rank)
+
+    info["reranked"] = [
+        {
+            "raw_grasp_index": int(record.get("raw_grasp_index", record.get("grasp_index", -1))),
+            "input_rank": int(record["pose_mean_ranking"]["input_rank"]),
+            "output_rank": int(record["pose_mean_ranking"]["output_rank"]),
+            "graspnet_score": float(record["score"]),
+            "translation_distance_to_mean_mm": float(
+                record["pose_mean_ranking"]["translation_distance_to_mean_mm"]
+            ),
+            "rotation_distance_to_mean_deg": float(
+                record["pose_mean_ranking"]["rotation_distance_to_mean_deg"]
+            ),
+            "normalized_pose_distance": float(
+                record["pose_mean_ranking"]["normalized_pose_distance"]
+            ),
+        }
+        for record in reranked_records
+    ]
+    selected = info["reranked"][0]
+    print(
+        "[candidate-rerank] closest to mean executable TCP pose: "
+        f"raw_grasp_{selected['raw_grasp_index']} "
+        f"translation_distance={selected['translation_distance_to_mean_mm']:.3f}mm "
+        f"rotation_distance={selected['rotation_distance_to_mean_deg']:.3f}deg "
+        f"normalized_distance={selected['normalized_pose_distance']:.3f}; "
+        f"mean_tcp_pose={np.round(info['mean_execution_tcp_pose'], 6).tolist()}",
+        flush=True,
+    )
+    return reranked_records, info
+
+
 def filter_grasp_centers_in_target_mask(
     records: list[dict[str, Any]],
     target_mask: np.ndarray | None,

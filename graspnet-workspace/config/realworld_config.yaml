@@ -23,13 +23,13 @@ calibration:
     - [0.0, -1.0, 0.0, 67.0]
     - [0.0, 0.0, -1.0, 0.0]
     - [0.0, 0.0, 0.0, 1.0]
-  tcp_target_translation_offset_mm: [-23.0, -27.0, 10.0]
+  tcp_target_translation_offset_mm: [-23.0, -35.0, 15.0]
 
 robot:
   jaka_ip: 192.168.1.199
   ready_pose: [300.0, 0.0, 350.0, 3.141592653589793, 0.0, 0.0]
-  capture_joint_pose_deg: [0.0, 90.0, 45.0, 135.0, 270.0, 72.0]
-  place_target_joint_pose_deg: [-75.0, 90.0, 45.0, 135.0, 270.0, 72.0]
+  capture_joint_pose_deg: [0.0, 90.0, 45.0, 135.0, 270.0, 75.0]
+  place_target_joint_pose_deg: [-75.0, 90.0, 45.0, 135.0, 270.0, 75.0]
   place_release_lower_mm: 100.0
   grasp_extra_depth_mm: 10.0
   joint_velocity_rad_s: 0.5
@@ -37,7 +37,7 @@ robot:
 gripper:
   robotiq_port: /dev/ttyUSB0
   open_force: 30
-  close_force: 100
+  close_force: 175
 
 camera:
   default_index: 1
@@ -61,6 +61,7 @@ filters:
   grasp_filter_finger_width_mm: 30.0
 
 ranking:
+  candidate_strategy: pose_mean
   geometry_score_weight: 0.5
   width_quality_weight: 2.0
   centering_quality_weight: 1.0

@@ -32,6 +32,11 @@ OUT_ROOT = SMARTGRASP_ROOT / "data_realworld"
 INPUT_ROOT = SMARTGRASP_ROOT / "input"
 DATA_REALWORLD_ROOT = SMARTGRASP_ROOT / "data_realworld"
 
+# A 9x9 kernel expands each mask by 4 px per side.  The previous 5x5 kernel
+# expanded it by 2 px, so this doubles the contact-search distance while
+# keeping an odd, centered morphology kernel.
+DEFAULT_OCCLUSION_KERNEL_SIZE = 9
+
 
 def _convert_depth_raw_to_npy(depth_raw_path: Path, out_dir: Path) -> Path:
     """Convert RealSense Z16 depth to the centimetres used by Perception."""
@@ -1069,7 +1074,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--review-api-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--review-base-url", default=None)
     parser.add_argument("--review-timeout", type=float, default=120.0)
-    parser.add_argument("--kernel-size", type=int, default=5)
+    parser.add_argument(
+        "--kernel-size",
+        type=int,
+        default=DEFAULT_OCCLUSION_KERNEL_SIZE,
+        help=(
+            "Occlusion-contact dilation kernel size. Default: 9 (4 px per "
+            "side, twice the previous 5x5 kernel's 2 px expansion)."
+        ),
+    )
     parser.add_argument("--min-contact-pixels", type=int, default=50)
     parser.add_argument("--min-contact-ratio", type=float, default=0.002)
     parser.add_argument(

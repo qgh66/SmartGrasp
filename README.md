@@ -881,8 +881,9 @@ MPLCONFIGDIR=/tmp/smartgrasp_mpl python scripts/realworld_grasp.py \
 | `--target-mask-center-tolerance-px` | `25` | 候选中心允许落在 mask 外的像素距离 |
 | `--min-target-tcp-z-mm` | `125` | 最终物理 TCP 的最低允许 base Z |
 | `--filter-grasp-collisions` | 开启 | 启用 model-free 碰撞过滤 |
-| `--prefer-topdown-candidate` | 开启 | 对所有通过 TCP Z 和碰撞过滤的候选进行“几何质量+垂直下探”联合排序 |
-| `--geometry-score-weight` | `0.5` | 联合分数中宽度/偏心几何质量的权重，剩余权重用于垂直下探 |
+| `--candidate-ranking` | `pose_mean` | 最终排序策略：默认从过滤后的真实候选中选取最接近平均执行 TCP 位姿的候选；也可选 `geometry_topdown` 或 `graspnet_score` |
+| `--prefer-topdown-candidate` | 兼容参数 | 显式使用时切换到旧的“几何质量+垂直下探”排序；`--no-prefer-topdown-candidate` 保留 GraspNet 分数顺序 |
+| `--geometry-score-weight` | `0.5` | 仅在 `--candidate-ranking geometry_topdown` 时使用；控制宽度/偏心几何质量的权重 |
 | `--width-quality-weight` / `--centering-quality-weight` | `2` / `1` | 几何分内部的点云宽度一致性与偏心质量相对权重 |
 
 执行和运动参数：

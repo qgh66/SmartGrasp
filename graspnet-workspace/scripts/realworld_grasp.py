@@ -59,6 +59,7 @@ from utils.grasp_processing import (  # noqa: E402
     offset_transform_along_tcp_z,
     print_candidate_target_centers,
     renumber_candidate_records,
+    rerank_candidates_by_pose_mean,
     rerank_candidates_by_topdown,
     run_graspnet,
     transform_to_jaka_pose,
@@ -124,6 +125,7 @@ DEFAULT_FILTER_GRASP_WIDTH_FROM_MASK = bool(
     config_get(REALWORLD_CONFIG, "filters.filter_grasp_width_from_mask", False)
 )
 DEFAULT_MIN_TARGET_TCP_Z_MM = float(config_get(REALWORLD_CONFIG, "filters.min_target_tcp_z_mm", 125.0))
+DEFAULT_CANDIDATE_RANKING = str(config_get(REALWORLD_CONFIG, "ranking.candidate_strategy", "pose_mean"))
 DEFAULT_GEOMETRY_SCORE_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.geometry_score_weight", 0.5))
 DEFAULT_WIDTH_QUALITY_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.width_quality_weight", 2.0))
 DEFAULT_CENTERING_QUALITY_WEIGHT = float(config_get(REALWORLD_CONFIG, "ranking.centering_quality_weight", 1.0))
@@ -289,7 +291,27 @@ def save_outputs(
         args,
     )
     records, outlier_filter_info = filter_grasp_center_outliers(records, args)
-    records, topdown_rerank_info = rerank_candidates_by_topdown(records, args)
+    pose_mean_rerank_info: dict[str, Any] = {
+        "enabled": False,
+        "reason": f"candidate_ranking_{args.candidate_ranking}",
+    }
+    topdown_rerank_info: dict[str, Any] = {
+        "enabled": False,
+        "reason": f"candidate_ranking_{args.candidate_ranking}",
+    }
+    if args.candidate_ranking == "pose_mean":
+        records, pose_mean_rerank_info = rerank_candidates_by_pose_mean(records)
+        candidate_ranking_info = pose_mean_rerank_info
+    elif args.candidate_ranking == "geometry_topdown":
+        args.prefer_topdown_candidate = True
+        records, topdown_rerank_info = rerank_candidates_by_topdown(records, args)
+        candidate_ranking_info = topdown_rerank_info
+    else:
+        candidate_ranking_info = {
+            "enabled": True,
+            "method": "graspnet_score_order_preserved",
+            "num_input_candidates": int(len(records)),
+        }
     records = renumber_candidate_records(records)
     print_candidate_target_centers(records, args.candidate_index, args.approach_offset_mm)
 
@@ -346,6 +368,9 @@ def save_outputs(
         "model_free_collision_filter": collision_filter_info,
         "target_tcp_z_filter": target_tcp_z_filter_info,
         "center_outlier_filter": outlier_filter_info,
+        "candidate_ranking_strategy": args.candidate_ranking,
+        "candidate_ranking": candidate_ranking_info,
+        "pose_mean_rerank": pose_mean_rerank_info,
         "topdown_rerank": topdown_rerank_info,
         "point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("point_cloud_source"),
         "grasp_point_cloud_source": None if point_cloud_info is None else point_cloud_info.get("grasp_point_cloud_source"),
@@ -956,10 +981,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vendor-dir", default=str(VENDOR_DIR), help="Directory containing local gripper vendor modules.")
     parser.add_argument("--candidate-index", type=int, default=0, help="Candidate index to execute.")
     parser.add_argument(
+        "--candidate-ranking",
+        choices=("pose_mean", "geometry_topdown", "graspnet_score"),
+        default=DEFAULT_CANDIDATE_RANKING,
+        help=(
+            "Final ordering after safety filters: pose_mean selects the real candidate closest to "
+            "the mean executable TCP pose (default); geometry_topdown uses the previous geometry/vertical "
+            "score; graspnet_score preserves the network-score order."
+        ),
+    )
+    parser.add_argument(
         "--prefer-topdown-candidate",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Jointly rank all safety-filtered candidates by mask geometry quality and vertical approach.",
+        default=None,
+        help=(
+            "Deprecated compatibility alias. Explicit --prefer-topdown-candidate selects "
+            "--candidate-ranking geometry_topdown; --no-prefer-topdown-candidate selects graspnet_score."
+        ),
     )
     parser.add_argument(
         "--geometry-score-weight",
@@ -1219,6 +1257,8 @@ def run_one_cycle(
 
 def main() -> None:
     args = build_arg_parser().parse_args()
+    if args.prefer_topdown_candidate is not None:
+        args.candidate_ranking = "geometry_topdown" if args.prefer_topdown_candidate else "graspnet_score"
     if args.loop:
         args.num_cycles = 0
     if args.num_cycles < 0:

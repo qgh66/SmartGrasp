@@ -37,6 +37,10 @@ DEFAULT_CAMERA_SERIAL_SUFFIX = "72659"
 MAX_GRASP_ROUNDS = 10
 DEFAULT_GRASP_EXTRA_DEPTH_MM = 0.0
 
+# Occlusion contact detection only: 9x9 expands each object mask by 4 px per
+# side, twice the previous 5x5 kernel's 2 px expansion.
+OCCLUSION_DILATION_KERNEL_SIZE = 9
+
 # Edit SAM2 settings here. These values are used by both the full Perception
 # pipeline and ``--debug sam2``. A ``None`` depth value inherits the matching
 # RGB SAM2 value inside perception/run_perception.py.
@@ -152,6 +156,7 @@ def run_perception(scene_dir: Path, args: argparse.Namespace) -> bool:
         str(SMARTGRASP_ROOT / "perception" / "run_perception.py"),
         "--scene-id", scene_id,
         "--mode", "vlm",
+        "--kernel-size", str(OCCLUSION_DILATION_KERNEL_SIZE),
     ]
     if args.device:
         cmd.extend(["--device", args.device])
