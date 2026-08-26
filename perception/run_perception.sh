@@ -59,6 +59,8 @@ D_PPS="${DEPTH_SAM2_POINTS_PER_SIDE:-}"
 D_CNL="${DEPTH_SAM2_CROP_N_LAYERS:-1}"
 D_PIT="${DEPTH_SAM2_PRED_IOU_THRESH:-0.58}"
 D_SST="${DEPTH_SAM2_STABILITY_SCORE_THRESH:-0.73}"
+export SAM2_MERGE_CONTAINMENT_THRESHOLD="${SAM2_MERGE_CONTAINMENT_THRESHOLD:-0.82}"
+export SAM2_STRICT_DEDUP_ENABLED="${SAM2_STRICT_DEDUP_ENABLED:-0}"
 
 # ---- reason-after-perception 配置：当次场景，单步非 closed-loop ----
 RUN_REASON_AFTER_PERCEPTION="${RUN_REASON_AFTER_PERCEPTION:-1}"
@@ -186,6 +188,7 @@ run_once() {
         echo "  Python:    $PYTHON"
         echo "  Scenes:    ${scenes[*]}"
         echo "  Mode:      $MODE"
+        echo "  SAM2:      2 fixed passes (RGB + depth)"
         echo "  Data dir:  $SMARTGRASP_DATA_DIR"
         echo "  API URL:   $OPENAI_BASE_URL"
         [[ -n "${OPENAI_API_KEY:-}" ]] && echo "  API Key:   ✓ 已设置"
@@ -203,7 +206,7 @@ run_once() {
             --min-contact-pixels "${MIN_CONTACT_PIXELS:-50}" \
             --min-contact-ratio "${MIN_CONTACT_RATIO:-0.002}" \
             --depth-gap-threshold "${DEPTH_GAP_THRESHOLD:-0.5}" \
-            --mask-clean-kernel "${MASK_CLEAN_KERNEL:-3}" \
+            --mask-clean-kernel "${MASK_CLEAN_KERNEL:-1}" \
             --proposal-min-area-ratio "${PROPOSAL_MIN_AREA_RATIO:-0.006}" \
             --proposal-max-area-ratio "${PROPOSAL_MAX_AREA_RATIO:-0.11}" \
             --proposal-border-fraction-threshold "${PROPOSAL_BORDER_FRACTION_THRESHOLD:-0.18}" \

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import io
 import json
 import os
 import time
@@ -11,14 +10,23 @@ from html import unescape
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 from SmartGrasp.perception._shared import _log_step
 
-VLM_MAX_IMAGE_DIM = 768
+_ALLOWED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh"}
 
 
 # ── utilities ────────────────────────────────────────────────────────────────
+
+def _configured_reasoning_effort() -> str | None:
+    value = os.environ.get("SMARTGRASP_REASONING_EFFORT", "").strip().lower()
+    if not value:
+        return None
+    if value not in _ALLOWED_REASONING_EFFORTS:
+        raise ValueError(
+            "SMARTGRASP_REASONING_EFFORT must be one of "
+            f"{sorted(_ALLOWED_REASONING_EFFORTS)}, got {value!r}"
+        )
+    return value
 
 def _extract_json_from_text(text: str) -> dict[str, Any]:
     stripped = text.strip()
@@ -37,14 +45,19 @@ def _extract_json_from_text(text: str) -> dict[str, Any]:
 
 
 def _image_data_url(image_path: Path) -> str:
-    """Encode image as JPEG base64 data URL, resizing if too large."""
-    img = Image.open(image_path).convert("RGB")
-    if max(img.size) > VLM_MAX_IMAGE_DIM:
-        ratio = VLM_MAX_IMAGE_DIM / max(img.size)
-        img = img.resize((int(img.size[0] * ratio), int(img.size[1] * ratio)), Image.LANCZOS)
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
-    return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('ascii')}"
+    """Encode the original image bytes without resizing or lossy recompression."""
+    mime_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    mime_type = mime_types.get(image_path.suffix.lower())
+    if mime_type is None:
+        raise ValueError(f"Unsupported VLM image format: {image_path}")
+    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 def _response_text(response: Any) -> str:
@@ -108,51 +121,62 @@ def review_and_assign_sam2(
         "2. Then use the SAM2 overlay and cutout sheet to assign mask ids to each object.",
         "3. Return visible parts for each object.",
         "",
-        "Instance rules:",
-        "- Same category/color/material/texture is not enough to merge objects.",
-        "- Split repeated instances even when identical, touching, overlapping, or partially occluded.",
-        "- Do not split true parts of one object; parts may differ in color/material and may be fragmented by occlusion.",
-        "- Disconnected visible regions belong to one object only with positive physical evidence: continuous path, shared endpoint, matching geometry across short occlusion, or plausible hidden path behind the same occluder.",
-        "- Do not merge distant disconnected regions just because they look similar or are both occluded.",
-        "- Small rigid items are often separate objects if visible and separated by background/gaps; merge them into a larger object only when clearly mounted, embedded, or mechanically continuous.",
-        "- Ignore printed graphics, texture, shadows, highlights, and segmentation noise.",
+        "Grouping rules — apply in this priority order:",
+        "- Build the physical-object inventory from the original RGB image before assigning SAM2 ids. SAM2 masks are region proposals, not object identities.",
+        "- Default to separate objects. Independent-object evidence has priority over all merge evidence and vetoes a merge.",
+        "- Mandatory independence test: if two regions each have a coherent, recognizable physical-object identity or their own independently operable structure (for example, each has its own grip, articulation, or working mechanism), they are two objects, even when touching, crossing, stacked, mutually occluding, or one appears to hold the other.",
+        "- Mandatory whole-instance rule: complementary, non-independent regions that together form one canonical manufactured instance MUST be grouped as one physical object and all of their SAM2 ids MUST share one object_id. Apply this strictly even when SAM2 splits the instance into several masks or occlusion makes its regions disconnected. Non-exhaustive illustrations include a hammer handle with its head, a screwdriver handle with its shaft/tip, and a drill housing with its grip/chuck. These examples are explanatory only and never override visual evidence or the independence test.",
+        "- A category/name match or resemblance to an illustration is never by itself merge evidence and is never a reason to omit an object. Every visible physical object must still be inventoried from the image.",
+        "- Never return a constituent region, such as an attached handle, housing section, shaft, working end, or other integral component, as a separate object merely because it has its own SAM2 id. Keep it separate only when there is clear visual evidence that it is detached, is a standalone item, or belongs to a different independently complete physical object.",
+        "- Merge complementary, non-independent regions of one canonical manufactured instance when there is positive ownership evidence such as a real attachment, shared articulation, unique geometric continuation, aligned material/shape transition, or an unambiguous part-to-whole structure. A region that itself forms another independently complete physical object may not be merged.",
+        "- Touching, overlap, proximity, functional relation, or a convenient combined silhouette is not attachment evidence. Never invent a hidden joint or treat one object resting on another as a single object.",
+        "- Occluded disconnected regions may belong to one object only when their geometry, orientation, scale, and structure align across the same occluder and this is the unique plausible explanation; otherwise keep them separate.",
+        "- Without positive ownership evidence, represent a partial or uncertain region as a separate partially visible object with a neutral appearance-based name.",
+        "- Keep repeated instances separate and ignore background, shadows, printed texture, highlights, and segmentation noise.",
         "",
-        "SAM2 rules:",
-        "- Each SAM2 id can be assigned to at most one object.",
-        "- An object may have multiple SAM2 ids if fragmented.",
-        "- Every id in visible_parts[].sam2_ids must also appear in that object's top-level sam2_ids.",
-        "- Do not force a nearby mask into an object if it is better explained as another instance.",
-        "- Name each object by the complete physical instance in the RGB image. Use neutral descriptions when uncertain.",
+        "SAM2 assignment rules:",
+        "- Assign every available SAM2 id exactly once across objects[].sam2_ids: no omissions and no duplicates. This ownership requirement never authorizes an object merge.",
+        "- Assign an ambiguous or coarse id to only its single best-fitting owner; do not create or merge objects merely to accommodate it.",
+        "- One object may use multiple ids only when the grouping rules above are satisfied. Before returning, audit every multi-id object: if its ids contain two recognizable physical-object identities or two independent operating structures, split them into separate objects. Use visible_parts only for true constituent regions of one object, never for an adjacent, held, or stacked object.",
+        "- Before returning, perform a mandatory whole-instance audit: if two proposed objects are complementary, geometrically aligned constituent regions that together complete one canonical manufactured instance, merge their records and SAM2 ids unless both regions independently form complete physical objects.",
+        "- Every visible_parts[].sam2_ids value must also appear in that object's top-level sam2_ids.",
+        "- Name each object as a complete physical instance; keep names and visible-part descriptions concise.",
         "",
         "Output only valid JSON with this schema:",
         '{"objects":[',
-        '  {"id":1, "description":"red and yellow handled pliers",',
+        '  {"id":1, "description":"blue and gray manufactured object",',
         '   "relative_position":"lower right",',
         '   "sam2_ids":[3,7,12],',
         '   "visible_parts":[',
-        '     {"description":"red handle","sam2_ids":[3]},',
-        '     {"description":"yellow handle","sam2_ids":[7]},',
-        '     {"description":"black jaws","sam2_ids":[12]}',
+        '     {"description":"upper blue region","sam2_ids":[3]},',
+        '     {"description":"central gray region","sam2_ids":[7]},',
+        '     {"description":"lower blue region","sam2_ids":[12]}',
         '   ]}',
         ']}',
     ])
 
     client = _openai_client(api_key_env, base_url, timeout)
-    response = client.chat.completions.create(
-        model=model_id,
-        messages=[{
+    reasoning_effort = _configured_reasoning_effort()
+    request_options: dict[str, Any] = {
+        "model": model_id,
+        "messages": [{
             "role": "user",
             "content": [
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": _image_data_url(image_path)}},
-                {"type": "image_url", "image_url": {"url": _image_data_url(label_image_path)}},
-                {"type": "image_url", "image_url": {"url": _image_data_url(parts_sheet_path)}},
+                {"type": "image_url", "image_url": {"url": _image_data_url(image_path), "detail": "high"}},
+                {"type": "image_url", "image_url": {"url": _image_data_url(label_image_path), "detail": "high"}},
+                {"type": "image_url", "image_url": {"url": _image_data_url(parts_sheet_path), "detail": "high"}},
             ],
         }],
-        temperature=0.0,
-        max_tokens=3000,
-        response_format={"type": "json_object"},
-    )
+        "temperature": 0.0,
+        "max_tokens": 3000,
+        "response_format": {"type": "json_object"},
+    }
+    if reasoning_effort is not None:
+        request_options["reasoning_effort"] = reasoning_effort
+    llm_started_at = time.monotonic()
+    response = client.chat.completions.create(**request_options)
+    llm_call_seconds = time.monotonic() - llm_started_at
 
     _log_step("  ②b vlm_review (3img)", t0)
 
@@ -215,6 +239,12 @@ def review_and_assign_sam2(
     payload = {
         "model_id": model_id,
         "review_backend": "openai_chat_completions",
+        "llm_timing": {
+            "call_count": 1,
+            "call_seconds": llm_call_seconds,
+            "calls_seconds": [llm_call_seconds],
+            "reasoning_effort": reasoning_effort or "model_default",
+        },
         "image": {
             "path": str(image_path.resolve()),
             "sam2_label_path": str(label_image_path.resolve()),

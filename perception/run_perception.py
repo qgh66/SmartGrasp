@@ -23,7 +23,10 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 from SmartGrasp.perception._shared import _save_mask_png
-from SmartGrasp.perception.background import generate_background_exclusion_mask
+from SmartGrasp.perception.background import (
+    generate_background_exclusion_mask,
+    remove_background_from_image,
+)
 from SmartGrasp.perception.data_loader import DATA_DIR, PARQUET_GLOB, iter_npz_sources, load_npz
 from SmartGrasp.perception.occlusion_map import build_occlusion_graph, graph_to_jsonable
 
@@ -79,6 +82,8 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
         summary_path = summary_dir / "summary.json"
         depth_path = input_dir / "depth.npy"
         scene_image_path = input_dir / "scene_image.png"
+        background_depth_path = input_dir / "background_depth.npy"
+        background_image_path = input_dir / "background_rgb.png"
         if not scene_image_path.exists():
             scene_image_path = input_dir / "rgb.png"
         if not (scene_image_path.exists() and depth_path.exists()):
@@ -99,6 +104,12 @@ def load_priority_scene_inputs(scene_id: int | None) -> dict[str, Any] | None:
             "instruction_path": instruction_path,
             "image_path": scene_image_path,
             "depth_path": depth_path,
+            "background_depth_path": (
+                background_depth_path if background_depth_path.exists() else None
+            ),
+            "background_image_path": (
+                background_image_path if background_image_path.exists() else None
+            ),
         }
     return None
 
@@ -995,6 +1006,10 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
     priority_inputs = load_priority_scene_inputs(args.scene_id)
     row = None
     source_image: Image.Image | None = None
+    captured_background_image: Image.Image | None = None
+    captured_background_depth: np.ndarray | None = None
+    captured_background_mask: np.ndarray | None = None
+    background_mask_source = "depth_calibration"
     instances_objects: np.ndarray | None = None
 
     if priority_inputs is not None:
@@ -1008,6 +1023,25 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
         annotation = str(priority_summary.get("instruction") or priority_summary.get("annotation") or "")
         source_image = Image.open(priority_inputs["image_path"]).convert("RGB")
         depth = np.asarray(np.load(priority_inputs["depth_path"]), dtype=np.float32)
+        if (
+            priority_inputs.get("background_image_path") is not None
+            and priority_inputs.get("background_depth_path") is not None
+        ):
+            captured_background_image = Image.open(
+                priority_inputs["background_image_path"]
+            ).convert("RGB")
+            captured_background_depth = np.asarray(
+                np.load(priority_inputs["background_depth_path"]),
+                dtype=np.float32,
+            )
+            captured_background_mask = generate_background_exclusion_mask(
+                depth_map=depth,
+                image=source_image,
+                mask_clean_kernel=args.mask_clean_kernel,
+                reference_depth_map=captured_background_depth,
+                reference_image=captured_background_image,
+            )
+            background_mask_source = "captured_pre_object_rgbd"
         input_dir = Path(priority_inputs["input_dir"])
         instruction_path = priority_inputs.get("instruction_path")
         input_note = f", instruction={instruction_path}" if instruction_path else ""
@@ -1040,7 +1074,30 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
 
     if source_image is not None:
         image_path = out_dir / "scene_image.png"
-        source_image.save(image_path)
+        raw_image_path = out_dir / "scene_image_with_background.png"
+        source_image.save(raw_image_path)
+        if captured_background_mask is not None:
+            remove_background_from_image(
+                source_image,
+                captured_background_mask,
+            ).save(image_path)
+            captured_background_image.save(out_dir / "background_rgb.png")
+            np.save(
+                out_dir / "background_depth.npy",
+                captured_background_depth,
+            )
+            (out_dir / "mask").mkdir(parents=True, exist_ok=True)
+            save_background_exclusion_mask(
+                captured_background_mask,
+                out_dir / "mask",
+            )
+            print(
+                f"[scene_{int(scene_id)}] removed captured pre-object "
+                "background before SAM2/VLM/occlusion analysis",
+                flush=True,
+            )
+        else:
+            source_image.save(image_path)
         (out_dir / "summary.json").write_text(
             json.dumps(
                 {
@@ -1055,6 +1112,18 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                         if priority_inputs.get("instruction_path")
                         else None
                     ),
+                    "raw_scene_image_path": str(raw_image_path.resolve()),
+                    "background_rgb_path": (
+                        str((out_dir / "background_rgb.png").resolve())
+                        if captured_background_image is not None
+                        else None
+                    ),
+                    "background_depth_path": (
+                        str((out_dir / "background_depth.npy").resolve())
+                        if captured_background_depth is not None
+                        else None
+                    ),
+                    "background_mask_source": background_mask_source,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -1100,14 +1169,15 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 _draw_sam2_auto_label_image,
                 _save_sam2_rgb_parts_sheet,
             )
-            bg_mask = None
+            bg_mask = captured_background_mask
             background_mask_path = None
             try:
-                bg_mask = generate_background_exclusion_mask(
-                    depth_map=depth,
-                    image=Image.open(image_path).convert("RGB"),
-                    mask_clean_kernel=args.mask_clean_kernel,
-                )
+                if bg_mask is None:
+                    bg_mask = generate_background_exclusion_mask(
+                        depth_map=depth,
+                        image=Image.open(image_path).convert("RGB"),
+                        mask_clean_kernel=args.mask_clean_kernel,
+                    )
                 background_mask_path = save_background_exclusion_mask(bg_mask, out_dir / "mask")
             except Exception as exc:
                 print(f"bg_mask failed: {exc}", file=sys.stderr)
@@ -1140,7 +1210,7 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
                 "label_png": str(label_path.resolve()),
                 "parts_sheet_png": str((out_dir / "sam2_rgb_parts_sheet.png").resolve()),
                 "background_mask_path": background_mask_path,
-                "background_mask_source": "depth",
+                "background_mask_source": background_mask_source,
                 "candidates": [{k: v for k, v in c.items() if k != "mask"} for c in candidates],
                 "report": report,
             }
@@ -1176,6 +1246,8 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             depth_sam2_stability_score_thresh=args.depth_sam2_stability_score_thresh,
             proposal_border_fraction_threshold=args.proposal_border_fraction_threshold,
             max_contact_background_ratio=args.max_contact_background_ratio,
+            background_exclusion_mask_override=captured_background_mask,
+            background_mask_source=background_mask_source,
         )
         # Graph PNG already saved by build_org_json with scene-image background
         # Write a minimal points.json for summary generation
@@ -1211,8 +1283,23 @@ def run_pipeline(args: argparse.Namespace, df: pd.DataFrame | None = None) -> di
             "point_source": "sam2-vlm-anchor",
             "output_dir": str(out_dir.resolve()),
             "image_path": str(image_path.resolve()),
+            "raw_scene_image_path": (
+                str((out_dir / "scene_image_with_background.png").resolve())
+                if (out_dir / "scene_image_with_background.png").exists()
+                else None
+            ),
             "depth_path": str(depth_path.resolve()),
             "depth_image_path": str(depth_image_path.resolve()),
+            "background_rgb_path": (
+                str((out_dir / "background_rgb.png").resolve())
+                if (out_dir / "background_rgb.png").exists()
+                else None
+            ),
+            "background_depth_path": (
+                str((out_dir / "background_depth.npy").resolve())
+                if (out_dir / "background_depth.npy").exists()
+                else None
+            ),
             "graph_json": str((out_dir / "occlusion_graph.json").resolve()),
             "graph_png": str((out_dir / "occlusion_graph.png").resolve()),
             "background_mask_path": graph_payload.get("background_mask_path"),

@@ -509,20 +509,34 @@ def build_org_json(
     depth_sam2_pred_iou_thresh: float | None = None,
     depth_sam2_stability_score_thresh: float | None = None,
     max_contact_background_ratio: float = 0.3,
+    background_exclusion_mask_override: np.ndarray | None = None,
+    background_mask_source: str = "depth_calibration",
 ) -> dict[str, Any]:
     t0 = _log_step("start", None)
 
     _prepare_mask_output_dir(output_mask_dir, save_candidates)
     depth_map = _load_depth_map(depth_path)
     background_exclusion_mask: np.ndarray | None = None
-    try:
-        background_exclusion_mask = generate_background_exclusion_mask(
-            depth_map=depth_map,
-            image=Image.open(image_path).convert("RGB"),
-            mask_clean_kernel=mask_clean_kernel,
+    if background_exclusion_mask_override is not None:
+        background_exclusion_mask = np.asarray(
+            background_exclusion_mask_override,
+            dtype=bool,
         )
-    except Exception as exc:
-        print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
+        if background_exclusion_mask.shape != depth_map.shape:
+            raise ValueError(
+                "Background exclusion mask shape does not match depth map: "
+                f"background={background_exclusion_mask.shape}, "
+                f"depth={depth_map.shape}"
+            )
+    else:
+        try:
+            background_exclusion_mask = generate_background_exclusion_mask(
+                depth_map=depth_map,
+                image=Image.open(image_path).convert("RGB"),
+                mask_clean_kernel=mask_clean_kernel,
+            )
+        except Exception as exc:
+            print(f"Background exclusion mask generation failed: {exc}", file=sys.stderr, flush=True)
     background_mask_path = _save_background_exclusion_mask(background_exclusion_mask, output_mask_dir)
     t1 = _log_step("① background_mask", t0)
 
@@ -633,7 +647,7 @@ def build_org_json(
         "segmentation_backend": "anchor",
         "anchor_report": anchor_report,
         "background_mask_path": background_mask_path,
-        "background_mask_source": "depth",
+        "background_mask_source": background_mask_source,
         "save_candidates": bool(save_candidates),
         "graph": graph_payload,
     }

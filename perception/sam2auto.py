@@ -665,6 +665,100 @@ def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _strict_deduplicate_candidates(
+    candidates: list[dict[str, Any]],
+    report: list[dict[str, Any]],
+    mask_iou_threshold: float = float(
+        os.environ.get("SAM2_DUPLICATE_MASK_IOU_THRESHOLD", "0.93")
+    ),
+    area_ratio_threshold: float = float(
+        os.environ.get("SAM2_DUPLICATE_AREA_RATIO_THRESHOLD", "0.85")
+    ),
+) -> list[dict[str, Any]]:
+    """Drop near-identical SAM2 masks before visible part ids are assigned.
+
+    This is deliberately a removal-only pass: it never unions masks. Among a
+    duplicate pair, the proposal with the stronger SAM2 quality scores is kept.
+    """
+    if len(candidates) < 2:
+        return candidates
+
+    input_count = len(candidates)
+    indexed_candidates = list(enumerate(candidates, start=1))
+
+    def _quality_key(item: tuple[int, dict[str, Any]]) -> tuple[float, float, float, int]:
+        pre_dedup_id, candidate = item
+        return (
+            float(candidate.get("predicted_iou", 0.0) or 0.0),
+            float(candidate.get("stability_score", 0.0) or 0.0),
+            float(candidate.get("selection_score", 0.0) or 0.0),
+            -pre_dedup_id,
+        )
+
+    ranked_candidates = sorted(indexed_candidates, key=_quality_key, reverse=True)
+    kept: list[tuple[int, dict[str, Any]]] = []
+    removed_count = 0
+
+    for pre_dedup_id, candidate in ranked_candidates:
+        candidate_mask = np.asarray(candidate["mask"], dtype=bool)
+        candidate_area = int(np.count_nonzero(candidate_mask))
+        duplicate_match: tuple[int, dict[str, Any], float, float] | None = None
+
+        for kept_pre_dedup_id, kept_candidate in kept:
+            kept_mask = np.asarray(kept_candidate["mask"], dtype=bool)
+            kept_area = int(np.count_nonzero(kept_mask))
+            intersection = int(np.count_nonzero(candidate_mask & kept_mask))
+            union = candidate_area + kept_area - intersection
+            mask_iou = float(intersection / max(1, union))
+            area_ratio = float(
+                min(candidate_area, kept_area) / max(1, max(candidate_area, kept_area))
+            )
+
+            if mask_iou >= mask_iou_threshold and area_ratio >= area_ratio_threshold:
+                duplicate_match = (
+                    kept_pre_dedup_id,
+                    kept_candidate,
+                    mask_iou,
+                    area_ratio,
+                )
+                break
+
+        if duplicate_match is None:
+            kept.append((pre_dedup_id, candidate))
+            continue
+
+        kept_pre_dedup_id, kept_candidate, mask_iou, area_ratio = duplicate_match
+        removed_count += 1
+        report.append({
+            "stage": "strict_near_duplicate_dedup",
+            "decision": "remove_duplicate_without_union",
+            "removed_pre_dedup_id": pre_dedup_id,
+            "kept_pre_dedup_id": kept_pre_dedup_id,
+            "removed": _candidate_summary(candidate),
+            "kept": _candidate_summary(kept_candidate),
+            "mask_iou": mask_iou,
+            "smaller_to_larger_area_ratio": area_ratio,
+            "mask_iou_threshold": mask_iou_threshold,
+            "area_ratio_threshold": area_ratio_threshold,
+        })
+
+    # Preserve the candidate ordering expected by the downstream visualizer/VLM.
+    deduplicated = [candidate for _, candidate in kept]
+    deduplicated.sort(
+        key=lambda item: float(item.get("selection_score", 0.0) or 0.0),
+        reverse=True,
+    )
+    report.append({
+        "stage": "strict_near_duplicate_dedup_summary",
+        "input_candidates": input_count,
+        "removed_candidates": removed_count,
+        "output_candidates": len(deduplicated),
+        "mask_iou_threshold": mask_iou_threshold,
+        "area_ratio_threshold": area_ratio_threshold,
+    })
+    return deduplicated
+
+
 def _refresh_candidate_geometry(candidate: dict[str, Any], mask: np.ndarray, image_area: float) -> None:
     area = int(np.count_nonzero(mask))
     bbox_xywh = _mask_bbox(mask)
@@ -735,7 +829,9 @@ def _merge_candidates_with_depth_edges(
     report: list[dict[str, Any]],
     initial_kept: list[dict[str, Any]] | None = None,
     reject_internal_depth_edges: bool = True,
-    containment_threshold: float = 0.82,
+    containment_threshold: float = float(
+        os.environ.get("SAM2_MERGE_CONTAINMENT_THRESHOLD", "0.82")
+    ),
     depth_map: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = list(initial_kept or [])
@@ -875,6 +971,14 @@ def _sam2_auto_candidate_pool(
             max_candidates=None,
             report=report,
         )
+    else:
+        report.append(
+            {
+                "stage": "depth_sam2_auto_generator",
+                "configured": False,
+                "reason": "depth_map_unavailable",
+            }
+        )
 
     depth_gradient, valid_depth_mask = _normalized_depth_gradient(depth_map, image_np.shape[:2])
     rgb_candidates = _merge_candidates_with_depth_edges(
@@ -896,6 +1000,23 @@ def _sam2_auto_candidate_pool(
         depth_map=depth_map,
     )
     candidates = _resolve_overlaps_by_depth(candidates, depth_map=depth_map)
+    strict_dedup_enabled = os.environ.get(
+        "SAM2_STRICT_DEDUP_ENABLED",
+        "0",
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if strict_dedup_enabled:
+        candidates = _strict_deduplicate_candidates(candidates, report=report)
+    else:
+        report.append(
+            {
+                "stage": "strict_near_duplicate_dedup_summary",
+                "enabled": False,
+                "reason": "SAM2_STRICT_DEDUP_ENABLED is disabled",
+                "input_candidates": len(candidates),
+                "removed_candidates": 0,
+                "output_candidates": len(candidates),
+            }
+        )
     if save_candidates:
         candidate_dir = output_mask_dir.parent / "sam2_auto_candidates"
         for candidate in candidates:

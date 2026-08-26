@@ -53,6 +53,10 @@ def generate_background_exclusion_mask(
     depth_map: np.ndarray,
     image: Image.Image | None = None,
     mask_clean_kernel: int = 3,
+    reference_depth_map: np.ndarray | None = None,
+    reference_image: Image.Image | np.ndarray | None = None,
+    reference_depth_tolerance: float = 0.004,
+    reference_rgb_tolerance: int = 18,
 ) -> np.ndarray:
     """Generate background exclusion mask via per-pixel depth matching.
 
@@ -63,6 +67,55 @@ def generate_background_exclusion_mask(
     """
     depth = np.asarray(depth_map, dtype=np.float32)
     valid_depth = np.isfinite(depth) & (depth > 0)
+
+    if reference_depth_map is not None:
+        reference_depth = np.asarray(reference_depth_map, dtype=np.float32)
+        if reference_depth.shape != depth.shape:
+            raise ValueError(
+                "Captured background depth shape does not match scene depth: "
+                f"background={reference_depth.shape}, scene={depth.shape}"
+            )
+        reference_valid = np.isfinite(reference_depth) & (reference_depth > 0)
+        depth_delta = np.abs(depth - reference_depth)
+        depth_matches = (
+            valid_depth
+            & reference_valid
+            & (depth_delta <= float(reference_depth_tolerance))
+        )
+        background = ~valid_depth
+
+        if image is not None and reference_image is not None:
+            scene_rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+            if isinstance(reference_image, Image.Image):
+                reference_rgb = np.asarray(
+                    reference_image.convert("RGB"),
+                    dtype=np.int16,
+                )
+            else:
+                reference_rgb = np.asarray(reference_image, dtype=np.int16)
+                if reference_rgb.ndim == 3 and reference_rgb.shape[2] == 4:
+                    reference_rgb = reference_rgb[..., :3]
+            expected_rgb_shape = (*depth.shape, 3)
+            if (
+                scene_rgb.shape != expected_rgb_shape
+                or reference_rgb.shape != expected_rgb_shape
+            ):
+                raise ValueError(
+                    "Captured background RGB shape does not match scene image: "
+                    f"background={reference_rgb.shape}, scene={scene_rgb.shape}, "
+                    f"expected={expected_rgb_shape}"
+                )
+            rgb_delta = np.max(np.abs(scene_rgb - reference_rgb), axis=2)
+            rgb_matches = rgb_delta <= int(reference_rgb_tolerance)
+            exact_depth_matches = (
+                valid_depth
+                & reference_valid
+                & (depth_delta <= 0.0005)
+            )
+            background |= depth_matches & (rgb_matches | exact_depth_matches)
+        else:
+            background |= depth_matches
+        return np.asarray(background, dtype=bool)
 
     # Outside tray: depth seed (far plane + invalid depth)
     outside = (valid_depth & (depth >= DEPTH_BACKGROUND_THRESHOLD)) | ~valid_depth
@@ -77,6 +130,23 @@ def generate_background_exclusion_mask(
     inside = tray_border_mask & (np.abs(depth - ref) <= _TRAY_DEPTH_TOLERANCE)
 
     return outside | inside
+
+
+def remove_background_from_image(
+    image: Image.Image,
+    background_mask: np.ndarray,
+    fill_rgb: tuple[int, int, int] = (255, 255, 255),
+) -> Image.Image:
+    """Replace captured background pixels with a uniform RGB color."""
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    mask = np.asarray(background_mask, dtype=bool)
+    if mask.shape != rgb.shape[:2]:
+        raise ValueError(
+            "Background mask shape does not match image: "
+            f"mask={mask.shape}, image={rgb.shape[:2]}"
+        )
+    rgb[mask] = np.asarray(fill_rgb, dtype=np.uint8)
+    return Image.fromarray(rgb, mode="RGB")
 
 
 def generate_gt_background_exclusion_mask(instances_objects: np.ndarray) -> np.ndarray:
