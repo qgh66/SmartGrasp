@@ -42,6 +42,42 @@ export REASON_RANKING_SCORE=ig_graspability
 操作成功只记录为 `rounds[*].action_success=true`；只有最终指令目标物体完成
 物理抓取和搬运后，顶层 `task_success` 才为 `true`。
 
+动作对象来源由 `--task-selection-policy` 控制：
+
+- `configured`（默认）：保留场景 `occludes` 关系对 Reason 结果的稳定演示兜底。
+- `reason`：动作对象严格来自 Reason 的 `grasp_object`，有效遮挡分支严格来自
+  Reason 的 `branch`。场景配置仅用于判断最终真实目标是否抓取成功，不能覆盖
+  Reason 动作选择。Reason 没有返回有效对象或 mask 无法映射时，本轮失败，不会
+  偷偷回退到配置遮挡物。
+
+纯 Reason 多轮实验需要显式添加：
+
+```bash
+--task-selection-policy reason
+```
+
+`--task-selection-policy` 只作用于 `--task-closed-loop` 物理闭环，不影响
+`--perception-reason-test` 的 no-grasp/no-push 核验删除流程。
+
+Case 28（重度遮挡中号夹具）默认使用 no-grasp/no-push 多轮核验删除模式：
+
+```bash
+bash graspnet-workspace/scripts/run_case28_multiround.sh
+```
+
+脚本按实际堆叠顺序核验十字螺丝刀、大号夹具、灰色锤子和最终中号夹具。
+每个当前目标只有在 Perception 和 Reason 都映射正确后才直接从 PyBullet
+场景消失，然后重新拍摄下一层；全程不加载 GraspNet，也不执行机械臂或 Push。
+
+也可以把第一个参数指定为结果 JSON 路径，并通过环境变量调整每个目标的
+最大核验轮数：
+
+```bash
+MAX_TASK_ROUNDS=5 MAX_STALLED_PASSES=3 \
+  bash graspnet-workspace/scripts/run_case28_multiround.sh \
+  results/case28_no_grasp_delete.json
+```
+
 仿真场景还会使用对象 metadata 中的 `instruction_aliases` 锁定稳定的最终
 PyBullet body，并使用遮挡物的 `occludes` 关系防止 Perception 将上下两个工具
 合成一个 mask 后误把遮挡物当成最终目标。新增自定义目标指令时，应给对应对象

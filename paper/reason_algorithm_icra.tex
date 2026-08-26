@@ -1,0 +1,69 @@
+% ICRA/ieeeconf preamble requirements:
+% \usepackage{amsmath,amssymb}
+% \usepackage{algorithm}
+% \usepackage[noend]{algpseudocode}
+%
+% Notation: \textsc{G-Info} is graspability-info and
+% \textsc{G-Theory} is graspability-theory.
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+\begin{algorithm}[t]
+  \caption{Graspability-aware reasoning with
+  \emph{graspability-info} (\textsc{G-Info}) and
+  \emph{graspability-theory} (\textsc{G-Theory}).}
+  \label{alg:graspability_reason}
+  \small
+  \begin{algorithmic}[1]
+    \Require Target ID $t$ from Intent; perceived scene
+      $\mathcal{S}=(I,D,G,\mathcal{M},\mathcal{P})$; method
+      $m\in\{\textsc{G-Info},\textsc{G-Theory}\}$
+    \Ensure Next object $a^*$, its grasp part $p^*$, and action status
+    \State $b\gets\Call{VisibilityBranch}{t,G}$
+    \If{$b=\textsc{FullyVisible}$}
+      \State $(q_t,p_t^*)\gets\Call{VLMGraspability}{I,t,\mathcal{P}}$
+      \State \Return $(t,p_t^*,\textsc{GraspTarget})$
+    \ElsIf{$b=\textsc{PartiallyOccluded}$}
+      \State $\mathcal{A}\gets\Call{Ancestors}{G,t}$
+      \State $\mathcal{C}\gets\{i\in\mathcal{A}:\deg_G^-(i)=0\}$
+      \State $(s_i,q_i,p_i^*)_{i\in\mathcal{A}}
+        \gets\Call{VLMScore}{I,G,t,\mathcal{A},\mathcal{P}}$
+      \For{$i\in\mathcal{C}$}
+        \State $g_i\gets\sum_{\pi:i\leadsto t}\prod_{(u,v)\in\pi}r_{uv}$
+      \EndFor
+      \State $P\gets\Call{Normalize}{\{s_i g_i\}_{i\in\mathcal{C}}}$
+      \State $H_0\gets\Call{Entropy}{P}$
+      \For{$i\in\mathcal{C}$}
+        \State $P^{-i}\gets\Call{ResidualBelief}{G\setminus i,t,s}$
+        \State $\Delta_i\gets H_0-\Call{Entropy}{P^{-i}}$; $w_i\gets P_i$
+      \EndFor
+    \ElsIf{$b=\textsc{FullyOccluded}$}
+      \State $\mathcal{C}\gets\{i\in V(G):\deg_G^-(i)=0\}$
+      \State $(s_i,q_i,p_i^*)_{i\in\mathcal{C}}
+        \gets\Call{VLMScore}{I,G,t,\mathcal{C},\mathcal{P}}$
+      \For{$i\in\mathcal{C}$}
+        \State $v_i\gets A_i^{\mathrm{eq}}
+          \max(\epsilon,d_{\mathrm{floor}}-\bar d_i)$
+      \EndFor
+      \State $P\gets\Call{Normalize}{\{s_i v_i\}_{i\in\mathcal{C}}}$
+      \State $H_0\gets\Call{Entropy}{P}$
+      \For{$i\in\mathcal{C}$}
+        \State $P_{\mathrm{miss}}^{-i}\gets
+          \Call{MissBelief}{G\setminus i,D,\mathcal{M}}$
+        \State $\Delta_i\gets H_0-(1-P_i)
+          \Call{Entropy}{P_{\mathrm{miss}}^{-i}}$; $w_i\gets1$
+      \EndFor
+    \Else
+      \State \Return $(\varnothing,\varnothing,\textsc{Fault})$
+    \EndIf
+    \State $Z\gets\log_2(\max(2,|\mathcal{C}|))$
+    \For{$i\in\mathcal{C}$}
+      \If{$m=\textsc{G-Info}$}
+        \State $U_i\gets q_i\Delta_i$
+      \Else
+        \State $U_i\gets q_i w_i[\Delta_i]_+/Z$
+      \EndIf
+    \EndFor
+    \State $a^*\gets\arg\max_{i\in\mathcal{C}}U_i$
+    \State \Return $(a^*,p_{a^*}^*,\textsc{RemoveAndReobserve})$
+  \end{algorithmic}
+\end{algorithm}
