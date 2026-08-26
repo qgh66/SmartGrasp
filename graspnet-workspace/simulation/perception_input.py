@@ -56,6 +56,8 @@ def export_perception_input(
     depth: np.ndarray,
     segmentation: np.ndarray,
     instruction: str,
+    background_rgb: np.ndarray | None = None,
+    background_depth: np.ndarray | None = None,
     input_root: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Save one synchronized RGB-D-segmentation frame under input/scene_<id>."""
@@ -90,6 +92,34 @@ def export_perception_input(
             f"segmentation={segmentation_array.shape}"
         )
 
+    background_rgb_array: np.ndarray | None = None
+    background_depth_array: np.ndarray | None = None
+    if background_rgb is not None or background_depth is not None:
+        if background_rgb is None or background_depth is None:
+            raise ValueError(
+                "background_rgb and background_depth must be provided together"
+            )
+        background_rgb_array = np.asarray(background_rgb)
+        background_depth_array = np.asarray(background_depth, dtype=np.float32)
+        if (
+            background_rgb_array.ndim != 3
+            or background_rgb_array.shape[2] not in (3, 4)
+        ):
+            raise ValueError(
+                "background_rgb must have shape (H, W, 3) or (H, W, 4), "
+                f"got {background_rgb_array.shape}"
+            )
+        if tuple(background_rgb_array.shape[:2]) != spatial_shape:
+            raise ValueError(
+                "background_rgb must use the same camera resolution as rgb: "
+                f"background={background_rgb_array.shape[:2]}, rgb={spatial_shape}"
+            )
+        if background_depth_array.shape != spatial_shape:
+            raise ValueError(
+                "background_depth must use the same camera resolution as depth: "
+                f"background={background_depth_array.shape}, depth={spatial_shape}"
+            )
+
     if input_root is None:
         root = REPO_ROOT / "input"
     else:
@@ -105,12 +135,20 @@ def export_perception_input(
     rgb_path = scene_dir / "scene_image.png"
     depth_path = scene_dir / "depth.npy"
     segmentation_path = scene_dir / "segmentation.npy"
+    background_rgb_path = scene_dir / "background_rgb.png"
+    background_depth_path = scene_dir / "background_depth.npy"
     instruction_path = scene_dir / "input.txt"
     summary_path = scene_dir / "summary.json"
 
     Image.fromarray(rgb_array[..., :3].astype(np.uint8), mode="RGB").save(rgb_path)
     np.save(depth_path, depth_array)
     np.save(segmentation_path, segmentation_array)
+    if background_rgb_array is not None and background_depth_array is not None:
+        Image.fromarray(
+            background_rgb_array[..., :3].astype(np.uint8),
+            mode="RGB",
+        ).save(background_rgb_path)
+        np.save(background_depth_path, background_depth_array)
     instruction_path.write_text(instruction + "\n", encoding="utf-8")
 
     summary = {
@@ -128,6 +166,16 @@ def export_perception_input(
         "depth_dtype": str(depth_array.dtype),
         "depth_unit": "meter",
         "segmentation_dtype": str(segmentation_array.dtype),
+        "background_reference": (
+            {
+                "captured_before_objects": True,
+                "rgb_path": str(background_rgb_path),
+                "depth_path": str(background_depth_path),
+                "same_camera_pose": True,
+            }
+            if background_rgb_array is not None
+            else None
+        ),
     }
     summary_path.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -139,6 +187,12 @@ def export_perception_input(
         "scene_image": str(rgb_path),
         "depth": str(depth_path),
         "segmentation": str(segmentation_path),
+        "background_rgb": (
+            str(background_rgb_path) if background_rgb_array is not None else None
+        ),
+        "background_depth": (
+            str(background_depth_path) if background_depth_array is not None else None
+        ),
         "instruction": str(instruction_path),
         "summary": str(summary_path),
     }
@@ -306,6 +360,49 @@ def run_pipeline_for_scene(
             )
 
     reason_summary = _load_json(reason_summary_path)
+    perception_vlm_path = perception_output_dir / "vlm.json"
+    intent_result_path = scene_output_dir / "intent" / "intent_result.json"
+    perception_vlm = (
+        _load_json(perception_vlm_path)
+        if perception_vlm_path.exists()
+        else {}
+    )
+    intent_result = (
+        _load_json(intent_result_path)
+        if intent_result_path.exists()
+        else {}
+    )
+    perception_llm_timing = perception_vlm.get("llm_timing") or {}
+    reason_llm_timing = reason_summary.get("llm_timings") or {}
+    perception_llm_seconds = perception_llm_timing.get("call_seconds")
+    intent_llm_seconds = intent_result.get("llm_call_seconds")
+    reason_llm_seconds = reason_llm_timing.get("reason_seconds")
+    llm_stage_seconds = [
+        value
+        for value in (
+            perception_llm_seconds,
+            intent_llm_seconds,
+            reason_llm_seconds,
+        )
+        if value is not None
+    ]
+    llm_timings = {
+        "perception_seconds": perception_llm_seconds,
+        "perception_call_count": perception_llm_timing.get("call_count"),
+        "perception_calls_seconds": perception_llm_timing.get(
+            "calls_seconds"
+        )
+        or [],
+        "intent_seconds": intent_llm_seconds,
+        "intent_call_count": 1 if intent_llm_seconds is not None else 0,
+        "reason_seconds": reason_llm_seconds,
+        "reason_call_count": reason_llm_timing.get("reason_call_count"),
+        "reason_calls": reason_llm_timing.get("reason_calls") or [],
+        "total_seconds": sum(float(value) for value in llm_stage_seconds),
+        "perception_timing_path": str(perception_vlm_path.resolve()),
+        "intent_timing_path": str(intent_result_path.resolve()),
+        "reason_timing_path": str(reason_summary_path.resolve()),
+    }
     grasp_object = reason_summary.get("grasp_object") or {}
     target_object = reason_summary.get("target_object") or {}
     target_object_id = target_object.get("id")
@@ -370,4 +467,5 @@ def run_pipeline_for_scene(
             else None
         ),
         "graspability": reason_summary.get("graspability"),
+        "llm_timings": llm_timings,
     }

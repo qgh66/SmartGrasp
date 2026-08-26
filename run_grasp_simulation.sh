@@ -115,6 +115,10 @@ REQUESTED_PERCEPTION_REASON_TEST=0
 if has_arg "--perception-reason-test"; then
   REQUESTED_PERCEPTION_REASON_TEST=1
 fi
+REQUESTED_REASON_SELECTED_DELETE=0
+if has_arg "--delete-reason-selected-object"; then
+  REQUESTED_REASON_SELECTED_DELETE=1
+fi
 
 GRASP_OBJ_PATH="${GRASP_OBJ_PATH:-}"
 GRASP_SCENE_CONFIG="${GRASP_SCENE_CONFIG:-}"
@@ -147,7 +151,7 @@ USAGE
   exit 2
 fi
 
-if [[ "$REQUESTED_PERCEPTION_REASON_TEST" != "1" ]] && ! has_arg "--ckpt" && [[ ! -f "$GRASP_CHECKPOINT_PATH" ]]; then
+if [[ "$REQUESTED_PERCEPTION_REASON_TEST" != "1" ]] && [[ "$REQUESTED_REASON_SELECTED_DELETE" != "1" ]] && ! has_arg "--ckpt" && [[ ! -f "$GRASP_CHECKPOINT_PATH" ]]; then
   echo "Checkpoint not found: $GRASP_CHECKPOINT_PATH" >&2
   echo "Set GRASP_CHECKPOINT_PATH or pass --ckpt /path/to/checkpoint-rs.tar" >&2
   exit 2
@@ -209,7 +213,7 @@ if [[ -n "$GRASP_TARGET_OBJECT" ]] && ! has_arg "--target-object"; then
   CMD+=(--target-object "$GRASP_TARGET_OBJECT")
 fi
 
-if [[ "$REQUESTED_PERCEPTION_REASON_TEST" != "1" ]] && ! has_arg "--ckpt"; then
+if [[ "$REQUESTED_PERCEPTION_REASON_TEST" != "1" ]] && [[ "$REQUESTED_REASON_SELECTED_DELETE" != "1" ]] && ! has_arg "--ckpt"; then
   CMD+=(--ckpt "$GRASP_CHECKPOINT_PATH")
 fi
 
@@ -290,6 +294,7 @@ echo "  top_k=$REQUESTED_TOP_K"
 echo "  task_closed_loop=$REQUESTED_TASK_CLOSED_LOOP"
 echo "  occlusion_action=$REQUESTED_OCCLUSION_ACTION"
 echo "  perception_reason_test=$REQUESTED_PERCEPTION_REASON_TEST"
+echo "  delete_reason_selected_object=$REQUESTED_REASON_SELECTED_DELETE"
 echo "  test_all_candidates=$GRASP_TEST_ALL_CANDIDATES"
 echo "  test_all_raw_candidates=$GRASP_TEST_ALL_RAW_CANDIDATES"
 echo "  stop_on_success=$REQUESTED_STOP_ON_SUCCESS"

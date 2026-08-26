@@ -450,6 +450,108 @@ def _attempt_pipeline_target(
                     print(f"  ⚠️ Reason 动作 mask 映射失败: {error}")
 
             if args.perception_reason_test:
+                if args.delete_reason_selected_object:
+                    selected_mapping = action_mapping or reason_target_mapping
+                    selection = (
+                        selected_mapping[2]
+                        if selected_mapping is not None
+                        else None
+                    )
+                    if selected_mapping is None:
+                        print(
+                            "  ⚠️ Reason 物体无法映射到当前仿真场景；"
+                            "本轮不删除，重新感知后重试"
+                        )
+                        round_record = {
+                            "round": round_index,
+                            "scene_id": int(capture["scene_id"]),
+                            "instruction": round_instruction,
+                            "reason_target": reason_target,
+                            "selected_body_id": None,
+                            "selected_object_name": None,
+                            "selection_role": "reason_selected",
+                            "selection": None,
+                            "action": "no-action-reason-unmapped",
+                            "action_result": {
+                                "validation_skipped": True,
+                                "removed_from_scene": False,
+                            },
+                            "action_success": False,
+                        }
+                        pipeline_rounds.append(round_record)
+                        scene.step(args.reobserve_settle_steps)
+                        continue
+
+                    selected_body_id, selected_object, selection = (
+                        selected_mapping
+                    )
+                    scene.remove_object(selected_body_id)
+                    requested_target_removed = (
+                        selected_body_id == target_body_id
+                    )
+                    print(
+                        "  ✅ 跳过真值核验，已删除 Reason 选择的物体: "
+                        f"{selected_object.name} (body_id={selected_body_id})"
+                    )
+                    deletion_result = {
+                        "validation_skipped": True,
+                        "requested_target_body_id": int(target_body_id),
+                        "requested_target_name": target.name,
+                        "reason_selected_body_id": int(selected_body_id),
+                        "reason_selected_object_name": selected_object.name,
+                        "requested_target_matches_selection": bool(
+                            requested_target_removed
+                        ),
+                        "removed_from_scene": True,
+                    }
+                    round_record = {
+                        "round": round_index,
+                        "scene_id": int(capture["scene_id"]),
+                        "instruction": round_instruction,
+                        "reason_target": reason_target,
+                        "selected_body_id": int(selected_body_id),
+                        "selected_object_name": selected_object.name,
+                        "selection_role": "reason_selected",
+                        "selection": selection,
+                        "action": "delete-reason-selected-object",
+                        "action_result": deletion_result,
+                        "action_success": True,
+                    }
+                    pipeline_rounds.append(round_record)
+                    latest_visualization = {
+                        "rgb": capture["rgb"],
+                        "depth": capture["depth"],
+                        "seg": capture["segmentation"],
+                        "point_cloud": camera.generate_point_cloud(
+                            capture["depth"],
+                            num_points=20000,
+                        ).numpy(),
+                        "perception_input": capture["perception_input"],
+                        "reason_target": reason_target,
+                        "target_selection": selection,
+                        "target_body_id": int(target_body_id),
+                        "target_object_name": target.name,
+                        "reason_selected_deletion": deletion_result,
+                    }
+                    scene.step(max(1, args.reobserve_settle_steps))
+                    return {
+                        "target_body_id": int(target_body_id),
+                        "target_object_name": target.name,
+                        "obj_path": target.path,
+                        "instruction": instruction,
+                        "success": True,
+                        "failure_reason": None,
+                        "evaluated_candidates": 0,
+                        "validation_skipped": True,
+                        "removed_from_scene": True,
+                        "removed_body_id": int(selected_body_id),
+                        "removed_object_name": selected_object.name,
+                        "requested_target_removed": bool(
+                            requested_target_removed
+                        ),
+                        "pipeline_rounds": pipeline_rounds,
+                    }, latest_visualization
+
                 perception_validation = _evaluate_perception_target(
                     scene,
                     capture,
@@ -908,7 +1010,12 @@ def _attempt_target(
     }, visualization
 
 
-def _summarize_continuous_objects(target_ids, target_names, attempts):
+def _summarize_continuous_objects(
+    target_ids,
+    target_names,
+    attempts,
+    reason_selected_delete=False,
+):
     """Build one compact final record per requested object."""
     summaries = []
     for target_body_id, target_name in zip(target_ids, target_names):
@@ -917,10 +1024,21 @@ def _summarize_continuous_objects(target_ids, target_names, attempts):
             for attempt in attempts
             if attempt["target_body_id"] == int(target_body_id)
         ]
-        successful_attempt = next(
-            (attempt for attempt in object_attempts if attempt["success"]),
-            None,
-        )
+        if reason_selected_delete:
+            successful_attempt = next(
+                (
+                    attempt
+                    for attempt in attempts
+                    if attempt.get("removed_body_id")
+                    == int(target_body_id)
+                ),
+                None,
+            )
+        else:
+            successful_attempt = next(
+                (attempt for attempt in object_attempts if attempt["success"]),
+                None,
+            )
         last_attempt = object_attempts[-1] if object_attempts else {}
         summary = {
             "target_body_id": int(target_body_id),
@@ -951,6 +1069,21 @@ def _summarize_continuous_objects(target_ids, target_names, attempts):
                     validation_attempt.get("removed_from_scene", False)
                 ),
             })
+        if "removed_from_scene" in validation_attempt:
+            summary.update({
+                "removed_from_scene": bool(
+                    validation_attempt.get("removed_from_scene", False)
+                ),
+                "removed_body_id": validation_attempt.get(
+                    "removed_body_id"
+                ),
+                "removed_object_name": validation_attempt.get(
+                    "removed_object_name"
+                ),
+                "validation_skipped": bool(
+                    validation_attempt.get("validation_skipped", False)
+                ),
+            })
         summaries.append(summary)
     return summaries
 
@@ -970,10 +1103,18 @@ def run_all_objects(args):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
     validation_only = bool(args.perception_reason_test)
+    reason_selected_delete = bool(
+        validation_only and args.delete_reason_selected_object
+    )
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print(f"[All Objects] seed={args.seed}, device={device}")
     network = None if validation_only else _load_network(args, device)
-    if validation_only:
+    if reason_selected_delete:
+        print(
+            "  Reason 删除模式: 不做仿真真值核验；Reason 选择哪个物体，"
+            "就直接从场景删除哪个物体；不加载 GraspNet，不执行夹取或 Push"
+        )
+    elif validation_only:
         print(
             "  测试模式: 仅运行 Perception + Intent + Reason；"
             "不加载 GraspNet，不执行机械臂抓取或 Push"
@@ -1137,6 +1278,15 @@ def run_all_objects(args):
                 attempt["attempt_index"] = len(attempts) + 1
                 attempts.append(attempt)
                 last_visualization = visualization
+                if (
+                    reason_selected_delete
+                    and attempt.get("removed_from_scene", False)
+                ):
+                    removed_body_id = attempt.get("removed_body_id")
+                    if removed_body_id in remaining_ids:
+                        remaining_ids.remove(removed_body_id)
+                    pass_succeeded = True
+                    break
                 if attempt["success"]:
                     remaining_ids.remove(target_body_id)
                     pass_succeeded = True
@@ -1153,7 +1303,10 @@ def run_all_objects(args):
                     f"连续停滞 {stalled_passes}/{max_stalled_passes} 轮"
                 )
         object_results = _summarize_continuous_objects(
-            target_ids, target_names, attempts
+            target_ids,
+            target_names,
+            attempts,
+            reason_selected_delete=reason_selected_delete,
         )
     else:
         object_results = []
@@ -1227,18 +1380,22 @@ def run_all_objects(args):
     ]
     output = _json_safe({
         "mode": (
-            "perception_reason_validation_and_delete"
-            if validation_only
+            "reason_selected_object_delete"
+            if reason_selected_delete
             else (
-                "pipeline_continuous_grasp_and_drop"
-                if continuous_mode and args.run_pipeline_after_capture
+                "perception_reason_validation_and_delete"
+                if validation_only
                 else (
-                    "continuous_grasp_and_drop"
-                    if continuous_mode
+                    "pipeline_continuous_grasp_and_drop"
+                    if continuous_mode and args.run_pipeline_after_capture
                     else (
-                        "pipeline_all_objects_sequential_pick_and_place"
-                        if args.run_pipeline_after_capture
-                        else "all_objects_sequential_pick_and_place"
+                        "continuous_grasp_and_drop"
+                        if continuous_mode
+                        else (
+                            "pipeline_all_objects_sequential_pick_and_place"
+                            if args.run_pipeline_after_capture
+                            else "all_objects_sequential_pick_and_place"
+                        )
                     )
                 )
             )
@@ -1262,6 +1419,7 @@ def run_all_objects(args):
             args.run_pipeline_after_capture
         ),
         "perception_reason_test": validation_only,
+        "delete_reason_selected_object": reason_selected_delete,
         "graspnet_enabled": network is not None,
         "physical_actions_enabled": not validation_only,
         "instruction_template": (

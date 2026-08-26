@@ -29,7 +29,11 @@ from models.graspnet import pred_decode
 from simulation.camera import VirtualCamera
 from simulation.evaluator import GraspEvaluator
 from simulation.gripper_factory import create_gripper
-from simulation.object_mapping import match_scene_object_by_mask
+from simulation.object_mapping import (
+    decode_body_ids,
+    load_object_mask,
+    match_scene_object_by_mask,
+)
 from simulation.perception_input import (
     export_perception_input,
     generate_capture_scene_id,
@@ -42,6 +46,8 @@ from simulation.scene import SimulationScene
 FINAL_BRANCH = "fully_visible"
 PARTIAL_BRANCH = "partially_occluded"
 PIPELINE_HEARTBEAT_SECONDS = 30.0
+BODY_MASK_MIN_OVERLAP_RATIO = 0.03
+BODY_FRONT_DEPTH_TOLERANCE_M = 0.02
 
 
 def _json_safe(value):
@@ -105,6 +111,8 @@ def _report_pipeline_wait(
 def _capture_and_reason(
     *,
     camera,
+    background_rgb,
+    background_depth,
     gripper,
     capture_pose,
     instruction,
@@ -132,6 +140,8 @@ def _capture_and_reason(
         depth=depth,
         segmentation=segmentation,
         instruction=instruction,
+        background_rgb=background_rgb,
+        background_depth=background_depth,
     )
     print(
         f"  💾 Round 输入: scene_id={scene_id} "
@@ -176,12 +186,21 @@ def _capture_and_reason(
         heartbeat_thread.join(timeout=1.0)
         _move_network_to_device(network, device)
     elapsed = time.monotonic() - pipeline_started_at
+    llm_timings = reason_target.get("llm_timings") or {}
     print(
         "  ✅ Round 推理: "
         f"elapsed={elapsed:.1f}s, "
         f"branch={reason_target['branch']}, "
         f"target={reason_target.get('target_object_label')}, "
         f"grasp_object={reason_target['object_label']}",
+        flush=True,
+    )
+    print(
+        "  ⏱️ LLM 调用时间: "
+        f"perception={llm_timings.get('perception_seconds')}s, "
+        f"intent={llm_timings.get('intent_seconds')}s, "
+        f"reason={llm_timings.get('reason_seconds')}s, "
+        f"total={llm_timings.get('total_seconds')}s",
         flush=True,
     )
     return {
@@ -191,23 +210,172 @@ def _capture_and_reason(
         "segmentation": segmentation,
         "perception_input": perception_input,
         "reason_target": reason_target,
+        "pipeline_elapsed_seconds": elapsed,
     }
+
+
+def _match_scene_object_by_overlap_depth(
+    scene,
+    segmentation,
+    depth,
+    mask_path,
+    *,
+    minimum_overlap_ratio=BODY_MASK_MIN_OVERLAP_RATIO,
+    front_depth_tolerance_m=BODY_FRONT_DEPTH_TOLERANCE_M,
+):
+    """Map one Reason mask to the frontmost meaningfully overlapped body.
+
+    The Reason object ID is an image-sheet ID rather than a PyBullet body ID.
+    First keep bodies covering at least ``minimum_overlap_ratio`` of the
+    selected mask. Then find the nearest depth layer from the median depth in
+    each overlap region. If multiple bodies are in that layer, choose the one
+    covering the largest fraction of the selected mask.
+    """
+    body_ids = decode_body_ids(segmentation)
+    selected_mask, mask_diagnostics = load_object_mask(
+        mask_path,
+        target_shape=body_ids.shape,
+    )
+    depth_image = np.asarray(depth, dtype=np.float32)
+    if depth_image.shape != body_ids.shape:
+        raise RuntimeError(
+            "Depth and segmentation shapes differ during Reason-body "
+            f"mapping: depth={depth_image.shape}, "
+            f"segmentation={body_ids.shape}"
+        )
+
+    selected_pixels = int(np.count_nonzero(selected_mask))
+    if selected_pixels == 0:
+        raise RuntimeError(
+            f"Reason object mask is empty: {mask_diagnostics['mask_path']}"
+        )
+
+    candidates = []
+    registry = scene.get_object_registry()
+    for raw_body_id, scene_object in registry.items():
+        body_id = int(raw_body_id)
+        visible_body_mask = body_ids == body_id
+        scene_pixels = int(np.count_nonzero(visible_body_mask))
+        overlap_mask = selected_mask & visible_body_mask
+        intersection_pixels = int(np.count_nonzero(overlap_mask))
+        overlap_ratio = float(intersection_pixels / selected_pixels)
+        union_pixels = int(np.count_nonzero(selected_mask | visible_body_mask))
+        iou = float(intersection_pixels / union_pixels) if union_pixels else 0.0
+        scene_coverage = (
+            float(intersection_pixels / scene_pixels)
+            if scene_pixels
+            else 0.0
+        )
+
+        overlap_depth = depth_image[overlap_mask]
+        valid_depth = overlap_depth[
+            np.isfinite(overlap_depth) & (overlap_depth > 0.0)
+        ]
+        median_depth_m = (
+            float(np.median(valid_depth)) if valid_depth.size else None
+        )
+        candidates.append(
+            {
+                "body_id": body_id,
+                "name": scene_object.name,
+                "intersection_pixels": intersection_pixels,
+                "overlap_ratio": overlap_ratio,
+                "iou": iou,
+                "scene_pixels": scene_pixels,
+                "scene_coverage": scene_coverage,
+                "median_overlap_depth_m": median_depth_m,
+                "passes_overlap_ratio": bool(
+                    overlap_ratio >= float(minimum_overlap_ratio)
+                ),
+            }
+        )
+
+    meaningful_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate["passes_overlap_ratio"]
+        and candidate["median_overlap_depth_m"] is not None
+    ]
+    if not meaningful_candidates:
+        best_overlap = max(
+            candidates,
+            key=lambda candidate: candidate["overlap_ratio"],
+            default=None,
+        )
+        raise RuntimeError(
+            "No PyBullet body covers at least "
+            f"{float(minimum_overlap_ratio):.1%} of the Reason mask "
+            f"with valid depth; best={best_overlap}"
+        )
+
+    nearest_depth_m = min(
+        candidate["median_overlap_depth_m"]
+        for candidate in meaningful_candidates
+    )
+    front_candidates = [
+        candidate
+        for candidate in meaningful_candidates
+        if candidate["median_overlap_depth_m"]
+        <= nearest_depth_m + float(front_depth_tolerance_m)
+    ]
+    selected = max(
+        front_candidates,
+        key=lambda candidate: (
+            candidate["overlap_ratio"],
+            candidate["iou"],
+            candidate["scene_coverage"],
+            -candidate["body_id"],
+        ),
+    )
+    selected_body_id = int(selected["body_id"])
+    selected_object = registry[selected_body_id]
+
+    candidates.sort(
+        key=lambda candidate: (
+            not candidate["passes_overlap_ratio"],
+            candidate["median_overlap_depth_m"] is None,
+            candidate["median_overlap_depth_m"]
+            if candidate["median_overlap_depth_m"] is not None
+            else float("inf"),
+            -candidate["overlap_ratio"],
+        )
+    )
+    selection = {
+        **mask_diagnostics,
+        "source": "perception_mask_overlap_depth",
+        "minimum_overlap_ratio": float(minimum_overlap_ratio),
+        "front_depth_tolerance_m": float(front_depth_tolerance_m),
+        "nearest_candidate_depth_m": float(nearest_depth_m),
+        "selected_body_id": selected_body_id,
+        "selected_object_name": selected_object.name,
+        "selected_overlap_ratio": float(selected["overlap_ratio"]),
+        "selected_iou": float(selected["iou"]),
+        "selected_median_overlap_depth_m": float(
+            selected["median_overlap_depth_m"]
+        ),
+        "front_candidate_body_ids": [
+            int(candidate["body_id"])
+            for candidate in front_candidates
+        ],
+        "candidates": candidates,
+    }
+    return selected_body_id, selected_object, selection
 
 
 def _map_reason_object(
     scene,
     capture,
-    minimum_iou,
+    _minimum_iou,
     *,
     prefer_part_mask,
 ):
     reason_target = capture["reason_target"]
     whole_body_id, whole_scene_object, whole_selection = (
-        match_scene_object_by_mask(
+        _match_scene_object_by_overlap_depth(
             scene,
             capture["segmentation"],
+            capture["depth"],
             reason_target["object_mask_path"],
-            minimum_iou=minimum_iou,
         )
     )
     body_id = whole_body_id
@@ -222,16 +390,16 @@ def _map_reason_object(
     ):
         try:
             body_id, scene_object, part_selection = (
-                match_scene_object_by_mask(
+                _match_scene_object_by_overlap_depth(
                     scene,
                     capture["segmentation"],
+                    capture["depth"],
                     part_mask_path,
-                    minimum_iou=minimum_iou,
                 )
             )
             selection = {
                 **part_selection,
-                "source": "reason_part_mask_iou",
+                "source": "reason_part_mask_overlap_depth",
                 "reason_part_id": part_mask.get("part_id"),
                 "whole_object_selection": whole_selection,
             }
@@ -258,7 +426,8 @@ def _map_reason_object(
     print(
         f"  🔗 Reason Object {reason_target['object_id']} "
         f"-> body_id={body_id}, name={scene_object.name}, "
-        f"IoU={selection['selected_iou']:.4f}, "
+        f"overlap={selection['selected_overlap_ratio']:.4f}, "
+        f"depth={selection['selected_median_overlap_depth_m']:.4f}m, "
         f"source={selection['source']}"
     )
     return body_id, scene_object, selection
@@ -753,6 +922,7 @@ def _write_round_checkpoint(
     output_path,
     instruction,
     policy,
+    selection_policy,
     max_task_rounds,
     rounds,
     task_status,
@@ -760,23 +930,53 @@ def _write_round_checkpoint(
     configured_target_name,
     pending_occluder_ids,
     scene_config,
+    reason_selected_delete=False,
+    reason_task_complete=False,
+    movement_steps=0,
 ):
     """Atomically persist completed rounds so interruptions remain debuggable."""
     checkpoint = _json_safe(
         {
-            "mode": "semantic_target_physical_closed_loop",
+            "mode": (
+                "semantic_target_reason_selected_delete_closed_loop"
+                if reason_selected_delete
+                else "semantic_target_physical_closed_loop"
+            ),
             "in_progress": True,
-            "success": 0,
-            "task_success": False,
+            "success": None if reason_selected_delete else 0,
+            "task_success": None if reason_selected_delete else False,
+            "reason_task_complete": (
+                bool(reason_task_complete)
+                if reason_selected_delete
+                else None
+            ),
+            "human_validation_required": bool(
+                reason_selected_delete
+            ),
+            "human_validation_status": (
+                "pending"
+                if reason_selected_delete and reason_task_complete
+                else (
+                    "not_ready"
+                    if reason_selected_delete
+                    else "not_required"
+                )
+            ),
             "task_status": task_status,
             "instruction": instruction,
             "occlusion_action_policy": policy,
+            "task_selection_policy": selection_policy,
+            "delete_reason_selected_object": bool(
+                reason_selected_delete
+            ),
+            "physical_actions_enabled": not reason_selected_delete,
             "max_task_rounds": int(max_task_rounds),
             "round_count": len(rounds),
             "last_completed_round": (
                 int(rounds[-1]["round"]) if rounds else None
             ),
             "rounds": rounds,
+            "movement_steps": int(movement_steps),
             "configured_target_body_id": configured_target_body_id,
             "configured_target_name": configured_target_name,
             "remaining_occluder_ids": sorted(pending_occluder_ids),
@@ -813,7 +1013,7 @@ def _is_final_target_action(reason_target):
 
 
 def run_task_closed_loop(args):
-    """Run until the instruction's final target is physically grasped."""
+    """Run until Reason declares completion; leave correctness to a human."""
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -822,19 +1022,22 @@ def run_task_closed_loop(args):
     device = torch.device(
         args.device if torch.cuda.is_available() else "cpu"
     )
+    selection_policy = str(args.task_selection_policy)
+    configured_policy = selection_policy == "configured"
+    reason_selected_delete = bool(args.delete_reason_selected_object)
 
     checkpoint = args.ckpt or os.path.join(
         Path(__file__).resolve().parents[1],
         "checkpoints",
         "checkpoint-rs.tar",
     )
-    if not os.path.exists(checkpoint):
+    if not reason_selected_delete and not os.path.exists(checkpoint):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
 
     config = load_scene_config(args.scene_config)
     capture_pose = config.get("capture_joint_pose_deg")
     place_pose = config.get("place_target_joint_pose_deg")
-    if place_pose is None:
+    if not reason_selected_delete and place_pose is None:
         raise ValueError(
             "Task closed loop requires place_target_joint_pose_deg"
         )
@@ -856,9 +1059,13 @@ def run_task_closed_loop(args):
     rounds = []
     latest_visualization = None
     task_success = False
+    reason_task_complete = False
     task_status = "not_started"
     final_target_body_id = None
     final_target_name = None
+    reason_declared_final_body_id = None
+    reason_declared_final_name = None
+    movement_steps = 0
     failed_auto_pushes = set()
     pushed_occluder_ids = set()
     configured_target_body_id = None
@@ -872,6 +1079,7 @@ def run_task_closed_loop(args):
             output_path=output_path,
             instruction=str(args.instruction).strip(),
             policy=args.occlusion_action,
+            selection_policy=selection_policy,
             max_task_rounds=args.max_task_rounds,
             rounds=rounds,
             task_status=task_status,
@@ -879,16 +1087,49 @@ def run_task_closed_loop(args):
             configured_target_name=configured_target_name,
             pending_occluder_ids=pending_occluder_ids,
             scene_config=config["_path"],
+            reason_selected_delete=reason_selected_delete,
+            reason_task_complete=reason_task_complete,
+            movement_steps=movement_steps,
         )
 
     try:
         scene.connect()
         scene.load_plane()
-        scene.load_objects(config["_resolved_objects"])
-        configured_target = _configured_target(
-            scene,
-            str(args.instruction).strip(),
+        camera = _make_camera(config)
+        gripper = create_gripper(
+            args.gripper_model,
+            planner=None,
+            initial_joint_pose_deg=capture_pose,
+            robot_base_yaw_deg=float(
+                config.get("robot_base_yaw_deg", 0.0)
+            ),
+            gui_motion_step_delay=(
+                0.003 / args.gui_speed if args.gui else 0.0
+            ),
         )
+        gripper.load()
+        gripper.release_grasp()
+        gripper.set_opening(gripper._max_opening)
+        gripper.move_to_joint_pose_deg(capture_pose)
+        scene.step(1)
+        background_rgb, background_depth, _ = camera.capture()
+        print(
+            "  📷 已在添加物体前拍摄含机械臂的空场景 RGB-D 背景；"
+            "本次多轮流程将复用同一背景参考",
+            flush=True,
+        )
+        scene.load_objects(config["_resolved_objects"])
+        if reason_selected_delete:
+            configured_target = None
+            print(
+                "  Reason 删除模式不解析预置目标或 body_id；"
+                "Reason 决定每轮对象及何时结束，最终正确性由人工验证"
+            )
+        else:
+            configured_target = _configured_target(
+                scene,
+                str(args.instruction).strip(),
+            )
         if configured_target is not None:
             configured_target_body_id, configured_target_object = configured_target
             configured_target_name = configured_target_object.name
@@ -915,19 +1156,6 @@ def run_task_closed_loop(args):
             )
         scene.step(int(config.get("settle_steps", 300)))
 
-        camera = _make_camera(config)
-        gripper = create_gripper(
-            args.gripper_model,
-            planner=None,
-            initial_joint_pose_deg=capture_pose,
-            robot_base_yaw_deg=float(
-                config.get("robot_base_yaw_deg", 0.0)
-            ),
-            gui_motion_step_delay=(
-                0.003 / args.gui_speed if args.gui else 0.0
-            ),
-        )
-        gripper.load()
         if args.record_video:
             from simulation.video_recorder import PyBulletVideoRecorder
 
@@ -939,11 +1167,21 @@ def run_task_closed_loop(args):
             video_recorder.start()
             atexit.register(video_recorder.close)
 
-        print(
-            "🎯 最终目标闭环启动: "
-            f"policy={args.occlusion_action}, "
-            f"max_rounds={args.max_task_rounds}"
-        )
+        if reason_selected_delete:
+            print(
+                "🎯 Reason 自主删除闭环启动: "
+                f"final_instruction={args.instruction!r}, "
+                f"selection_policy={selection_policy}, "
+                f"max_rounds={args.max_task_rounds}；"
+                "每轮删除 Reason 选择的物体，不执行夹取或 Push"
+            )
+        else:
+            print(
+                "🎯 最终目标闭环启动: "
+                f"action_policy={args.occlusion_action}, "
+                f"selection_policy={selection_policy}, "
+                f"max_rounds={args.max_task_rounds}"
+            )
         for round_index in range(1, args.max_task_rounds + 1):
             print(
                 f"\n========== Task round "
@@ -955,6 +1193,8 @@ def run_task_closed_loop(args):
             try:
                 capture = _capture_and_reason(
                     camera=camera,
+                    background_rgb=background_rgb,
+                    background_depth=background_depth,
                     gripper=gripper,
                     capture_pose=capture_pose,
                     instruction=_round_instruction(
@@ -965,8 +1205,10 @@ def run_task_closed_loop(args):
                     network=network,
                     device=device,
                     allow_unselected_object=(
-                        configured_target_body_id is not None
+                        configured_policy
+                        and configured_target_body_id is not None
                     ),
+                    prepare_gripper=not reason_selected_delete,
                 )
                 reason_target = capture["reason_target"]
                 reason_mapping_role = None
@@ -977,7 +1219,8 @@ def run_task_closed_loop(args):
                         configured_target_object,
                     )
                     if (
-                        configured_target_body_id is not None
+                        configured_policy
+                        and configured_target_body_id is not None
                         and configured_target_object is not None
                     )
                     else None
@@ -997,10 +1240,14 @@ def run_task_closed_loop(args):
                         "转入目标抓取"
                     )
                 elif reason_target.get("object_id") is None:
-                    if configured_target_body_id is None:
+                    if (
+                        not configured_policy
+                        or configured_target_body_id is None
+                    ):
                         raise RuntimeError(
-                            "Reason did not select grasp_object.id and no "
-                            "configured target fallback is available: "
+                            "Reason did not select grasp_object.id and the "
+                            f"{selection_policy} selection policy forbids "
+                            "an action-object fallback: "
                             f"{reason_target['reason_summary_path']}"
                         )
                     reason_body_id = None
@@ -1019,7 +1266,10 @@ def run_task_closed_loop(args):
                     )
                 else:
                     configured_target_mapping = None
-                    if configured_target_body_id is not None:
+                    if (
+                        configured_policy
+                        and configured_target_body_id is not None
+                    ):
                         try:
                             target_mapping = _map_reason_target(
                                 scene,
@@ -1050,7 +1300,10 @@ def run_task_closed_loop(args):
                         )
                         reason_mapping_role = "grasp_object"
                     except Exception as grasp_mapping_error:
-                        if configured_target_mapping is not None:
+                        if (
+                            configured_policy
+                            and configured_target_mapping is not None
+                        ):
                             (
                                 reason_body_id,
                                 reason_scene_object,
@@ -1069,7 +1322,8 @@ def run_task_closed_loop(args):
                                 "已验证目标 mask，直接转入目标抓取"
                             )
                         elif (
-                            configured_target_body_id is not None
+                            configured_policy
+                            and configured_target_body_id is not None
                             and pending_occluder_ids
                         ):
                             reason_body_id = None
@@ -1114,7 +1368,8 @@ def run_task_closed_loop(args):
             # that a pushed occluder has revealed it. Prefer that evidence over
             # the still-pending configured occlusion relation.
             if (
-                configured_target_body_id is not None
+                configured_policy
+                and configured_target_body_id is not None
                 and reason_body_id == configured_target_body_id
             ):
                 if pending_occluder_ids:
@@ -1135,7 +1390,8 @@ def run_task_closed_loop(args):
             # Otherwise keep acting on the configured occluder. A successful
             # push only proves motion, not that the target is visible yet.
             elif (
-                configured_target_body_id is not None
+                configured_policy
+                and configured_target_body_id is not None
                 and pending_occluder_ids
             ):
                 body_id = (
@@ -1153,7 +1409,7 @@ def run_task_closed_loop(args):
                     selected_object=scene_object,
                     source="configured_occlusion_relation",
                 )
-            elif configured_target_body_id is not None:
+            elif configured_policy and configured_target_body_id is not None:
                 body_id = configured_target_body_id
                 scene_object = scene.get_object_info(body_id)
                 branch = FINAL_BRANCH
@@ -1164,25 +1420,54 @@ def run_task_closed_loop(args):
                     source="configured_final_target_after_occluders",
                 )
 
+            reason_considered_final = _is_final_target_action(reason_target)
+            ground_truth_final_target = (
+                None
+                if reason_selected_delete
+                else (
+                    body_id == configured_target_body_id
+                    if configured_target_body_id is not None
+                    else reason_considered_final
+                )
+            )
             final_action = (
-                body_id == configured_target_body_id
-                if configured_target_body_id is not None
-                else _is_final_target_action(reason_target)
+                reason_considered_final
+                if reason_selected_delete
+                else (
+                    ground_truth_final_target
+                    if configured_policy
+                    and configured_target_body_id is not None
+                    else reason_considered_final
+                )
             )
-            action = _resolve_action(
-                args.occlusion_action,
-                branch,
-                body_id,
-                failed_auto_pushes,
-                final_target=final_action,
+            if reason_selected_delete:
+                action = "delete-reason-selected-object"
+            else:
+                action = _resolve_action(
+                    args.occlusion_action,
+                    branch,
+                    body_id,
+                    failed_auto_pushes,
+                    final_target=final_action,
+                )
+            physical_final_grasp = bool(
+                not reason_selected_delete
+                and ground_truth_final_target
+                and action == "grasp-target"
             )
-            print(
-                "  🧭 物理动作: "
+            action_summary = (
+                "  🧭 本轮动作: "
                 f"reason_branch={reason_branch}, "
                 f"effective_branch={branch}, "
                 f"action={action}, body_id={body_id}, "
-                f"name={scene_object.name}, final={final_action}"
+                f"name={scene_object.name}, "
+                f"reason_final={reason_considered_final}"
             )
+            if not reason_selected_delete:
+                action_summary += (
+                    f", ground_truth_final={ground_truth_final_target}"
+                )
+            print(action_summary)
             round_record = {
                 "round": round_index,
                 "scene_id": int(capture["scene_id"]),
@@ -1231,15 +1516,48 @@ def run_task_closed_loop(args):
                 },
                 "action": action,
                 "action_role": (
-                    "final_target" if final_action else "occluder"
+                    (
+                        "reason_declared_target"
+                        if final_action
+                        else "reason_selected_intermediate"
+                    )
+                    if reason_selected_delete
+                    else (
+                        "final_target" if final_action else "occluder"
+                    )
                 ),
+                "task_selection_policy": selection_policy,
+                "validation_skipped": reason_selected_delete,
+                "automatic_correctness_validation": False
+                if reason_selected_delete
+                else True,
+                "reason_considered_final": reason_considered_final,
+                "ground_truth_final_target": ground_truth_final_target,
+                "physical_final_grasp": physical_final_grasp,
                 "target_selection": selection,
                 "reason_target": reason_target,
+                "llm_timings": reason_target.get("llm_timings") or {},
+                "pipeline_elapsed_seconds": capture.get(
+                    "pipeline_elapsed_seconds"
+                ),
                 "task_complete": False,
             }
 
             try:
-                if action == "push":
+                if reason_selected_delete:
+                    scene.remove_object(body_id)
+                    action_result = {
+                        "success": True,
+                        "validation_skipped": True,
+                        "removed_from_scene": True,
+                        "removed_body_id": int(body_id),
+                        "removed_object_name": scene_object.name,
+                    }
+                    print(
+                        "  ✅ 已删除 Reason 选择的物体: "
+                        f"{scene_object.name} (body_id={body_id})"
+                    )
+                elif action == "push":
                     push_result, activated = _execute_push(
                         scene=scene,
                         gripper=gripper,
@@ -1273,7 +1591,7 @@ def run_task_closed_loop(args):
                         reason_target=reason_target,
                         config=config,
                         args=args,
-                        final_target=final_action,
+                        final_target=physical_final_grasp,
                         use_reason_part_mask=bool(
                             args.use_reason_part_mask
                             and body_id == reason_body_id
@@ -1292,6 +1610,12 @@ def run_task_closed_loop(args):
                 }
 
             action_success = bool(action_result["success"])
+            if reason_selected_delete and action_success:
+                movement_steps += 1
+                round_record["movement_step"] = movement_steps
+            else:
+                round_record["movement_step"] = None
+            round_record["movement_steps_after_round"] = movement_steps
             round_record["action_success"] = action_success
             round_record["action_result"] = action_result
             latest_visualization = {
@@ -1307,7 +1631,7 @@ def run_task_closed_loop(args):
             }
 
             if (
-                not final_action
+                not ground_truth_final_target
                 and action_success
                 and body_id in pending_occluder_ids
             ):
@@ -1321,7 +1645,26 @@ def run_task_closed_loop(args):
                     pending_occluder_ids.discard(body_id)
                     pushed_occluder_ids.discard(body_id)
 
-            if final_action and action_success:
+            if reason_selected_delete and final_action and action_success:
+                reason_task_complete = True
+                task_status = (
+                    "reason_declared_target_deleted_"
+                    "pending_human_validation"
+                )
+                reason_declared_final_body_id = int(body_id)
+                reason_declared_final_name = scene_object.name
+                round_record["task_complete"] = True
+                round_record["human_validation_status"] = "pending"
+                rounds.append(round_record)
+                save_round_checkpoint()
+                print(
+                    "🏁 Reason 声明已到目标并完成本轮删除: "
+                    f"{scene_object.name} (round={round_index})；"
+                    "是否抓对等待人工验证"
+                )
+                break
+
+            if physical_final_grasp and action_success:
                 task_success = True
                 task_status = "final_target_grasped"
                 final_target_body_id = int(body_id)
@@ -1373,18 +1716,59 @@ def run_task_closed_loop(args):
 
         output = _json_safe(
             {
-                "mode": "semantic_target_physical_closed_loop",
+                "mode": (
+                    "semantic_target_reason_selected_delete_closed_loop"
+                    if reason_selected_delete
+                    else "semantic_target_physical_closed_loop"
+                ),
                 "in_progress": False,
-                "success": int(task_success),
-                "task_success": task_success,
+                "success": (
+                    None if reason_selected_delete else int(task_success)
+                ),
+                "task_success": (
+                    None if reason_selected_delete else task_success
+                ),
+                "verified_task_success": (
+                    None if reason_selected_delete else task_success
+                ),
+                "reason_task_complete": (
+                    reason_task_complete
+                    if reason_selected_delete
+                    else None
+                ),
+                "human_validation_required": reason_selected_delete,
+                "human_validation_status": (
+                    "pending"
+                    if reason_selected_delete and reason_task_complete
+                    else (
+                        "not_ready"
+                        if reason_selected_delete
+                        else "not_required"
+                    )
+                ),
                 "task_status": task_status,
                 "instruction": str(args.instruction).strip(),
                 "occlusion_action_policy": args.occlusion_action,
+                "task_selection_policy": selection_policy,
+                "delete_reason_selected_object": reason_selected_delete,
+                "physical_actions_enabled": not reason_selected_delete,
+                "validation_skipped": reason_selected_delete,
                 "max_task_rounds": int(args.max_task_rounds),
                 "round_count": len(rounds),
+                "movement_steps": int(movement_steps),
                 "rounds": rounds,
                 "final_target_body_id": final_target_body_id,
                 "final_target_name": final_target_name,
+                "reason_declared_final_body_id": (
+                    reason_declared_final_body_id
+                    if reason_selected_delete
+                    else None
+                ),
+                "reason_declared_final_name": (
+                    reason_declared_final_name
+                    if reason_selected_delete
+                    else None
+                ),
                 "configured_target_body_id": configured_target_body_id,
                 "configured_target_name": configured_target_name,
                 "remaining_occluder_ids": sorted(
@@ -1413,11 +1797,19 @@ def run_task_closed_loop(args):
             )
             with visualization_path.open("wb") as visualization_file:
                 pickle.dump(latest_visualization, visualization_file)
-        print(
-            f"\n📊 最终任务: "
-            f"{'SUCCESS' if task_success else 'FAILED'} "
-            f"({task_status})"
-        )
+        if reason_selected_delete:
+            print(
+                "\n📊 Reason 多轮流程: "
+                f"{'COMPLETE' if reason_task_complete else 'INCOMPLETE'} "
+                f"({task_status})"
+            )
+            print("👤 抓取是否正确: 等待人工验证")
+        else:
+            print(
+                f"\n📊 最终任务: "
+                f"{'SUCCESS' if task_success else 'FAILED'} "
+                f"({task_status})"
+            )
         print(f"💾 结果已保存: {output_path}")
         return output
     finally:

@@ -210,6 +210,15 @@ PIPELINE_EXIT=0
             exit $REASON_EXIT
         fi
 
+        if [[ ! -s "$scene_reason_dir/summary.json" ]]; then
+            echo "Reason: FAIL scene=${scene_id} (${RE}s, missing summary.json)"
+            echo ""
+            echo "---- Reason output (scene ${scene_id}) ----"
+            cat "$REASON_DETAIL_LOG"
+            rm -f "$REASON_DETAIL_LOG"
+            exit 1
+        fi
+
         printf "Reason: OK scene=%s (%ss) -> %s\n" "$scene_id" "$RE" "$scene_reason_dir"
         if [[ "$PIPELINE_VERBOSE" == "1" ]]; then
             grep -E '\[TIMING\]|\[ERROR\]|\[scene-out\]' "$REASON_DETAIL_LOG" || true

@@ -401,8 +401,26 @@ def parse_args():
                    help='导出同帧输入后运行 Perception+Intent+Reason，并将 Reason Object ID 映射为当前 PyBullet 目标')
     p.add_argument('--perception-reason-test', action='store_true',
                    help='批量只测 Perception+Reason：用仿真真值核验目标，正确后直接删除物体，不运行 GraspNet 或机械臂动作')
+    p.add_argument(
+        '--delete-reason-selected-object',
+        action='store_true',
+        help=(
+            'Perception+Reason 无动作模式：跳过仿真真值核验，直接删除 '
+            'Reason 的动作物体（没有动作物体时使用语义目标）'
+        ),
+    )
     p.add_argument('--task-closed-loop', action='store_true',
                    help='语义目标物理闭环：遮挡动作后重新拍摄和推理，只有最终目标抓取成功才结束')
+    p.add_argument(
+        '--task-selection-policy',
+        choices=['configured', 'reason'],
+        default='configured',
+        help=(
+            '多轮物理闭环动作对象来源：configured 保持场景配置辅助的稳定演示；'
+            'reason 完全执行 Reason 的 grasp_object 与 branch，配置仅用于评价'
+            '最终任务是否成功（默认: configured）'
+        ),
+    )
     p.add_argument(
         '--occlusion-action',
         choices=['auto', 'push', 'grasp-away'],
@@ -487,6 +505,10 @@ def main():
         )
     if args.task_closed_loop and not args.scene_config:
         raise ValueError("--task-closed-loop requires --scene-config")
+    if args.task_selection_policy != "configured" and not args.task_closed_loop:
+        raise ValueError(
+            "--task-selection-policy reason requires --task-closed-loop"
+        )
     if args.perception_reason_test and not args.run_pipeline_after_capture:
         raise ValueError(
             "--perception-reason-test requires --run-pipeline-after-capture"
@@ -498,10 +520,30 @@ def main():
             "--perception-reason-test requires --all-objects or "
             "--continuous-grasp"
         )
-    if args.perception_reason_test and args.task_closed_loop:
+    if (
+        args.perception_reason_test
+        and args.task_closed_loop
+        and not args.delete_reason_selected_object
+    ):
         raise ValueError(
             "--perception-reason-test is a batch validation flow and cannot "
             "be combined with --task-closed-loop"
+        )
+    if args.delete_reason_selected_object and not (
+        args.perception_reason_test or args.task_closed_loop
+    ):
+        raise ValueError(
+            "--delete-reason-selected-object requires "
+            "--perception-reason-test or --task-closed-loop"
+        )
+    if (
+        args.delete_reason_selected_object
+        and args.task_closed_loop
+        and args.task_selection_policy != "reason"
+    ):
+        raise ValueError(
+            "Task closed-loop Reason deletion requires "
+            "--task-selection-policy reason"
         )
     if args.max_task_rounds <= 0:
         raise ValueError("--max-task-rounds must be greater than zero")
