@@ -1,0 +1,310 @@
+{
+  "description": "Balanced C1 industrial benchmark; seed=5110; target=c1_10_small_clamp_clear_target_small_clamp.",
+  "benchmark": {
+    "case_id": "c1_10_small_clamp_clear",
+    "seed": 5110,
+    "target_name": "c1_10_small_clamp_clear_target_small_clamp",
+    "target_body_id": 5,
+    "target_asset": "small_clamp",
+    "target_occluder_names": [],
+    "target_occluder_body_ids": [],
+    "removal_order_names": [],
+    "removal_order_body_ids": [],
+    "instruction": "Directly grasp the clearly visible small clamp.",
+    "object_count": 9,
+    "layout_profile": "moderate_compact_right_shifted",
+    "workspace_shift_x": 0.2,
+    "difficulty_category": "C1",
+    "difficulty_name": "目标可直接抓取",
+    "occlusion_layers": 0,
+    "initial_state": "目标清晰可见，无遮挡或遮挡不影响抓取",
+    "major_assessment": "避免不必要移障，直接完成抓取",
+    "position_randomization": "deterministic_seeded_jitter"
+  },
+  "settle_steps": 720,
+  "robot_base_yaw_deg": 180,
+  "capture_joint_pose_deg": [
+    0,
+    90,
+    45,
+    135,
+    270,
+    72
+  ],
+  "place_target_joint_pose_deg": [
+    -75,
+    90,
+    45,
+    135,
+    270,
+    72
+  ],
+  "object_staging": {
+    "lock_initial_poses_until_grasp": true
+  },
+  "continuous_grasp": {
+    "drop_settle_steps": 240,
+    "max_stalled_passes": 2
+  },
+  "camera": {
+    "position": [
+      0.52,
+      0,
+      0.72
+    ],
+    "target": [
+      0.52,
+      0,
+      0.07
+    ],
+    "width": 1280,
+    "height": 720,
+    "fov": 60,
+    "near": 0.01,
+    "far": 5
+  },
+  "crop": {
+    "margin": 0.06,
+    "num_points": 20000,
+    "table_z": 0.005
+  },
+  "grasp_filter": {
+    "max_center_dist": 0.04,
+    "bbox_margin": 0.04,
+    "min_inner_points": 5
+  },
+  "collision_filter": {
+    "enabled": true,
+    "voxel_size": 0.005,
+    "approach_dist": 0.05,
+    "collision_thresh": 0.05
+  },
+  "topdown_filter": {
+    "enabled": true,
+    "max_angle_deg": 60
+  },
+  "objects": [
+    {
+      "name": "c1_10_small_clamp_clear_distractor_6_adjustable_wrench",
+      "path": "assets/objects/industrial_tools/ycb/042_adjustable_wrench/google_16k/textured.obj",
+      "position": [
+        0.524901,
+        0.169521,
+        0.03
+      ],
+      "euler": [
+        0,
+        0,
+        0.363611
+      ],
+      "scale": 1,
+      "mass": 0.16,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "wrench",
+        "stack_id": "distractor_6",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_1_battery",
+      "path": "assets/objects/industrial_tools/battery/Scan.obj",
+      "position": [
+        0.877256,
+        0.003104,
+        0.025
+      ],
+      "euler": [
+        0,
+        0,
+        -2.722721
+      ],
+      "scale": 1,
+      "mass": 0.05,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "battery",
+        "stack_id": "distractor_1",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_2_medium_clamp",
+      "path": "assets/objects/industrial_tools/ycb/050_medium_clamp/google_16k/textured.obj",
+      "position": [
+        0.874716,
+        -0.171639,
+        0.01
+      ],
+      "euler": [
+        0,
+        0,
+        1.377831
+      ],
+      "scale": 1,
+      "mass": 0.1,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "clamp",
+        "stack_id": "distractor_2",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_3_large_clamp",
+      "path": "assets/objects/industrial_tools/ycb/051_large_clamp/google_16k/textured.obj",
+      "position": [
+        0.345438,
+        -0.171166,
+        0.03
+      ],
+      "euler": [
+        0,
+        0,
+        2.142045
+      ],
+      "scale": 1,
+      "mass": 0.16,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "clamp",
+        "stack_id": "distractor_3",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_target_small_clamp",
+      "path": "assets/objects/industrial_tools/small_clamp/textured.obj",
+      "position": [
+        0.552013,
+        -0.027398,
+        0.012
+      ],
+      "euler": [
+        0,
+        0,
+        -2.713141
+      ],
+      "scale": 1,
+      "mass": 0.08,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "clamp",
+        "instruction_aliases": [
+          "小号夹具",
+          "小号夹钳",
+          "small clamp"
+        ],
+        "role": "target",
+        "stack_id": "target_stack",
+        "stack_layer": 0,
+        "occlusion_case": "directly_graspable"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_4_phillips_screwdriver",
+      "path": "assets/objects/industrial_tools/ycb/043_phillips_screwdriver/google_16k/textured.obj",
+      "position": [
+        0.339148,
+        0.005855,
+        0.025
+      ],
+      "euler": [
+        0,
+        0,
+        -2.417409
+      ],
+      "scale": 1,
+      "mass": 0.08,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "screwdriver",
+        "stack_id": "distractor_4",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_7_flat_screwdriver",
+      "path": "assets/objects/industrial_tools/ycb/044_flat_screwdriver/google_16k/textured.obj",
+      "position": [
+        0.523243,
+        -0.168637,
+        0.025
+      ],
+      "euler": [
+        0,
+        0,
+        -2.41353
+      ],
+      "scale": 1,
+      "mass": 0.08,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "screwdriver",
+        "stack_id": "distractor_7",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_5_ycb_hammer",
+      "path": "assets/objects/industrial_tools/ycb/048_hammer/google_16k/textured.obj",
+      "position": [
+        0.703308,
+        0.168954,
+        0.035
+      ],
+      "euler": [
+        0,
+        0,
+        0.303063
+      ],
+      "scale": 1,
+      "mass": 0.24,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "hammer",
+        "stack_id": "distractor_5",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    },
+    {
+      "name": "c1_10_small_clamp_clear_distractor_8_power_drill",
+      "path": "assets/objects/industrial_tools/ycb/035_power_drill/google_16k/textured.obj",
+      "position": [
+        0.876913,
+        0.168031,
+        0.035
+      ],
+      "euler": [
+        0,
+        0,
+        -0.047898
+      ],
+      "scale": 1,
+      "mass": 0.32,
+      "lateral_friction": 1.4,
+      "spinning_friction": 0.15,
+      "metadata": {
+        "category": "power_drill",
+        "stack_id": "distractor_8",
+        "stack_layer": 0,
+        "benchmark_role": "distractor"
+      }
+    }
+  ]
+}
