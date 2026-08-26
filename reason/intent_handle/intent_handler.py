@@ -14,15 +14,20 @@ import json
 import mimetypes
 import os
 import re
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
 DEFAULT_MODEL = "gpt-5.5"
-DEFAULT_BASE_URL = "https://yunwu.ai/v1"
+DEFAULT_BASE_URL = os.environ.get(
+    "OPENAI_BASE_URL",
+    "https://yunwu.ai/v1",
+)
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT = 600.0
 HIDDEN_TARGET_OCCLUDER_MODE = "visible_occluder_for_hidden_target"
+_ALLOWED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh"}
 
 _SIDE_WORDS = {
     "left",
@@ -62,6 +67,18 @@ _STOPWORDS = {
 
 class IntentHandleError(RuntimeError):
     """Raised when intent handling cannot complete."""
+
+
+def _configured_reasoning_effort() -> str | None:
+    value = os.environ.get("SMARTGRASP_REASONING_EFFORT", "").strip().lower()
+    if not value:
+        return None
+    if value not in _ALLOWED_REASONING_EFFORTS:
+        raise IntentHandleError(
+            "SMARTGRASP_REASONING_EFFORT must be one of "
+            f"{sorted(_ALLOWED_REASONING_EFFORTS)}, got {value!r}"
+        )
+    return value
 
 
 class VLMClient(Protocol):
@@ -104,6 +121,7 @@ class IntentResult:
     candidates: tuple[SceneObject, ...]
     reason: str
     vlm_decision: dict[str, Any]
+    llm_call_seconds: float | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -111,6 +129,7 @@ class IntentResult:
             "candidates": [obj.to_json() for obj in self.candidates],
             "reason": self.reason,
             "vlm_decision": self.vlm_decision,
+            "llm_call_seconds": self.llm_call_seconds,
         }
 
 
@@ -133,6 +152,8 @@ class ResponsesVLMClient:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.last_call_seconds: float | None = None
+        self.reasoning_effort = _configured_reasoning_effort()
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -170,28 +191,33 @@ class ResponsesVLMClient:
         scene_context: dict[str, Any],
         image_paths: Iterable[Path],
     ) -> dict[str, Any]:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are the intent recognition module for a "
+                    "robotic grasping system. Return only one JSON "
+                    "object with no markdown."
+                ),
+            },
+            {
+                "role": "user",
+                "content": self._content_parts(
+                    instruction, scene_context, image_paths
+                ),
+            },
+        ]
+        request_options: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.0,
+            "response_format": {"type": "json_object"},
+        }
+        if self.reasoning_effort is not None:
+            request_options["reasoning_effort"] = self.reasoning_effort
+        request_started_at = time.monotonic()
         try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are the intent recognition module for a "
-                            "robotic grasping system. Return only one JSON "
-                            "object with no markdown."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": self._content_parts(
-                            instruction, scene_context, image_paths
-                        ),
-                    },
-                ],
-                temperature=0.0,
-                response_format={"type": "json_object"},
-            )
+            resp = self.client.chat.completions.create(**request_options)
         except TimeoutError as exc:
             raise IntentHandleError(
                 f"VLM request timed out after {self.timeout}s: {exc}"
@@ -200,6 +226,8 @@ class ResponsesVLMClient:
             raise IntentHandleError(
                 f"VLM chat-completions request failed: {exc}"
             ) from exc
+        finally:
+            self.last_call_seconds = time.monotonic() - request_started_at
 
         response_text = resp.choices[0].message.content or ""
         return _parse_json_object(response_text)
@@ -264,7 +292,12 @@ def resolve_intent(
     )
 
     decision = vlm_client.choose_target(instruction, scene_context, resolved_images)
-    return _result_from_vlm_decision(decision, objects, occlusion)
+    result = _result_from_vlm_decision(decision, objects, occlusion)
+    duration = getattr(vlm_client, "last_call_seconds", None)
+    return replace(
+        result,
+        llm_call_seconds=(float(duration) if duration is not None else None),
+    )
 
 
 def _result_from_vlm_decision(
@@ -362,8 +395,8 @@ def _build_prompt(instruction: str, scene_context: dict[str, Any]) -> str:
         "color, function, and spatial position. Except for the completely hidden "
         "target rule above, you must still select the single most likely object as "
         "target_object_id.\n"
-        "Step 3. Spatial reasoning: if the instruction uses words such as top, "
-        "bottom, upper, lower, front, or back, interpret them from 2D image position. "
+        "Step 3. Spatial reasoning: if the instruction uses location words such as top, "
+        "center, upper, lower, front, or back, interpret them from 2D image position. "
         "If the instruction says that the target is underneath, below, or covered by "
         "another object, use both the attached occlusion graph and the occluded_by "
         "relations in Scene context to determine the covering relationship. In the "

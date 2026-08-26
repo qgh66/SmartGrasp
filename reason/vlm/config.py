@@ -1,11 +1,13 @@
-"""Static VLM configuration for reasoning priors.
+"""VLM configuration for reasoning priors.
 
-Keep API keys in .env. Model and base URL live here so reasoning experiments
-do not depend on shell-exported model/provider settings.
+Keep provider credentials in ``.env``.  The model default remains stable for
+the experiment while the endpoint follows ``OPENAI_BASE_URL`` when configured.
 """
 
+import os
+
 VLM_MODEL = "gpt-5.5"
-VLM_BASE_URL = "https://yunwu.ai/v1"
+VLM_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://yunwu.ai/v1")
 VLM_API_KEY_ENV = "OPENAI_API_KEY"
 VLM_TEMPERATURE = 0.0
 VLM_TIMEOUT = 600.0

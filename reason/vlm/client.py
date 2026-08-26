@@ -29,6 +29,32 @@ if load_dotenv is not None:
     load_dotenv()
 
 
+_REASON_LLM_CALL_TIMINGS: list[dict[str, Any]] = []
+_ALLOWED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh"}
+
+
+def _configured_reasoning_effort() -> str | None:
+    value = os.environ.get("SMARTGRASP_REASONING_EFFORT", "").strip().lower()
+    if not value:
+        return None
+    if value not in _ALLOWED_REASONING_EFFORTS:
+        raise ValueError(
+            "SMARTGRASP_REASONING_EFFORT must be one of "
+            f"{sorted(_ALLOWED_REASONING_EFFORTS)}, got {value!r}"
+        )
+    return value
+
+
+def reset_llm_call_timings() -> None:
+    """Reset process-local Reason VLM request timings for one target."""
+    _REASON_LLM_CALL_TIMINGS.clear()
+
+
+def get_llm_call_timings() -> list[dict[str, Any]]:
+    """Return a copy of all Reason VLM requests since the last reset."""
+    return [dict(item) for item in _REASON_LLM_CALL_TIMINGS]
+
+
 def _allowed_part_ids_by_mid(
     objects: list[dict[str, Any]],
 ) -> dict[int, set[int]]:
@@ -367,6 +393,7 @@ class OpenAIVisionClient(VLMClient):
             temperature if temperature is not None
             else float(vlm_config.VLM_TEMPERATURE)
         )
+        self.reasoning_effort = _configured_reasoning_effort()
 
         client_kwargs: dict = {
             "api_key": api_key or os.environ.get(vlm_config.VLM_API_KEY_ENV),
@@ -379,6 +406,27 @@ class OpenAIVisionClient(VLMClient):
         if base:
             client_kwargs["base_url"] = base
         self.client = OpenAI(**client_kwargs)
+
+    def _chat_completion(self, call_type: str, **kwargs: Any) -> Any:
+        """Call the LLM and record wall time for this exact API request."""
+        started_at = time.monotonic()
+        succeeded = False
+        if self.reasoning_effort is not None:
+            kwargs.setdefault("reasoning_effort", self.reasoning_effort)
+        try:
+            response = self.client.chat.completions.create(**kwargs)
+            succeeded = True
+            return response
+        finally:
+            _REASON_LLM_CALL_TIMINGS.append(
+                {
+                    "call_type": str(call_type),
+                    "seconds": time.monotonic() - started_at,
+                    "success": succeeded,
+                    "model": self.model,
+                    "reasoning_effort": self.reasoning_effort or "model_default",
+                }
+            )
 
 
     def score_occluders_partial(
@@ -484,7 +532,8 @@ class OpenAIVisionClient(VLMClient):
 
         for attempt in range(max_retries):
             try:
-                resp = self.client.chat.completions.create(
+                resp = self._chat_completion(
+                    "score_occluders_partial",
                     model=self.model,
                     messages=[
                         {
@@ -640,7 +689,8 @@ class OpenAIVisionClient(VLMClient):
             )
 
         try:
-            resp = self.client.chat.completions.create(
+            resp = self._chat_completion(
+                "score_occluders_invisible",
                 model=self.model,
                 messages=[
                     {
@@ -774,7 +824,8 @@ class OpenAIVisionClient(VLMClient):
             )
 
         try:
-            resp = self.client.chat.completions.create(
+            resp = self._chat_completion(
+                "score_graspability_objects",
                 model=self.model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT_GRASPABILITY},

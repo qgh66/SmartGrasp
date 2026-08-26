@@ -44,6 +44,10 @@ from reason.partially_visible import handle as handle_partially_visible
 from reason.invisible import handle as handle_fully_occluded
 from reason.closed_loop import run_closed_loop
 from reason.vlm import config as vlm_config
+from reason.vlm.client import (
+    get_llm_call_timings as get_reason_llm_call_timings,
+    reset_llm_call_timings as reset_reason_llm_call_timings,
+)
 from reason.intent_handle import HIDDEN_TARGET_OCCLUDER_MODE, resolve_intent
 from intent.run_intent import (
     RUN_INTENT_API_KEY_ENV,
@@ -54,12 +58,27 @@ from intent.run_intent import (
 
 
 def find_perception_summaries(root: Path):
-    """Recursively find all perception/summary.json files."""
-    return [
-        (str(p.parent.relative_to(root)), p)
-        for p in sorted(root.rglob("summary.json"))
-        if p.parent.name == "perception"
-    ]
+    """Find perception summaries, including ``scene_*`` directory symlinks.
+
+    ``Path.rglob`` does not descend into directory symlinks.  The simulation
+    runner deliberately exposes the active round as ``data/scene_<id>`` via a
+    symlink, so scan that canonical layout explicitly before the recursive
+    fallback used by ordinary directories.
+    """
+    candidates = list(root.glob("scene_*/perception/summary.json"))
+    candidates.extend(
+        p for p in root.rglob("summary.json") if p.parent.name == "perception"
+    )
+
+    summaries = []
+    seen = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        summaries.append((str(path.parent.relative_to(root)), path))
+    return summaries
 
 
 def _sanitize_model_name(name: str) -> str:
@@ -87,6 +106,7 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
                 "intent_reason": None,
                 "intent_candidate_ids": None,
                 "intent_vlm_decision": None,
+                "intent_llm_seconds": None,
             }
             for mid in sorted(perception.molmo_to_node.keys())
         ]
@@ -102,6 +122,7 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
                 "intent_reason": None,
                 "intent_candidate_ids": None,
                 "intent_vlm_decision": None,
+                "intent_llm_seconds": None,
             }
         ]
 
@@ -130,6 +151,7 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
             "candidate_object_ids": [obj.object_id for obj in result.candidates],
             "reason": result.reason,
             "vlm_decision": result.vlm_decision,
+            "llm_call_seconds": result.llm_call_seconds,
         }
         (intent_dir / "intent_result.json").write_text(
             json.dumps(intent_result, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -148,6 +170,7 @@ def _target_entries(args: argparse.Namespace, summary_path: Path, perception) ->
             "intent_reason": result.reason,
             "intent_candidate_ids": [obj.object_id for obj in result.candidates],
             "intent_vlm_decision": result.vlm_decision,
+            "intent_llm_seconds": result.llm_call_seconds,
         }
     ]
 
@@ -436,6 +459,12 @@ def _scene_reason_summary(
             "validated": bool(part_mask_path),
         },
         "graspability": row.get("selected_object_graspability"),
+        "llm_timings": {
+            "intent_seconds": row.get("intent_llm_seconds"),
+            "reason_seconds": row.get("reason_llm_seconds"),
+            "reason_call_count": row.get("reason_llm_call_count"),
+            "reason_calls": row.get("reason_llm_calls") or [],
+        },
     }
 
 
@@ -594,8 +623,10 @@ def main():
     root = Path(args.root)
     summaries = find_perception_summaries(root)
     if not summaries:
-        print(f"[WARN] no perception/summary.json found under {root}")
-        return
+        raise RuntimeError(
+            f"no perception/summary.json found under {root}; "
+            "Reason cannot produce a valid scene result"
+        )
 
     if args.scene_id is not None:
         target_suffix = f"scene_{args.scene_id}/perception"
@@ -605,8 +636,10 @@ def main():
             if scene_key == target_suffix
         ]
         if not summaries:
-            print(f"[WARN] scene_id={args.scene_id} not found under {root}")
-            return
+            raise RuntimeError(
+                f"scene_id={args.scene_id} not found under {root}; "
+                "Reason cannot produce a valid scene result"
+            )
     elif args.scene_ids:
         target_suffixes = {f"scene_{scene_id}/perception" for scene_id in args.scene_ids}
         summaries = [
@@ -649,8 +682,7 @@ def main():
             t_load = time.time() - t0
             print(f"[TIMING] {scene_key}: load_sample = {t_load:.2f}s", flush=True)
         except Exception as e:
-            print(f"  [ERROR] {scene_key}: load failed: {e}")
-            continue
+            raise RuntimeError(f"{scene_key}: load failed: {e}") from e
 
         scene_count += 1
         query_target_id = perception.target_molmo_id
@@ -664,8 +696,9 @@ def main():
             t_intent = time.time() - t0
             print(f"[TIMING] {scene_key}: intent_resolve = {t_intent:.2f}s ({len(targets)} targets)", flush=True)
         except Exception as e:
-            print(f"  [ERROR] {scene_key}: target resolution failed: {e}")
-            continue
+            raise RuntimeError(
+                f"{scene_key}: target resolution failed: {e}"
+            ) from e
 
         # Keep these defined even when Intent returns no target ID. A missing
         # ID is still classified below: scenes with occlusion edges enter the
@@ -673,6 +706,7 @@ def main():
         decision = None
         actions_seq = None
         for target_entry in targets:
+            reset_reason_llm_call_timings()
             mid = target_entry["target_id"]
             p = replace(
                 perception,
@@ -743,6 +777,18 @@ def main():
                 t_handler = time.time() - t0
                 print(f"[TIMING] {scene_key} target={mid}: handler = {t_handler:.2f}s", flush=True)
 
+            reason_llm_calls = get_reason_llm_call_timings()
+            reason_llm_seconds = sum(
+                float(call.get("seconds") or 0.0)
+                for call in reason_llm_calls
+            )
+            print(
+                f"[TIMING] {scene_key} target={mid}: "
+                f"reason_llm = {reason_llm_seconds:.2f}s "
+                f"({len(reason_llm_calls)} calls)",
+                flush=True,
+            )
+
             if status == "ok" and branch == Branch.FAULT:
                 status = "no_item_found"
             elif status == "ok" and (
@@ -771,6 +817,10 @@ def main():
                 "intent_reason": target_entry["intent_reason"],
                 "intent_candidate_ids": target_entry["intent_candidate_ids"],
                 "intent_vlm_decision": target_entry.get("intent_vlm_decision"),
+                "intent_llm_seconds": target_entry.get("intent_llm_seconds"),
+                "reason_llm_seconds": reason_llm_seconds,
+                "reason_llm_call_count": len(reason_llm_calls),
+                "reason_llm_calls": reason_llm_calls,
                 "scene_key": scene_key,
                 "scene_id": perception.scene_id,
                 "target_id": mid,

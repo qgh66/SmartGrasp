@@ -24,7 +24,10 @@ if load_dotenv is not None:
     load_dotenv()
 
 RUN_INTENT_MODEL = "gpt-5.5"
-RUN_INTENT_BASE_URL = "https://yunwu.ai/v1"
+RUN_INTENT_BASE_URL = os.environ.get(
+    "OPENAI_BASE_URL",
+    "https://yunwu.ai/v1",
+)
 RUN_INTENT_API_KEY_ENV = "OPENAI_API_KEY"
 RUN_INTENT_TIMEOUT = 300.0
 
