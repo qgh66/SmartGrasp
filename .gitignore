@@ -108,3 +108,11 @@ reason.txt
 *.bak
 *.swp
 *.swo
+
+/artifacts/
+/hard_result*.csv
+/graspnet-workspace/graspnet-workspace/
+/paper/*preview*
+*.bak_*
+*.before_*
+body_id=*
